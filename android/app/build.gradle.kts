@@ -17,12 +17,12 @@ val hasReleaseSigning = listOf(
 
 android {
     namespace = "com.evchargebook"
-    compileSdk = 37
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.evchargebook"
         minSdk = 26
-        targetSdk = 37
+        targetSdk = 36
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("APP_VERSION_NAME") ?: "0.1.0-dev"
     }

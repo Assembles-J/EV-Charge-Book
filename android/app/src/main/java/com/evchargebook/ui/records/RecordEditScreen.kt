@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RecordEditScreen(
     record: ChargingRecordEntity,

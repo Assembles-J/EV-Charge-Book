@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.VehicleEntity
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VehicleScreen(vehicle: VehicleEntity?, onEdit:()->Unit){
  Scaffold(topBar={TopAppBar(title={Text("我的车辆")},actions={TextButton(onClick=onEdit){Text("编辑")}})}){p->
