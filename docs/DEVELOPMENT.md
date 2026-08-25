@@ -1,40 +1,62 @@
 # Development Workflow
 
-## Branch Strategy
+Version: v1.1.0
 
-main
+## Standard Delivery Route
 
-- stable version
+Every meaningful change follows one short path:
 
-feature/*
+```text
+Issue -> feature/<issue>-short-name -> implementation -> PR -> CI -> squash merge -> main
+```
 
-- new features
+Rules:
 
-## MVP Development Order
+- `main` is the stable branch.
+- One Issue should describe one independently verifiable outcome.
+- Feature branches use `feature/<issue-number>-<short-name>`; fixes use `fix/<issue-number>-<short-name>`.
+- PR descriptions must link the Issue and state acceptance evidence.
+- Do not require every PR to edit every document. Update only documents whose product, architecture, data, UI, CI, or roadmap contract actually changes.
+- Keep infrastructure shared through `Assembles-J/.github` when the behavior is genuinely common.
+- Project-specific product logic stays inside this repository.
 
-### Step 1
+## New Project Bootstrap Order
 
-Android project initialization
+1. Define `PROJECT_MASTER.md`: product goal, MVP boundary, non-goals.
+2. Create the first runnable-app Issue.
+3. Build the smallest locally runnable client before backend/cloud work.
+4. Add CI that produces a downloadable debug artifact.
+5. Complete local persistence and the core CRUD loop.
+6. Add statistics only after the underlying data model is real.
+7. Add backend, sync, signing, deployment secrets, and AI only when a concrete feature requires them.
 
-### Step 2
+## EV Charge Book MVP Development Order
 
-Local database
+### Step 1 - Runnable Android shell
 
-### Step 3
+Compose app, Dashboard, navigation shell, repeatable Debug APK build.
 
-Charging record CRUD
+### Step 2 - Local database
 
-### Step 4
+Room, Vehicle, ChargingRecord, DAO and repository.
 
-Dashboard statistics
+### Step 3 - Charging record CRUD
 
-### Step 5
+Create, edit, delete and history list.
 
-APK release
+### Step 4 - Dashboard statistics
+
+Total energy, total cost, average electricity price and later cost-per-distance when mileage data exists.
+
+### Step 5 - Release
+
+Generate the Gradle wrapper, signed release APK and GitHub Release only after the MVP loop is stable.
 
 ## Coding Principles
 
 - Simple first
+- Local First for v0.1
 - Maintainable architecture
 - Avoid premature abstraction
 - Real user scenario driven
+- Do not introduce server infrastructure before the local product loop needs it
