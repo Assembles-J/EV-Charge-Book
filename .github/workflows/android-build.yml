@@ -2,33 +2,81 @@ name: Android Build
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
   pull_request:
+    paths:
+      - 'android/**'
+      - '.github/workflows/android-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
+    name: Android CI
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup JDK
+      - name: Detect Android build baseline
+        id: baseline
+        shell: bash
+        run: |
+          set -eu
+          ready=true
+          test -f android/gradlew || ready=false
+          test -f android/app/build.gradle.kts || ready=false
+          test -d android/gradle/wrapper || ready=false
+          echo "ready=$ready" >> "$GITHUB_OUTPUT"
+
+          if [ "$ready" != "true" ]; then
+            {
+              echo "## Android CI"
+              echo ""
+              echo "Build baseline is not complete yet."
+              echo "Expected: android/gradlew, android/gradle/wrapper/**, android/app/build.gradle.kts"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Setup JDK 17
+        if: steps.baseline.outputs.ready == 'true'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: '17'
 
-      - name: Grant permission
-        run: chmod +x ./gradlew
+      - name: Setup Android SDK
+        if: steps.baseline.outputs.ready == 'true'
+        uses: android-actions/setup-android@v3
 
-      - name: Build APK
-        run: ./gradlew assembleDebug
+      - name: Setup Gradle cache
+        if: steps.baseline.outputs.ready == 'true'
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build and test
+        if: steps.baseline.outputs.ready == 'true'
         working-directory: android
+        run: |
+          set -eu
+          printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
+          chmod +x gradlew
+          ./gradlew --no-daemon testDebugUnitTest :app:assembleDebug
 
-      - name: Upload APK
+      - name: Upload Debug APK
+        if: steps.baseline.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: ev-charge-book-debug-apk
-          path: android/**/build/outputs/apk/**/*.apk
+          name: ev-charge-book-debug-${{ github.run_number }}
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 7
