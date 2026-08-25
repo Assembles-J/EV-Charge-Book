@@ -1,102 +1,108 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v1.1.0
+版本: v1.2.0
 更新时间: 2026-08-25
 状态: Authority Subdocument
 
 ## 1. 目标
 
-EV Charge Book 的构建、签名、发布和服务器分发逻辑遵循 Assembles-J 组织现有项目的统一发布思路，优先参考 Third-Hand 的 production deployment 模式：
+EV Charge Book 的构建、签名、发布和服务器分发逻辑遵循 Assembles-J 组织现有项目的统一发布思路，主要参考 Third-Hand production deployment：
 
 - CI 与 Production Release 分离
 - Release 使用 GitHub Actions `production` Environment
 - Android Release APK 必须签名
 - 版本号由 GitHub Actions run number 驱动
 - APK 同时保留 GitHub Actions Artifact
-- 服务器使用 `/opt/<project>/releases` 保存不可变版本文件
-- 上传使用 `.part` 临时文件，校验后原子切换
-- 发布后保留稳定的 latest 下载入口
-- 支持 `workflow_dispatch` 手动指定 ref / 强制发布
+- `/opt/<project>/releases` 保存不可变版本文件
+- `.part` 临时上传 + 原子激活
+- 稳定 latest 下载入口
+- `workflow_dispatch` 手动生产发布门禁
 
-## 2. 当前阶段
+---
 
-当前 Android 工程仍处于 v0.1 Skeleton 阶段，尚未具备完整 Gradle Wrapper 和 Release signing build 配置。
+## 2. Android Build Baseline
 
-因此发布策略分两阶段：
+当前已具备:
 
-### Stage A - Release Pipeline Prepared
+- `android/build.gradle.kts`
+- `android/settings.gradle.kts`
+- `android/app/build.gradle.kts`
+- AndroidManifest
+- Room/KSP/Compose 依赖声明
+- production signing 环境变量接口
 
-当前执行：
+CI 固定使用:
 
-- 保留 Android CI 定义
-- 建立 signed APK release workflow
-- 建立服务器原子部署脚本
-- Release workflow 仅允许手动触发
-- 不允许未完成构建基线时因 main push 自动产生错误发布
+- JDK 17
+- Android API 37
+- Build Tools 36.0.0
+- Gradle 9.5.0
+- AGP 9.3.1
 
-### Stage B - Automatic Production Release
+Gradle Wrapper 是推荐的本地一致性工具，但不再阻塞第一次远程 CI 验证。CI 由 `gradle/actions/setup-gradle` 安装固定 Gradle 版本，避免“缺 Wrapper 就静默跳过构建”。
 
-满足以下条件后开启 main 自动发布：
-
-- `android/gradlew` 存在
-- `android/gradle/wrapper/**` 完整
-- `android/app/build.gradle.kts` 完整
-- `assembleDebug` 通过
-- `assembleRelease` 通过
-- Android signing secrets 已配置
-- 服务器 `/opt/ev-charge-book/releases` 可写
+---
 
 ## 3. CI 流程
 
-Pull Request / Android source change
+PR / main Android 变更:
 
 ```text
 Checkout
-  -> JDK 17
-  -> Android SDK
-  -> Gradle cache
-  -> Unit Test
-  -> assembleDebug
-  -> Upload Debug APK Artifact
+ -> Validate build files
+ -> JDK 17
+ -> Android SDK 37
+ -> Gradle 9.5.0
+ -> testDebugUnitTest
+ -> assembleDebug
+ -> Debug APK Artifact
 ```
 
-CI 不负责正式发布。
+CI 必须真实执行构建；禁止因为工程缺少非必要辅助文件而直接报告成功。
+
+---
 
 ## 4. Production Release 流程
 
+当前保持手动触发:
+
 ```text
-workflow_dispatch / future main Android change
-  -> Checkout selected ref
-  -> Resolve VERSION_CODE / VERSION_NAME
-  -> Restore signing keystore
-  -> assembleRelease
-  -> apksigner verify
-  -> SHA-256
-  -> Upload Actions Artifact
-  -> SCP as *.part
-  -> Remote verify
-  -> Atomic mv into releases/
-  -> Update latest symlink
-  -> Write release metadata
+workflow_dispatch
+ -> Checkout selected ref
+ -> VERSION_CODE / VERSION_NAME
+ -> Restore production keystore
+ -> Gradle 9.5.0 assembleRelease
+ -> apksigner verify
+ -> SHA-256
+ -> Actions Artifact
+ -> SCP *.part
+ -> Remote verify
+ -> Atomic mv into releases/
+ -> Update latest symlink
+ -> Write release metadata
 ```
+
+完成 Debug CI Green 和首次 signed release 验收后，再评估 main Android 变更自动 production release。
+
+---
 
 ## 5. 版本规则
 
-MVP 期间：
+MVP:
 
 - `VERSION_CODE = github.run_number`
 - `VERSION_NAME = 0.1.<github.run_number>`
 - APK: `ev-charge-book-0.1.<run_number>.apk`
 
-后续进入 v0.2 / v0.3 时，只调整产品 minor 基线，不重置 `VERSION_CODE`。
+VERSION_CODE 不随产品 minor 版本重置。
 
-## 6. GitHub Environment 与 Secrets
+---
 
-Environment:
+## 6. production Environment / Secrets
 
-- `production`
+Environment: `production`
 
-沿用组织项目已有命名：
+Secrets:
 
 - `ANDROID_KEYSTORE_BASE64`
 - `ANDROID_KEYSTORE_PASSWORD`
@@ -106,86 +112,104 @@ Environment:
 - `SERVER_USER`
 - `SERVER_SSH_KEY`
 
-原则：不在仓库中保存 keystore、密码或 SSH 私钥。
+不得提交 keystore、密码或 SSH 私钥。
 
-## 7. 服务器目录
+---
 
-正式目录：
+## 7. Android Signing Contract
+
+`app/build.gradle.kts` 读取:
+
+- `ANDROID_KEYSTORE_FILE`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+- `APP_VERSION_CODE`
+- `APP_VERSION_NAME`
+
+Production workflow 负责恢复 keystore 并注入这些环境变量。
+
+本地没有 production signing 环境变量时允许生成开发 release 包用于编译验证，但正式生产验收必须由 production workflow 完成并执行 `apksigner verify`。
+
+---
+
+## 8. 服务器目录与原子发布
 
 ```text
 /opt/ev-charge-book/
   releases/
-    ev-charge-book-0.1.12.apk
-    ev-charge-book-0.1.13.apk
   latest/
-    ev-charge-book-latest.apk -> ../releases/ev-charge-book-0.1.13.apk
   release-meta/
-    latest.env
+  release-upload/
 ```
 
-`releases/` 中版本文件发布后视为不可变产物。
+上传使用 `<apk>.part`，校验完成后移动到不可变 `releases/`，最后才更新 `latest/ev-charge-book-latest.apk`。
 
-## 8. 原子发布
+失败时不得改变 latest。
 
-上传文件必须先使用：
+---
 
-```text
-<apk>.part
-```
+## 9. Artifact
 
-服务器完成非空检查和 SHA-256 后：
+Debug:
 
-```text
-mv <apk>.part releases/<apk>
-ln -sfn ../releases/<apk> latest/ev-charge-book-latest.apk
-```
+- `ev-charge-book-debug-<run_number>`
+- 7 days
 
-避免客户端在上传过程中下载到半个 APK。
+Release:
 
-## 9. Artifact 保留
+- `ev-charge-book-<version>`
+- 14 days
 
-正式 APK 同时上传 GitHub Actions Artifact：
+服务器 release 为长期分发源；Actions Artifact 用于构建审计和短期下载。
 
-- 名称：`ev-charge-book-<version>`
-- retention：14 days
+---
 
-服务器 release 是长期分发源；Actions Artifact 用于构建审计和短期下载。
+## 10. 自动 Production Release 门禁
 
-## 10. 发布失败策略
+开启 main 自动 production release 前必须满足:
 
-任何以下情况必须终止发布：
+- Debug CI Green
+- Debug APK Artifact 可下载
+- `assembleRelease` Green
+- production signing Secrets 已验证
+- `/opt/ev-charge-book` 可写
+- 首次 signed APK 原子发布完成
 
-- signing secret 缺失
-- APK 不存在或为空
-- `apksigner verify` 失败
-- SCP 失败
-- 远端目录不可写
-- 原子激活脚本失败
+Gradle Wrapper 不再作为 Production Release 的硬门禁，但仍建议后续由本地 Android Studio 生成并提交。
 
-失败时不得改变 `latest` 指针。
+---
 
-## 11. 与组织发布逻辑的关系
+## 11. 与组织逻辑的关系
 
-EV Charge Book 不复制 Third-Hand 的后端部署和业务健康检查，因为 v0.1 没有服务端业务。
+v0.1 没有后端，因此不复制 Third-Hand 的 Docker/backend 健康检查。
 
-但保持相同的发布骨架：
+保持统一骨架:
 
 - production Environment
-- 相同 Secret 命名
-- GitHub run-number 版本策略
+- Secret 命名
+- run-number version
 - signed APK
 - Actions Artifact
 - `/opt/<project>/releases`
-- `.part` + atomic activation
-- SSH/SCP 到统一服务器
+- `.part` atomic activation
+- SSH/SCP
 
-新增后端后，再扩展为“后端变更检测 + Android 可选发布”的同类 scope detection 模式。
+v0.3 引入后端后，再增加 backend/android scope detection。
+
+---
 
 ## 12. 变更记录
 
-### v1.1.0 - 2026-08-25
+### v1.2.0
+
+- Android Gradle build baseline 已落地
+- CI 固定 Gradle 9.5.0 并开始真实 build/test
+- Gradle Wrapper 从硬门禁调整为推荐项
+- production release 同步改用固定 Gradle 9.5.0
+- 保持 production 手动发布门禁直到首次签名验收
+
+### v1.1.0
 
 - 对齐 Assembles-J / Third-Hand 发布逻辑
-- 明确 signed APK 和 production Environment
-- 定义服务器 release 目录、latest 指针与原子上传
-- 因 Android Skeleton 尚不可构建，Release 暂以 workflow_dispatch 门禁启用
+- 建立 signed APK、production Environment 和服务器原子发布规范
