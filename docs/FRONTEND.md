@@ -1,6 +1,6 @@
 # EV Charge Book 前端设计
 
-版本: v1.1.0
+版本: v1.2.0
 
 更新时间: 2026-08-25
 
@@ -11,205 +11,230 @@ Android Native:
 - Kotlin
 - Jetpack Compose
 - Material 3
-- Navigation Compose
 - ViewModel + StateFlow
-- Room
+- Room / SQLite
 - Coroutines
 
-v0.1 暂不引入复杂依赖注入框架，优先保持工程简单可读；当模块数量和构造依赖明显增长时再评估 Hilt/Koin。
+当前实际包名统一使用 `com.evchargebook`。v0.1 不引入 Hilt/Koin，不为未来模块提前增加复杂依赖注入。
 
 ---
 
-## 2. 前端职责
+## 2. v0.1 当前实现阶段
 
-Android 端在 v0.1 同时承担:
-
-- 页面与交互
-- 表单校验
-- 本地业务编排
-- Room 数据读写
-- 基础统计聚合
-
-后端未来接入后，前端仍必须保持离线可用能力。
-
----
-
-## 3. 推荐包结构
-
-```text
-com.assemblej.evchargebook
-├── app
-├── ui
-│   ├── dashboard
-│   ├── charging
-│   ├── history
-│   ├── vehicle
-│   └── settings
-├── data
-│   ├── local
-│   │   ├── entity
-│   │   ├── dao
-│   │   └── database
-│   └── repository
-├── domain
-│   ├── model
-│   └── usecase
-└── common
-```
-
-v0.1 不强制每个功能都创建 UseCase；只有存在可复用业务逻辑时才提取。
-
----
-
-## 4. 数据流
-
-标准读取流:
-
-```text
-Compose UI
-  -> ViewModel
-  -> Repository
-  -> Room DAO
-  -> StateFlow
-  -> Compose UI
-```
-
-标准写入流:
-
-```text
-用户表单
-  -> UI 校验
-  -> ViewModel
-  -> Repository
-  -> Room
-  -> 数据流刷新
-```
-
-UI 不直接调用 DAO。
-
----
-
-## 5. 页面状态
-
-每个主要页面建议至少表达:
-
-- Loading
-- Content
-- Empty
-- Error
-
-简单页面允许通过一个不可变 UiState data class 表达，而不是建立复杂状态机。
-
-例如 DashboardUiState:
-
-```text
-vehicle
-monthCost
-monthEnergy
-averagePrice
-chargingCount
-latestRecord
-isLoading
-errorMessage
-```
-
----
-
-## 6. Navigation
-
-v0.1 一级导航:
+UI 骨架已具备:
 
 - Dashboard
-- Record
-- Me
+- Records
+- Add Record
+- Stats
+- Vehicle
+- Bottom Navigation
 
-二级页面:
-
-- AddChargingRecord
-- ChargingDetail
-- EditChargingRecord
-- VehicleEditor
-- History
-
-Navigation 参数只传稳定标识符，例如 recordId / vehicleId，不直接传完整对象。
-
----
-
-## 7. 表单规则
-
-Charging Record 表单:
-
-- SOC: Int 0..100
-- energyKwh: Decimal >= 0
-- cost: Decimal >= 0
-- chargeTime: 必填
-- endSoc >= startSoc 默认校验；特殊场景未来再放开
-
-自动计算:
+下一业务基线从“静态页面”切换到“真实本地数据闭环”:
 
 ```text
-pricePerKwh = cost / energyKwh
+Add Record Form
+  -> validation
+  -> ViewModel
+  -> ChargingRepository
+  -> Room DAO
+  -> Flow refresh
+  -> Dashboard / Records / Stats
 ```
 
-energyKwh 为 0 时不得执行除法。
+禁止继续使用静态示例金额、固定日期、固定充电站作为正式业务数据。
 
 ---
 
-## 8. 本地数据与统计
+## 3. 包结构
 
-v0.1 统计优先通过 Room Query 或 Repository 内轻量聚合完成。
+```text
+com.evchargebook
+├── MainActivity.kt
+├── data
+│   ├── entity
+│   ├── dao
+│   ├── database
+│   └── repository
+├── ui
+│   ├── dashboard
+│   ├── records
+│   ├── stats
+│   └── vehicle
+└── viewmodel
+```
 
-禁止为简单统计引入额外分析引擎。
+v0.1 仅在出现可复用复杂业务逻辑时增加 domain/usecase。
 
-基础统计:
+---
 
+## 4. 核心数据流
+
+读取:
+
+```text
+Room Flow
+ -> Repository
+ -> MainViewModel
+ -> MainUiState
+ -> Compose
+```
+
+写入:
+
+```text
+AddRecordScreen
+ -> validate
+ -> MainViewModel.addChargingRecord()
+ -> Repository.insert()
+ -> Room
+```
+
+UI 不直接持有 DAO 或 Database。
+
+---
+
+## 5. MainUiState
+
+v0.1 采用单一轻量状态承载跨页面核心数据:
+
+- vehicle
+- chargingRecords
 - monthCost
 - monthEnergy
 - averagePrice
 - chargingCount
 - totalCost
 - totalEnergy
+- isLoading
+- errorMessage
+
+Dashboard 与 Stats 的数字必须从同一数据源聚合，避免页面口径不一致。
 
 ---
 
-## 9. 错误处理
+## 6. 充电记录表单
 
-- 数据库错误转换为用户可理解状态
-- 表单校验错误不进入 Repository
-- 不吞异常
-- Debug 构建保留足够日志
-- Release 不输出敏感信息
+必填:
+
+- chargeTime
+- startSoc
+- endSoc
+- energyKwh
+- cost
+
+可选:
+
+- location
+- chargerType
+- remark
+
+校验:
+
+- SOC: 0..100
+- endSoc >= startSoc
+- energyKwh > 0
+- cost >= 0
+
+派生值:
+
+```text
+pricePerKwh = cost / energyKwh
+```
+
+页面保存成功后返回 Records/Dashboard；失败则保留用户已输入内容并展示错误。
 
 ---
 
-## 10. 测试基线
+## 7. Records
 
-v0.1 至少覆盖:
+v0.1 必须支持:
 
-- 充电记录字段校验
+- 按充电时间倒序
+- 查看地点 / SOC / 电量 / 费用 / 单价
+- 删除
+
+编辑详情可在 CRUD 基线后补齐，但删除必须进入 v0.1。
+
+---
+
+## 8. Dashboard
+
+v0.1 首屏只显示可由真实数据可靠计算的内容:
+
+- 当前车辆
+- 本月费用
+- 本月充电量
+- 平均电价
+- 充电次数
+- 最近 3 条记录
+
+“实时 SOC / 剩余续航 / 电池健康度”在没有车机或人工录入数据源前不得伪装成实时数据。
+
+---
+
+## 9. Stats
+
+v0.1 只做基础统计:
+
+- 累计费用
+- 累计充电量
+- 平均电价
+- 本月费用
+- 本月充电量
+
+趋势图进入 v0.2；v0.1 可以保留明确标记为“即将支持”的占位区域，但不得展示伪造曲线。
+
+---
+
+## 10. Vehicle
+
+v0.1 至少支持一个车辆档案:
+
+- brand
+- model
+- batteryCapacityKwh
+- rangeKm
+
+默认测试数据可以用于首次启动初始化，但用户修改后必须由 Room 持久化。
+
+---
+
+## 11. 构建基线
+
+Android 工程必须具备:
+
+- root `build.gradle.kts`
+- `app/build.gradle.kts`
+- AndroidManifest
+- 可解析依赖
+- Debug assemble green
+
+CI 使用固定 Gradle 版本执行，Gradle Wrapper 后续补齐但不阻塞第一次远程构建验证。
+
+---
+
+## 12. 测试基线
+
+至少覆盖:
+
+- SOC 校验
 - 单价计算
-- 月度费用聚合
-- Repository 基础 CRUD
-
-UI 自动化测试不是 v0.1 阻塞项，但关键表单应可稳定手工验收。
+- 月度费用/电量聚合
+- Repository insert/delete
 
 ---
 
-## 11. 性能原则
+## 13. 变更记录
 
-- 数据库查询避免主线程
-- 列表使用 LazyColumn
-- 页面只订阅所需状态
-- 不进行无意义全表加载
-- 本地记录规模较小时优先简单实现，不提前分页
+### v1.2.0
 
----
-
-## 12. 变更记录
+- 对齐本地提交后的 Dashboard / Records / Stats / Vehicle UI
+- 正式进入 Room CRUD + 动态统计业务阶段
+- 统一实际包名 `com.evchargebook`
+- 禁止正式页面继续展示伪造实时数据和伪造统计
+- 明确 v0.1 MainUiState 与页面数据口径
 
 ### v1.1.0
 
-- 明确 Android v0.1 技术栈和包结构
-- 明确 StateFlow 单向数据流
-- 明确导航参数、表单校验和统计边界
-- 降低早期工程复杂度，不强制 DI / UseCase 形式化
+- 明确 Android v0.1 技术栈、数据流、导航和表单规则
