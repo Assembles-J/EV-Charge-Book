@@ -1,34 +1,46 @@
 # EV Charge Book Android
 
-## Tech Stack
+## Technology Stack
 
 - Kotlin
 - Jetpack Compose
+- Material 3
 - Room Database
+- Navigation Compose
 - Retrofit
-- MVVM
+- MVVM Architecture
 
-## Planned Structure
+## Package Design
 
 ```
-android/
- └── app/
-     ├── ui/
-     ├── data/
-     ├── domain/
-     ├── database/
-     └── network/
+app
+├── ui
+│   ├── dashboard
+│   ├── charging
+│   ├── vehicle
+│   └── settings
+│
+├── data
+│   ├── entity
+│   ├── dao
+│   └── repository
+│
+├── domain
+│   ├── model
+│   └── usecase
+│
+└── database
 ```
 
-## First Version
+## MVP Screens
 
-Goal:
+1. Dashboard
+2. Add Charging Record
+3. Charging History
+4. Vehicle Profile
 
-Create a local-first EV charging recorder.
+## Development Goal
 
-Features:
+First version focuses on local storage.
 
-- Vehicle profile
-- Add charging record
-- Charging history
-- Cost dashboard
+Cloud synchronization, AI analysis and IoT integration will be introduced later.
