@@ -1,32 +1,57 @@
 # EV Charge Book Product Specification
 
+Version: v1.1.0
+
 ## Vision
 
-打造一个新能源车主自己的车辆数据中心。
+打造新能源车主自己的车辆数据中心，记录充电、成本、电耗和电池健康。
 
 ## User Scenario
 
-以日常新能源车用户为核心：
+核心用户：
 
-- 家充用户
-- 通勤用户
-- 长途用户
+- 家充新能源车用户
+- 日常通勤用户
+- 长途新能源车用户
 
-## Core Metrics
+## Core Modules
 
-系统关注：
+### Vehicle Management
 
-- 电费
-- 电耗
-- 续航表现
-- 电池使用习惯
+- 车辆信息
+- 电池容量
+- 官方续航
 
-## First Supported Vehicle
+### Charging Management
 
-零跑 C16 作为首个测试车型。
+- 添加充电记录
+- 充电历史
+- 电费计算
+
+### Statistics
+
+- 月度费用
+- 平均电耗
+- 每公里成本
+
+### Battery Health
+
+- 充电习惯分析
+- 快慢充比例
+- SOC趋势
+
+### AI Assistant (Future)
+
+- 用车分析
+- 成本优化
+- 电池建议
 
 ## Design Principle
 
-简单、稳定、可维护。
+Local First
 
-避免过度设计，优先完成真实使用价值。
+Simple
+
+Reliable
+
+Maintainable
