@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v1.1.0
+版本: v1.2.0
 
 更新时间: 2026-08-25
 
@@ -15,11 +15,13 @@
 - 可执行验收标准
 - 对应文档版本更新
 
+发布逻辑遵循 Assembles-J 组织统一 production release 约定。
+
 ---
 
 ## v0.1 - Local Charging Book
 
-目标: 做出真正可长期使用的本地充电记账 App。
+目标: 做出真正可长期使用的本地充电记账 App，并具备可重复构建和正式 APK 发布能力。
 
 ### 功能范围
 
@@ -30,7 +32,18 @@
 - [ ] Room 本地数据库
 - [ ] Dashboard 基础统计
 - [ ] 空状态 / 错误状态
-- [ ] GitHub Actions 自动生成 Debug APK
+
+### 工程与发布范围
+
+- [ ] Gradle Wrapper 完整
+- [ ] PR / main Android CI
+- [ ] Debug APK Artifact
+- [ ] Release signing 配置
+- [x] Production Release workflow 基线
+- [x] 服务器原子 APK 部署脚本
+- [ ] production secrets 配置验证
+- [ ] 第一次 signed Release APK 发布验收
+- [ ] Android build baseline 完成后启用 main 自动 production release
 
 ### 核心统计
 
@@ -51,7 +64,15 @@
 
 ### 验收标准
 
-用户安装 APK 后，无网络情况下可以创建车辆、记录一次充电、编辑/删除记录，并在首页与历史页看到正确统计结果。
+用户安装正式签名 APK 后，无网络情况下可以创建车辆、记录一次充电、编辑/删除记录，并在首页与历史页看到正确统计结果。
+
+同时满足：
+
+- CI 可重复生成 Debug APK
+- production workflow 可生成签名 Release APK
+- Release APK 通过 `apksigner verify`
+- 服务器保留不可变版本 APK
+- `latest/ev-charge-book-latest.apk` 仅在发布成功后切换
 
 ---
 
@@ -90,6 +111,7 @@
 - [ ] 冲突处理
 - [ ] Docker Compose 部署
 - [ ] 服务端 CI/CD
+- [ ] 发布 workflow 引入 backend / android scope detection
 
 ### 非目标
 
@@ -143,22 +165,35 @@ AI 输出必须基于用户真实记录，并明确区分事实、推算和建�
 ## 当前执行顺序
 
 ```text
-Authority Docs
+Authority Docs v1.2
    ↓
-Android v0.1 Build Baseline
+Android Gradle / Build Baseline
+   ↓
+Debug CI Green
    ↓
 Room CRUD
    ↓
 Dashboard / History
    ↓
-GitHub Actions APK
+Signed Release Build
+   ↓
+Production Server Atomic Publish
    ↓
 v0.1 Acceptance
+   ↓
+Enable main automatic release
 ```
 
 ---
 
 ## 变更记录
+
+### v1.2.0
+
+- 将组织统一 signed APK production release 纳入 v0.1
+- 增加服务器原子部署和 latest 指针验收
+- 明确自动 production release 必须在 Android build baseline 完成后启用
+- v0.3 后端阶段预留 Third-Hand 同类 scope detection
 
 ### v1.1.0
 
