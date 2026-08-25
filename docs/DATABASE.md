@@ -1,18 +1,27 @@
 # EV Charge Book Database Design
 
+Version: v1.1.0
+
+## Design Principle
+
+Local First.
+
+Android 本地 Room 作为第一数据源，未来支持云端同步。
+
 ## Core Entities
 
-### Vehicle
+## Vehicle
 
-用于记录车辆信息。
+车辆基础信息。
 
 Fields:
 
 - id
 - brand
 - model
-- battery_capacity
+- battery_capacity_kwh
 - range_km
+- battery_type
 - purchase_date
 
 Example:
@@ -23,9 +32,9 @@ Battery: LFP 67.7kWh
 
 ---
 
-### ChargingRecord
+## ChargingRecord
 
-记录每一次充电。
+记录每一次充电行为。
 
 Fields:
 
@@ -36,15 +45,21 @@ Fields:
 - end_soc
 - energy_kwh
 - cost
+- price_per_kwh
 - charger_type
 - location
 - remark
 
+Calculated:
+
+- charging efficiency
+- average charging cost
+
 ---
 
-### DrivingRecord
+## DrivingRecord
 
-记录行驶数据。
+记录车辆行驶情况。
 
 Fields:
 
@@ -53,14 +68,54 @@ Fields:
 - date
 - mileage
 - average_consumption
+- weather
+- road_type
 
 ---
 
-## Statistics
+## BatteryHealth
 
-Calculated metrics:
+电池健康趋势模型。
 
-- monthly cost
-- cost per kilometer
-- average energy consumption
-- charging frequency
+Fields:
+
+- id
+- vehicle_id
+- record_date
+- charge_cycles
+- fast_charge_ratio
+- health_score
+
+---
+
+## CostSummary
+
+统计数据。
+
+Fields:
+
+- id
+- vehicle_id
+- month
+- total_cost
+- total_energy
+- total_mileage
+- cost_per_km
+
+---
+
+## Future Cloud Mapping
+
+User
+
+ |
+
+Vehicle
+
+ |
+
+ChargingRecord
+
+ |
+
+Analysis
