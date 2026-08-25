@@ -12,7 +12,7 @@ import com.evchargebook.data.entity.VehicleEntity
 @Database(
     entities = [VehicleEntity::class, ChargingRecordEntity::class],
     version = 1,
-    exportSchema = true
+    exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleDao(): VehicleDao
