@@ -2,29 +2,29 @@ package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EvStation
-import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.viewmodel.MainUiState
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(onAddClick: () -> Unit) {
+fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit) {
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("EV Charge Book", fontWeight = FontWeight.Bold) }
-            )
-        },
+        topBar = { TopAppBar(title = { Text("EV Charge Book", fontWeight = FontWeight.Bold) }) },
         floatingActionButton = {
             FloatingActionButton(onClick = onAddClick) {
                 Icon(Icons.Default.Add, contentDescription = "增加记录")
@@ -32,64 +32,64 @@ fun DashboardScreen(onAddClick: () -> Unit) {
         }
     ) { paddingValues ->
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-                .padding(16.dp),
+            modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // 车辆状态卡片
             item {
-                VehicleStatusCard("零跑 C16", "85%", "420 km")
-            }
-
-            // 核心指标网格
-            item {
-                Row(
+                val vehicle = state.vehicle
+                Card(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
                 ) {
-                    StatCard("本月电费", "¥ 128.5", Icons.Default.EvStation, Modifier.weight(1f))
-                    StatCard("平均电耗", "15.2 kWh", Icons.Default.ShowChart, Modifier.weight(1f))
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text = vehicle?.let { "${it.brand} ${it.model}" } ?: "尚未配置车辆",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold
+                        )
+                        if (vehicle != null) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text("电池 ${vehicle.batteryCapacityKwh} kWh · 标称续航 ${vehicle.rangeKm} km")
+                        }
+                    }
                 }
             }
 
-            // 最近记录预览
             item {
-                Text(
-                    text = "最近记录",
-                    style = MaterialTheme.typography.titleMedium,
-                    modifier = Modifier.padding(vertical = 8.dp)
-                )
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard("本月电费", money(state.monthCost), Icons.Default.EvStation, Modifier.weight(1f))
+                    StatCard("本月充电量", "${oneDecimal(state.monthEnergy)} kWh", Icons.Default.ShowChart, Modifier.weight(1f))
+                }
             }
-            
-            items(3) {
-                RecentRecordItem()
+
+            item {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    StatCard("平均电价", "¥ ${twoDecimals(state.averagePrice)}/kWh", Icons.Default.EvStation, Modifier.weight(1f))
+                    StatCard("本月次数", "${state.chargingCount} 次", Icons.Default.ShowChart, Modifier.weight(1f))
+                }
+            }
+
+            item {
+                Text("最近记录", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 4.dp))
+            }
+
+            if (state.chargingRecords.isEmpty()) {
+                item {
+                    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
+                        Text("还没有充电记录，点击右下角 + 记录第一次充电。", modifier = Modifier.padding(20.dp))
+                    }
+                }
+            } else {
+                items(state.chargingRecords.take(3), key = { it.id }) { record ->
+                    RecentRecordItem(record)
+                }
             }
         }
     }
 }
 
 @Composable
-fun VehicleStatusCard(name: String, battery: String, range: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(battery, style = MaterialTheme.typography.displaySmall, color = MaterialTheme.colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("剩余续航 $range", style = MaterialTheme.typography.bodyLarge)
-            }
-        }
-    }
-}
-
-@Composable
-fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
+private fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
     ElevatedCard(modifier = modifier) {
         Column(modifier = Modifier.padding(16.dp)) {
             Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.secondary)
@@ -101,24 +101,28 @@ fun StatCard(label: String, value: String, icon: ImageVector, modifier: Modifier
 }
 
 @Composable
-fun RecentRecordItem() {
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp)
-    ) {
+private fun RecentRecordItem(record: ChargingRecordEntity) {
+    OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier
-                .padding(16.dp)
-                .fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Text("2023-10-24 22:00", style = MaterialTheme.typography.bodySmall)
-                Text("小桔充电站", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            Column(modifier = Modifier.weight(1f)) {
+                Text(formatTime(record.chargeTimeEpochMillis), style = MaterialTheme.typography.bodySmall)
+                Text(record.location ?: "未填写地点", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text("${record.startSoc}% → ${record.endSoc}% · ${oneDecimal(record.energyKwh)} kWh", style = MaterialTheme.typography.bodySmall)
             }
-            Text("¥ 45.20", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error)
+            Text(money(record.cost), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         }
     }
 }
+
+private fun formatTime(epochMillis: Long): String =
+    DateTimeFormatter.ofPattern("MM-dd HH:mm")
+        .withLocale(Locale.SIMPLIFIED_CHINESE)
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochMilli(epochMillis))
+
+private fun money(value: Double) = "¥ ${twoDecimals(value)}"
+private fun oneDecimal(value: Double) = String.format(Locale.US, "%.1f", value)
+private fun twoDecimals(value: Double) = String.format(Locale.US, "%.2f", value)
