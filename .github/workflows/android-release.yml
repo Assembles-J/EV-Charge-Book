@@ -40,9 +40,9 @@ jobs:
         shell: bash
         run: |
           set -eu
-          test -f android/gradlew
+          test -f android/build.gradle.kts
           test -f android/app/build.gradle.kts
-          test -d android/gradle/wrapper
+          test -f android/app/src/main/AndroidManifest.xml
           test -n "$ANDROID_KEYSTORE_BASE64"
           test -n "$ANDROID_KEYSTORE_PASSWORD"
           test -n "$ANDROID_KEY_ALIAS"
@@ -57,8 +57,13 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Setup Gradle cache
+      - name: Install Android SDK packages
+        run: sdkmanager "platforms;android-37" "build-tools;36.0.0"
+
+      - name: Setup Gradle 9.5
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.5.0'
 
       - name: Restore signing keystore
         shell: bash
@@ -76,8 +81,7 @@ jobs:
         run: |
           set -eu
           printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-          chmod +x gradlew
-          ./gradlew --no-daemon :app:assembleRelease
+          gradle --no-daemon :app:assembleRelease
           BUILD_TOOLS_VERSION="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -V | tail -1)"
           "$ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner" verify --print-certs app/build/outputs/apk/release/app-release.apk
 
