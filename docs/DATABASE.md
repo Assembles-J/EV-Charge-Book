@@ -1,121 +1,142 @@
 # EV Charge Book Database Design
 
-Version: v1.1.0
+Version: v1.2.0
 
-## Design Principle
+更新时间: 2026-08-25
 
-Local First.
+## 1. Design Principle
 
-Android 本地 Room 作为第一数据源，未来支持云端同步。
+Local First。
 
-## Core Entities
-
-## Vehicle
-
-车辆基础信息。
-
-Fields:
-
-- id
-- brand
-- model
-- battery_capacity_kwh
-- range_km
-- battery_type
-- purchase_date
-
-Example:
-
-Zero Run C16 2026
-
-Battery: LFP 67.7kWh
+v0.1 Android Room/SQLite 是唯一事实数据源；统计值优先动态聚合，不提前持久化冗余汇总表。
 
 ---
 
-## ChargingRecord
+## 2. Vehicle
 
-记录每一次充电行为。
+表名: `vehicles`
 
-Fields:
+字段:
 
-- id
-- vehicle_id
-- charge_time
-- start_soc
-- end_soc
-- energy_kwh
-- cost
-- price_per_kwh
-- charger_type
-- location
-- remark
+- `id: Long` PK autoGenerate
+- `brand: String`
+- `model: String`
+- `batteryCapacityKwh: Double`
+- `rangeKm: Int`
 
-Calculated:
+约束:
 
-- charging efficiency
-- average charging cost
+- brand/model 非空
+- batteryCapacityKwh > 0
+- rangeKm > 0
+
+v0.1 支持单车优先，但模型保持一对多扩展能力。
 
 ---
 
-## DrivingRecord
+## 3. ChargingRecord
 
-记录车辆行驶情况。
+表名: `charging_records`
 
-Fields:
+字段:
 
-- id
-- vehicle_id
-- date
-- mileage
-- average_consumption
-- weather
-- road_type
+- `id: Long` PK autoGenerate
+- `vehicleId: Long`
+- `chargeTimeEpochMillis: Long`
+- `startSoc: Int`
+- `endSoc: Int`
+- `energyKwh: Double`
+- `cost: Double`
+- `chargerType: String?`
+- `location: String?`
+- `remark: String?`
 
----
+派生值 `pricePerKwh` 不持久化，读取时按 `cost / energyKwh` 计算，避免修改费用或电量后出现数据不一致。
 
-## BatteryHealth
+约束:
 
-电池健康趋势模型。
+- startSoc/endSoc: 0..100
+- endSoc >= startSoc
+- energyKwh > 0
+- cost >= 0
 
-Fields:
+索引:
 
-- id
-- vehicle_id
-- record_date
-- charge_cycles
-- fast_charge_ratio
-- health_score
+- `vehicleId`
+- `chargeTimeEpochMillis`
 
----
-
-## CostSummary
-
-统计数据。
-
-Fields:
-
-- id
-- vehicle_id
-- month
-- total_cost
-- total_energy
-- total_mileage
-- cost_per_km
+默认查询按 `chargeTimeEpochMillis DESC`。
 
 ---
 
-## Future Cloud Mapping
+## 4. v0.1 Statistics
 
-User
+不创建 `CostSummary` 实体。
 
- |
+由 DAO/Repository 动态聚合:
 
-Vehicle
+- monthCost = SUM(cost)
+- monthEnergy = SUM(energyKwh)
+- chargingCount = COUNT(*)
+- totalCost = SUM(cost)
+- totalEnergy = SUM(energyKwh)
+- averagePrice = totalCost / totalEnergy
 
- |
+月度边界由应用层计算 `[monthStart, nextMonthStart)` 后传入 DAO。
 
+---
+
+## 5. Relationship
+
+```text
+Vehicle 1
+   |
+   | N
 ChargingRecord
+```
 
- |
+v0.1 可不启用 SQLite 外键级联，删除车辆前必须由业务层处理关联记录；云同步阶段再评估严格外键策略。
 
-Analysis
+---
+
+## 6. Future Entities
+
+以下实体不进入 v0.1 Room 基线:
+
+- DrivingRecord
+- BatteryHealth
+- CostSummary persisted table
+- User / Sync metadata
+
+进入对应版本前必须先更新本文件。
+
+---
+
+## 7. Migration Rule
+
+数据库版本从 `1` 开始。
+
+任何字段删除、重命名、类型修改必须:
+
+1. 更新 DATABASE.md 版本
+2. 增加 Room Migration
+3. 增加迁移测试
+4. 禁止 Release 使用 destructive migration
+
+开发早期 Debug 可临时重装应用，但不能把 destructive migration 当正式迁移方案。
+
+---
+
+## 8. 变更记录
+
+### v1.2.0
+
+- 将设计落到 v0.1 可实现 Room schema
+- ChargingRecord 增加 vehicleId / chargeTime / chargerType / remark
+- pricePerKwh 改为派生值
+- 明确 v0.1 不持久化 CostSummary
+- 明确统计口径、索引和 Migration 规则
+
+### v1.1.0
+
+- 建立 Vehicle / ChargingRecord / DrivingRecord / BatteryHealth / CostSummary 初始模型
