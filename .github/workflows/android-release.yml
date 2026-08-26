@@ -36,6 +36,11 @@ jobs:
           ref: ${{ inputs.ref }}
           fetch-depth: 0
 
+      - name: Resolve checked-out commit
+        id: source
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Validate Android release baseline
         shell: bash
         run: |
@@ -133,7 +138,7 @@ jobs:
           VERSION_CODE: ${{ env.VERSION_CODE }}
           VERSION_NAME: ${{ env.VERSION_NAME }}
           APK_FILE: ${{ env.APK_FILE }}
-          RELEASE_SHA: ${{ github.sha }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
         with:
           host: ${{ secrets.SERVER_IP }}
           username: ${{ secrets.SERVER_USER }}
@@ -153,7 +158,7 @@ jobs:
             echo "## EV Charge Book production release"
             echo ""
             echo "- Ref: \`${{ inputs.ref }}\`"
-            echo "- Commit: \`${{ github.sha }}\`"
+            echo "- Commit: \`${{ steps.source.outputs.sha }}\`"
             echo "- Version: \`${{ env.VERSION_NAME }}\`"
             echo "- APK: \`${{ env.APK_FILE }}\`"
           } >> "$GITHUB_STEP_SUMMARY"
