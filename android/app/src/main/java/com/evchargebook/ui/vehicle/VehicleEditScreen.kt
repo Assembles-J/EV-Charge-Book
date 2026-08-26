@@ -13,6 +13,7 @@ fun VehicleEditScreen(
     initialModel: String,
     initialBatteryCapacity: String,
     initialRange: String,
+    title: String = "编辑车辆",
     onSave: (String, String, Double, Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -24,7 +25,7 @@ fun VehicleEditScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("编辑车辆") },
+                title = { Text(title) },
                 navigationIcon = {
                     TextButton(onClick = onBack) { Text("返回") }
                 }

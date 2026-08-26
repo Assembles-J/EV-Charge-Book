@@ -116,16 +116,16 @@ Issue #18 保持 open，只追踪 migration test、正式 charging interval calc
 - Room transaction restore
 - export / restore count validation
 
-Android Build Run #65 已通过，Debug APK Artifact 已生成；真机验收仍未完成。
+Android Build Run #65 已通过，Debug APK Artifact 已生成，并已完成真机验收。
 
 Run ID: `32942654435`
 Commit: `94127ae874c33015eb88bb461be37f3869618b0f`
 
-下一优先级是完成 Backup / Restore 真机验收。验收完成前不得开始 Multi Vehicle / Catalog / Location / Trip 新功能。
+当前进入 P1 Multi Vehicle；完成该阶段验收前不得开始 Vehicle Catalog / Location / Trip 新功能。
 
 ### P1: 多车辆 / 车型目录
 
-Backup / Restore 验收完成后再进入：
+Backup / Restore 已验收，当前开始 Multi Vehicle：
 
 - selected/default vehicle
 - Dashboard / Records / Stats 按车辆隔离
@@ -218,8 +218,7 @@ Custom Vehicle fallback
 ## 10. 当前执行顺序
 
 ```text
-Backup / Restore physical-device acceptance
- -> Multi Vehicle (#17)
+Multi Vehicle (#17)
  -> Vehicle Catalog (#16)
  -> Location foundation (#14)
  -> Manual Trip Tracking (#15)
@@ -263,8 +262,8 @@ Compose -> MainViewModel -> ChargingRepository -> Room DAO -> Room
 
 - v0.1 正式标记 Released / Accepted
 - odometer foundation 已实现并通过 Android Build Run #56
-- Local Backup / Restore 第一版已通过 Android Build Run #65，等待真机验收
-- Local Agent 当前任务固定为 Backup/Restore 真机验收
+- Local Backup / Restore 已完成 CI 与真机验收
+- Local Agent 当前任务固定为 Multi Vehicle (#17)
 - 清理历史 Issue #1 / #2；#18 / #19 更新为真实当前状态
 
 ### v1.6.0

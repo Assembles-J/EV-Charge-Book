@@ -20,11 +20,11 @@ v0.1 已正式 Released / Accepted。
 
 ## 2. 本地 Agent 第一任务
 
-不要继续扩业务功能，先完成 Backup / Restore 真机验收。
+不要继续进入车型目录、定位或 Trip；当前任务为 Multi Vehicle (#17)。
 
 BuildConfig 编译阻塞已由最小改动修复：启用 Android `buildFeatures.buildConfig`。本地 `testDebugUnitTest` 与 `assembleDebug` 已通过，Android Build Run #65 Green，Debug APK Artifact 为 `ev-charge-book-debug-65`。
 
-真机验收前不得开始 Multi Vehicle / Catalog / Location / Trip。
+Backup / Restore 已完成真机验收。Multi Vehicle 结束前不得开始 Catalog / Location / Trip。
 
 ## 3. 已完成: v0.1
 
@@ -65,7 +65,7 @@ Issue: #18
 
 这些不是当前第一优先级。
 
-## 5. 已实现但未验收完成: Local Backup / Restore
+## 5. 已完成并验收: Local Backup / Restore
 
 Issue: #19
 
@@ -84,7 +84,7 @@ Issue: #19
 - record -> vehicle 引用检查
 - Vehicle 页面备份/恢复入口
 
-CI 已通过；现在按以下顺序完成真机验收:
+CI 与真机验收均已通过，覆盖以下场景:
 
 1. Debug APK Artifact
 2. 真机导出备份
@@ -101,8 +101,7 @@ CI 已通过；现在按以下顺序完成真机验收:
 严格按以下顺序推进:
 
 ```text
-P0.5 Backup / Restore device acceptance
- -> P1 Multi Vehicle (#17)
+P1 Multi Vehicle (#17)
  -> P1 Vehicle Catalog (#16)
  -> P2 Location foundation (#14)
  -> P2 Manual Trip Tracking (#15)

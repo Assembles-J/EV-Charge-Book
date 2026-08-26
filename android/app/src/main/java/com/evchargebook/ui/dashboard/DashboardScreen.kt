@@ -8,16 +8,21 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.ReceiptLong
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.font.FontWeight
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
@@ -28,14 +33,14 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit) {
+fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit, onSelectVehicle: (Long) -> Unit) {
     Scaffold(floatingActionButton = { ExtendedFloatingActionButton(onClick = onAddClick, icon = { Icon(Icons.Default.Add, null) }, text = { Text("记录充电") }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(MaterialTheme.spacing.md),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
         ) {
-            item { DashboardHeader(state.vehicle?.let { "${it.brand} ${it.model}" } ?: "我的电动车") }
+            item { DashboardHeader(state.vehicle, state.vehicles, onSelectVehicle) }
             item { EnergyHero(state) }
             item { Text("本月能耗", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item { MetricsRow(state) }
@@ -46,11 +51,12 @@ fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit) {
     }
 }
 
-@Composable private fun DashboardHeader(vehicleName: String) {
+@Composable private fun DashboardHeader(selectedVehicle: VehicleEntity?, vehicles: List<VehicleEntity>, onSelectVehicle: (Long) -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Surface(color = MaterialTheme.colorScheme.tertiaryContainer, shape = MaterialTheme.shapes.large) { Icon(Icons.Default.DirectionsCar, null, Modifier.padding(MaterialTheme.spacing.sm), MaterialTheme.colorScheme.onTertiaryContainer) }
         Spacer(Modifier.width(MaterialTheme.spacing.sm))
-        Column(Modifier.weight(1f)) { Text("EV Charge Book", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary); Text(vehicleName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold) }
+        Column(Modifier.weight(1f)) { Text("EV Charge Book", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary); Box { TextButton(onClick = { expanded = true }, contentPadding = PaddingValues()) { Text(selectedVehicle?.let { "${it.brand} ${it.model}" } ?: "我的电动车", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold); Icon(Icons.Default.ArrowDropDown, "切换车辆") }; DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) { vehicles.forEach { vehicle -> DropdownMenuItem(text = { Text("${vehicle.brand} ${vehicle.model}") }, onClick = { onSelectVehicle(vehicle.id); expanded = false }) } } } }
         Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = MaterialTheme.shapes.medium) { Text("本地账本", Modifier.padding(horizontal = MaterialTheme.spacing.sm, vertical = MaterialTheme.spacing.xs), style = MaterialTheme.typography.labelMedium) }
     }
 }

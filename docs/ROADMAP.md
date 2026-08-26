@@ -74,7 +74,7 @@ Issue #18 后续尾项：
 
 ### P0.5 Local Backup / Restore
 
-状态: Implemented / CI Accepted / Device Acceptance Pending
+状态: Implemented / CI Accepted / Device Accepted
 
 已实现：
 
@@ -99,13 +99,13 @@ CI 验收：
 
 接下来必须按顺序完成：
 
-- [ ] 真机导出备份
-- [ ] 真机覆盖确认
-- [ ] 真机恢复 Vehicle / ChargingRecord / odometer / remark
-- [ ] 坏 JSON / 错 schemaVersion 不破坏当前数据
-- [ ] 更新 #19 并标记 Backup / Restore accepted
+- [x] 真机导出备份
+- [x] 真机覆盖确认
+- [x] 真机恢复 Vehicle / ChargingRecord / odometer / remark
+- [x] 坏 JSON / 错 schemaVersion 不破坏当前数据
+- [x] 更新 #19 并标记 Backup / Restore accepted
 
-Backup / Restore 完成前，不开始后续 P1/P2 功能。
+Backup / Restore 已验收；当前进入 Multi Vehicle。
 
 ### P1 Multi Vehicle (#17)
 
@@ -181,8 +181,7 @@ Analytics 必须区分原始事实、派生值和估算值。
 ## 当前执行顺序
 
 ```text
-Backup / Restore device acceptance
-  -> Multi Vehicle (#17)
+Multi Vehicle (#17)
   -> Vehicle Catalog (#16)
   -> Location foundation (#14)
   -> Manual Trip Tracking (#15)
@@ -212,8 +211,8 @@ docs/LOCAL_AGENT_HANDOFF.md
 ### v2.0.0
 
 - odometer foundation 确认由 Android Build Run #56 验收通过
-- Local Backup / Restore 第一版已通过 Android Build Run #65，等待真机验收
-- 当前主线为 Backup/Restore 真机验收
+- Local Backup / Restore 已通过 Android Build Run #65 和真机验收
+- 当前主线为 Multi Vehicle (#17)
 - 新增 LOCAL_AGENT_HANDOFF.md
 - 清理历史 Issue #1 / #2
 - 更新 #18 / #19 为真实当前状态

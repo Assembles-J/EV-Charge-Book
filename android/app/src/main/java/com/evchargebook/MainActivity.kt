@@ -33,7 +33,7 @@ import java.util.Locale
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels {
         val db = AppDatabase.getInstance(applicationContext)
-        MainViewModel.Factory(ChargingRepository(db))
+        MainViewModel.Factory(ChargingRepository(db, applicationContext))
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +50,7 @@ fun MainApp(viewModel: MainViewModel) {
     val snackbarHostState = remember { SnackbarHostState() }
     var tab by remember { mutableIntStateOf(0) }
     var editVehicle by remember { mutableStateOf(false) }
+    var addVehicle by remember { mutableStateOf(false) }
     var addRecord by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
@@ -93,7 +94,7 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!editVehicle && !addRecord && editingRecord == null) {
+            if (!editVehicle && !addVehicle && !addRecord && editingRecord == null) {
                 NavigationBar {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(
@@ -131,25 +132,43 @@ fun MainApp(viewModel: MainViewModel) {
                 editVehicle -> {
                     state.vehicle?.let { vehicle ->
                         VehicleEditScreen(
-                            vehicle.brand,
-                            vehicle.model,
-                            vehicle.batteryCapacityKwh.toString(),
-                            vehicle.rangeKm.toString(),
-                            { brand, model, capacity, range ->
+                            initialBrand = vehicle.brand,
+                            initialModel = vehicle.model,
+                            initialBatteryCapacity = vehicle.batteryCapacityKwh.toString(),
+                            initialRange = vehicle.rangeKm.toString(),
+                            onSave = { brand, model, capacity, range ->
                                 viewModel.saveVehicle(brand, model, capacity, range)
                                 editVehicle = false
                             },
-                            { editVehicle = false }
+                            onBack = { editVehicle = false }
                         )
                     }
                 }
+                addVehicle -> {
+                    VehicleEditScreen(
+                        initialBrand = "",
+                        initialModel = "",
+                        initialBatteryCapacity = "",
+                        initialRange = "",
+                        title = "添加车辆",
+                        onSave = { brand, model, capacity, range ->
+                            viewModel.addVehicle(brand, model, capacity, range)
+                            addVehicle = false
+                        },
+                        onBack = { addVehicle = false }
+                    )
+                }
                 else -> when (tab) {
-                    0 -> DashboardScreen(state) { addRecord = true }
+                    0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
                     3 -> VehicleScreen(
                         vehicle = state.vehicle,
+                        vehicles = state.vehicles,
+                        onSelect = viewModel::selectVehicle,
+                        onAdd = { addVehicle = true },
                         onEdit = { editVehicle = true },
+                        onArchive = { vehicle -> viewModel.archiveVehicle(vehicle.id) },
                         onExportBackup = {
                             viewModel.exportBackup(BuildConfig.VERSION_NAME) { content ->
                                 pendingExportContent = content

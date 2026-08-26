@@ -14,6 +14,9 @@ interface ChargingRecordDao {
     @Query("SELECT * FROM charging_records ORDER BY chargeTimeEpochMillis DESC")
     fun observeAll(): Flow<List<ChargingRecordEntity>>
 
+    @Query("SELECT * FROM charging_records WHERE vehicleId = :vehicleId ORDER BY chargeTimeEpochMillis DESC")
+    fun observeForVehicle(vehicleId: Long): Flow<List<ChargingRecordEntity>>
+
     @Query("SELECT * FROM charging_records ORDER BY id")
     suspend fun getAll(): List<ChargingRecordEntity>
 

@@ -15,6 +15,7 @@ import java.time.YearMonth
 
 data class MainUiState(
     val vehicle: VehicleEntity? = null,
+    val vehicles: List<VehicleEntity> = emptyList(),
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
     val monthCost: Double = 0.0,
     val monthEnergy: Double = 0.0,
@@ -33,7 +34,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     init {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch {
-            combine(repository.vehicle, repository.chargingRecords) { vehicle, records ->
+            combine(repository.vehicle, repository.vehicles, repository.chargingRecords) { vehicle, vehicles, records ->
                 val now = Instant.now().atZone(ZoneId.systemDefault())
                 val month = YearMonth.from(now)
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -41,6 +42,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val summary = ChargingStatistics.summarize(records, start, end)
                 _uiState.value.copy(
                     vehicle = vehicle,
+                    vehicles = vehicles,
                     chargingRecords = records,
                     monthCost = summary.monthCost,
                     monthEnergy = summary.monthEnergy,
@@ -80,6 +82,29 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     rangeKm = range
                 ))
             }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
+
+    fun addVehicle(brand: String, model: String, battery: Double, range: Int) {
+        viewModelScope.launch {
+            runCatching { repository.addVehicle(brand, model, battery, range) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
+
+    fun selectVehicle(vehicleId: Long) {
+        viewModelScope.launch {
+            runCatching { repository.selectVehicle(vehicleId) }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
+
+    fun archiveVehicle(vehicleId: Long) {
+        viewModelScope.launch {
+            runCatching { repository.archiveVehicle(vehicleId) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已归档，历史记录仍保留") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
         }
     }
 

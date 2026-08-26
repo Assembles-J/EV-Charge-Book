@@ -10,5 +10,8 @@ data class VehicleEntity(
     val brand: String,
     val model: String,
     val batteryCapacityKwh: Double,
-    val rangeKm: Int
+    val rangeKm: Int,
+    val isDefault: Boolean = false,
+    val isArchived: Boolean = false,
+    val createdAtEpochMillis: Long = System.currentTimeMillis()
 )

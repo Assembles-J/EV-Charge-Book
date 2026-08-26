@@ -1,13 +1,13 @@
 package com.evchargebook.ui.vehicle
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Upload
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import com.evchargebook.data.entity.VehicleEntity
@@ -16,37 +16,25 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VehicleScreen(
-    vehicle: VehicleEntity?,
-    onEdit: () -> Unit,
-    onExportBackup: () -> Unit,
-    onImportBackup: () -> Unit
-) {
-    Scaffold(topBar = { TopAppBar(title = { Text("我的车辆") }, actions = { IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "编辑车辆") } }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-            if (vehicle == null) Text("暂未配置车辆", style = MaterialTheme.typography.titleLarge)
-            else {
-                ElevatedCard(Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) { Column(Modifier.padding(MaterialTheme.spacing.lg)) { Icon(Icons.Default.DirectionsCar, null, tint = MaterialTheme.colorScheme.onPrimaryContainer); Spacer(Modifier.height(MaterialTheme.spacing.sm)); Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold); Text("你的当前座驾", color = MaterialTheme.colorScheme.onPrimaryContainer) } }
-                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { VehicleMetric("电池容量", "${one(vehicle.batteryCapacityKwh)} kWh", Modifier.weight(1f)); VehicleMetric("标称续航", "${vehicle.rangeKm} km", Modifier.weight(1f)) }
-                Text("车辆信息用于帮助你理解每次充电；所有数据只保存在本机。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text("编辑车辆资料") }
-            }
+fun VehicleScreen(vehicle: VehicleEntity?, vehicles: List<VehicleEntity>, onSelect: (Long) -> Unit, onAdd: () -> Unit, onEdit: () -> Unit, onArchive: (VehicleEntity) -> Unit, onExportBackup: () -> Unit, onImportBackup: () -> Unit) {
+    var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
+    Scaffold(topBar = { TopAppBar(title = { Text("我的车辆") }) }, floatingActionButton = { ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Default.Add, null) }, text = { Text("添加车辆") }) }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            item { Text("当前车辆决定总览、记录与统计的数据范围。归档不会删除历史充电记录。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            items(vehicles, key = { it.id }) { item -> VehicleRow(item, item.id == vehicle?.id, vehicles.size > 1, { onSelect(item.id) }, { if (item.id == vehicle?.id) onEdit() else onSelect(item.id) }, { archiveCandidate = item }) }
+            item { HorizontalDivider(Modifier.padding(vertical = MaterialTheme.spacing.sm)); Text("本地备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text("备份包含所有车辆及其充电记录。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(MaterialTheme.spacing.sm)); Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) { Text("导出备份") }; OutlinedButton(onClick = onImportBackup, modifier = Modifier.weight(1f)) { Text("恢复备份") } } }
+        }
+    }
+    archiveCandidate?.let { candidate -> AlertDialog(onDismissRequest = { archiveCandidate = null }, title = { Text("归档 ${candidate.brand} ${candidate.model}？") }, text = { Text("车辆将不再出现在切换列表中，但历史充电记录仍会保留。") }, confirmButton = { TextButton(onClick = { onArchive(candidate); archiveCandidate = null }) { Text("归档") } }, dismissButton = { TextButton(onClick = { archiveCandidate = null }) { Text("取消") } }) }
+}
 
-            HorizontalDivider()
-            Text("本地数据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("备份包含车辆和全部充电记录。恢复会覆盖当前本地数据，并在执行前再次确认。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Download, null)
-                Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("导出本地备份")
-            }
-            OutlinedButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth()) {
-                Icon(Icons.Default.Upload, null)
-                Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("从备份恢复")
-            }
+@Composable private fun VehicleRow(vehicle: VehicleEntity, selected: Boolean, canArchive: Boolean, onSelect: () -> Unit, onEdit: () -> Unit, onArchive: () -> Unit) {
+    ElevatedCard(onClick = onSelect, modifier = Modifier.fillMaxWidth(), colors = CardDefaults.elevatedCardColors(containerColor = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow)) {
+        Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.DirectionsCar, null, tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(MaterialTheme.spacing.sm)); Column(Modifier.weight(1f)) { Row(verticalAlignment = Alignment.CenterVertically) { Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); if (selected) { Spacer(Modifier.width(MaterialTheme.spacing.xs)); AssistChip(onClick = onSelect, label = { Text("当前") }) } }; Text("${one(vehicle.batteryCapacityKwh)} kWh · ${vehicle.rangeKm} km", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "编辑车辆") }; if (canArchive) IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, "归档车辆") }
         }
     }
 }
-@Composable private fun VehicleMetric(label: String, value: String, modifier: Modifier) { OutlinedCard(modifier) { Column(Modifier.padding(MaterialTheme.spacing.md)) { Text(label, style = MaterialTheme.typography.labelMedium); Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) } } }
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)

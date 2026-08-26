@@ -14,7 +14,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 2
+    const val CURRENT_SCHEMA_VERSION = 3
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -28,6 +28,9 @@ object BackupCodec {
                     put("model", vehicle.model)
                     put("batteryCapacityKwh", vehicle.batteryCapacityKwh)
                     put("rangeKm", vehicle.rangeKm)
+                    put("isDefault", vehicle.isDefault)
+                    put("isArchived", vehicle.isArchived)
+                    put("createdAtEpochMillis", vehicle.createdAtEpochMillis)
                 })
             }
         })
@@ -53,8 +56,8 @@ object BackupCodec {
     fun decode(text: String): BackupPayload {
         val root = JSONObject(text)
         val schemaVersion = root.getInt("schemaVersion")
-        require(schemaVersion == CURRENT_SCHEMA_VERSION) {
-            "不支持的备份版本：$schemaVersion，当前支持 ${CURRENT_SCHEMA_VERSION}"
+        require(schemaVersion in 2..CURRENT_SCHEMA_VERSION) {
+            "不支持的备份版本：$schemaVersion，当前支持 2 至 ${CURRENT_SCHEMA_VERSION}"
         }
 
         val vehiclesJson = root.getJSONArray("vehicles")
@@ -67,7 +70,10 @@ object BackupCodec {
                         brand = item.getString("brand"),
                         model = item.getString("model"),
                         batteryCapacityKwh = item.getDouble("batteryCapacityKwh"),
-                        rangeKm = item.getInt("rangeKm")
+                        rangeKm = item.getInt("rangeKm"),
+                        isDefault = item.optBoolean("isDefault", false),
+                        isArchived = item.optBoolean("isArchived", false),
+                        createdAtEpochMillis = item.optLong("createdAtEpochMillis", item.getLong("id"))
                     )
                 )
             }

@@ -10,8 +10,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface VehicleDao {
-    @Query("SELECT * FROM vehicles ORDER BY id LIMIT 1")
-    fun observePrimaryVehicle(): Flow<VehicleEntity?>
+    @Query("SELECT * FROM vehicles WHERE isArchived = 0 ORDER BY isDefault DESC, createdAtEpochMillis ASC")
+    fun observeActive(): Flow<List<VehicleEntity>>
 
     @Query("SELECT * FROM vehicles ORDER BY id")
     suspend fun getAll(): List<VehicleEntity>
@@ -24,6 +24,9 @@ interface VehicleDao {
 
     @Update
     suspend fun update(vehicle: VehicleEntity)
+
+    @Query("UPDATE vehicles SET isDefault = CASE WHEN id = :vehicleId THEN 1 ELSE 0 END")
+    suspend fun setDefault(vehicleId: Long)
 
     @Query("DELETE FROM vehicles")
     suspend fun deleteAll()
