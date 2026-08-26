@@ -1,240 +1,209 @@
 # EV Charge Book 前端设计
 
-版本: v1.2.0
-
-更新时间: 2026-08-25
+版本: v1.3.0
+更新时间: 2026-08-26
 
 ## 1. 技术方案
 
 Android Native:
 
 - Kotlin
-- Jetpack Compose
-- Material 3
+- Jetpack Compose / Material 3
 - ViewModel + StateFlow
 - Room / SQLite
+- DataStore（v0.2 selectedVehicleId）
 - Coroutines
+- Android Location API / foreground service（v0.2）
+- MapLibre Native adapter（v0.2 地图展示）
 
-当前实际包名统一使用 `com.evchargebook`。v0.1 不引入 Hilt/Koin，不为未来模块提前增加复杂依赖注入。
+当前包名 `com.evchargebook`。继续避免为早期功能引入不必要的 DI/微型 Clean Architecture 仪式。
 
 ---
 
-## 2. v0.1 当前实现阶段
-
-UI 骨架已具备:
-
-- Dashboard
-- Records
-- Add Record
-- Stats
-- Vehicle
-- Bottom Navigation
-
-下一业务基线从“静态页面”切换到“真实本地数据闭环”:
+## 2. v0.1 当前数据流
 
 ```text
-Add Record Form
-  -> validation
-  -> ViewModel
-  -> ChargingRepository
-  -> Room DAO
-  -> Flow refresh
-  -> Dashboard / Records / Stats
+Compose
+ -> MainViewModel
+ -> ChargingRepository
+ -> Room DAO
+ -> Flow
+ -> UI
 ```
 
-禁止继续使用静态示例金额、固定日期、固定充电站作为正式业务数据。
+Dashboard / Records / Stats 必须共享真实数据口径。
+
+v0.1 剩余重点是充电记录完整编辑与 CI/APK 验收，新定位/地图需求不得阻塞 v0.1。
 
 ---
 
-## 3. 包结构
+## 3. v0.2 模块扩展
+
+推荐新增:
 
 ```text
 com.evchargebook
-├── MainActivity.kt
 ├── data
-│   ├── entity
-│   ├── dao
-│   ├── database
+│   ├── local
+│   │   ├── trip
+│   │   └── catalog
 │   └── repository
-├── ui
-│   ├── dashboard
-│   ├── records
-│   ├── stats
-│   └── vehicle
-└── viewmodel
+│       ├── VehicleRepository
+│       └── TripRepository
+├── location
+│   ├── LocationProvider
+│   ├── AndroidLocationProvider
+│   └── TripTrackingService
+├── map
+│   ├── MapProvider
+│   └── MapLibreProvider
+└── ui
+    ├── trip
+    └── vehiclecatalog
 ```
 
-v0.1 仅在出现可复用复杂业务逻辑时增加 domain/usecase。
+接口以实际替换需求为目的，不创建多层空抽象。
 
 ---
 
-## 4. 核心数据流
+## 4. 多车辆 App State
 
-读取:
+v0.2 引入统一 `selectedVehicleId`。
 
 ```text
-Room Flow
- -> Repository
- -> MainViewModel
- -> MainUiState
- -> Compose
+DataStore selectedVehicleId
+ -> VehicleRepository
+ -> App/ViewModel State
+ -> Dashboard / Records / Stats / Add Record / Trip
 ```
 
-写入:
+页面不各自保存当前车辆。
+
+任何新增充电/行程都必须显式绑定 vehicleId。
+
+---
+
+## 5. Vehicle Catalog
+
+车型目录与 UserVehicle 分离。
+
+v0.2 首先采用本地版本化 JSON/Room seed，实现离线搜索，不让 App 依赖在线免费 API 才能添加车辆。
+
+流程:
 
 ```text
-AddRecordScreen
- -> validate
- -> MainViewModel.addChargingRecord()
- -> Repository.insert()
- -> Room
+Catalog Search
+ -> Select model
+ -> User confirms/overrides values
+ -> Save UserVehicle snapshot
 ```
 
-UI 不直接持有 DAO 或 Database。
+必须保留 Custom Vehicle fallback。
 
 ---
 
-## 5. MainUiState
+## 6. LocationProvider
 
-v0.1 采用单一轻量状态承载跨页面核心数据:
+定位核心定义最小接口:
 
-- vehicle
-- chargingRecords
-- monthCost
-- monthEnergy
-- averagePrice
-- chargingCount
-- totalCost
-- totalEnergy
-- isLoading
-- errorMessage
+- getCurrentLocation()
+- startUpdates(config)
+- stopUpdates()
 
-Dashboard 与 Stats 的数字必须从同一数据源聚合，避免页面口径不一致。
+核心业务使用统一 LocationSample，不让 ViewModel 直接依赖地图 SDK 的 location object。
+
+建议 LocationSample 包含:
+
+- lat/lng
+- altitude?
+- speed?
+- bearing?
+- accuracy
+- timestamp
+
+原始数据库坐标统一 WGS84。
 
 ---
 
-## 6. 充电记录表单
+## 7. TripTrackingService
 
-必填:
+v0.2 使用用户主动启动的 location foreground service。
 
-- chargeTime
-- startSoc
-- endSoc
-- energyKwh
-- cost
+职责:
 
-可选:
+- 启动/结束 TripSession
+- 订阅定位更新
+- 过滤明显无效点
+- 批量写入 TripPoint
+- 更新 ongoing notification
+- 处理进程/服务异常结束状态
 
-- location
-- chargerType
-- remark
+UI 不承担持续采样逻辑。
 
-校验:
+Android 10+ 声明 `foregroundServiceType="location"`；持续记录过程中必须有通知。
 
-- SOC: 0..100
-- endSoc >= startSoc
-- energyKwh > 0
-- cost >= 0
+v0.2 不默认申请“永久后台自动位置追踪”来做自动开车识别。
 
-派生值:
+---
+
+## 8. Map Adapter
+
+地图只消费已有轨迹数据:
 
 ```text
-pricePerKwh = cost / energyKwh
+TripPoint Flow/List
+ -> MapProvider
+ -> Polyline / Start / End
 ```
 
-页面保存成功后返回 Records/Dashboard；失败则保留用户已输入内容并展示错误。
+MapLibre 作为首选开源实现；tile/style provider 单独配置。
+
+地图失败不影响 Trip 数据读取、统计和删除。
+
+高德等中国地图可作为后续 adapter，不能把其 SDK 类型渗透到 Room/Repository。
 
 ---
 
-## 7. Records
+## 9. 充电表单
 
-v0.1 必须支持:
+v0.1 字段保持时间、SOC、电量、费用、类型、地点、备注。
 
-- 按充电时间倒序
-- 查看地点 / SOC / 电量 / 费用 / 单价
-- 删除
+v0.2 增加:
 
-编辑详情可在 CRUD 基线后补齐，但删除必须进入 v0.1。
+- 当前车辆选择
+- 使用当前位置
 
----
-
-## 8. Dashboard
-
-v0.1 首屏只显示可由真实数据可靠计算的内容:
-
-- 当前车辆
-- 本月费用
-- 本月充电量
-- 平均电价
-- 充电次数
-- 最近 3 条记录
-
-“实时 SOC / 剩余续航 / 电池健康度”在没有车机或人工录入数据源前不得伪装成实时数据。
+获取位置失败不得阻塞手工保存。
 
 ---
 
-## 9. Stats
+## 10. Trip 统计口径
 
-v0.1 只做基础统计:
-
-- 累计费用
-- 累计充电量
-- 平均电价
-- 本月费用
-- 本月充电量
-
-趋势图进入 v0.2；v0.1 可以保留明确标记为“即将支持”的占位区域，但不得展示伪造曲线。
+- distance: 相邻有效坐标点累计
+- elapsed time: endedAt - startedAt
+- current/max speed: Location speed，过滤异常值
+- average speed: 必须明确使用 elapsed time 或 moving time；第一版使用 elapsed time 更可解释
+- altitude: 标记 GPS altitude；爬升量先平滑再计算
 
 ---
 
-## 10. Vehicle
+## 11. Build Baseline
 
-v0.1 至少支持一个车辆档案:
-
-- brand
-- model
-- batteryCapacityKwh
-- rangeKm
-
-默认测试数据可以用于首次启动初始化，但用户修改后必须由 Room 持久化。
+当前已具备 Gradle Wrapper。CI / Release 应使用 `./gradlew`，Android SDK 与 `compileSdk` 保持一致。
 
 ---
 
-## 11. 构建基线
+## 12. 变更记录
 
-Android 工程必须具备:
+### v1.3.0
 
-- root `build.gradle.kts`
-- `app/build.gradle.kts`
-- AndroidManifest
-- 可解析依赖
-- Debug assemble green
-
-CI 使用固定 Gradle 版本执行，Gradle Wrapper 后续补齐但不阻塞第一次远程构建验证。
-
----
-
-## 12. 测试基线
-
-至少覆盖:
-
-- SOC 校验
-- 单价计算
-- 月度费用/电量聚合
-- Repository insert/delete
-
----
-
-## 13. 变更记录
+- 增加 DataStore 当前车辆上下文
+- 定义车型目录本地 seed 方案
+- 定义 LocationProvider / TripTrackingService
+- 定义 MapLibre 可替换 MapProvider
+- 明确 WGS84、foreground location 和统计口径
+- 更新构建基线为使用已提交 Gradle Wrapper
 
 ### v1.2.0
 
-- 对齐本地提交后的 Dashboard / Records / Stats / Vehicle UI
-- 正式进入 Room CRUD + 动态统计业务阶段
-- 统一实际包名 `com.evchargebook`
-- 禁止正式页面继续展示伪造实时数据和伪造统计
-- 明确 v0.1 MainUiState 与页面数据口径
-
-### v1.1.0
-
-- 明确 Android v0.1 技术栈、数据流、导航和表单规则
+- 对齐 Room CRUD 和真实 Dashboard / Records / Stats
