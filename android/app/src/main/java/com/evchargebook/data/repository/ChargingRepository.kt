@@ -18,6 +18,7 @@ import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.domain.TripRules
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -80,12 +81,16 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             exportedAt = System.currentTimeMillis(),
             appVersion = appVersion,
             vehicles = vehicleDao.getAll(),
-            chargingRecords = chargingRecordDao.getAll()
+            chargingRecords = chargingRecordDao.getAll(),
+            tripSessions = tripDao.getAllSessions(),
+            tripPoints = tripDao.getAllPoints()
         )
         val encoded = BackupCodec.encode(payload)
         val verified = BackupCodec.decode(encoded)
         require(verified.vehicles.size == payload.vehicles.size) { "车辆备份数量校验失败" }
         require(verified.chargingRecords.size == payload.chargingRecords.size) { "充电记录备份数量校验失败" }
+        require(verified.tripSessions.size == payload.tripSessions.size) { "行程备份数量校验失败" }
+        require(verified.tripPoints.size == payload.tripPoints.size) { "轨迹点备份数量校验失败" }
         return encoded
     }
 
@@ -93,19 +98,24 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val payload = BackupCodec.decode(content)
         database.withTransaction {
             require(tripDao.getActive() == null) { "请先结束当前行程，再恢复备份" }
+            tripDao.deleteAllSessions()
             chargingRecordDao.deleteAll()
             vehicleDao.deleteAll()
             vehicleDao.insertAll(payload.vehicles)
             chargingRecordDao.insertAll(payload.chargingRecords)
+            tripDao.insertSessions(payload.tripSessions)
+            tripDao.insertPoints(payload.tripPoints)
 
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
+            require(tripDao.getAllSessions().size == payload.tripSessions.size) { "行程恢复数量校验失败" }
+            require(tripDao.getAllPoints().size == payload.tripPoints.size) { "轨迹点恢复数量校验失败" }
         }
     }
 
     suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long = database.withTransaction {
         require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
-        require(tripDao.getActive() == null) { "已有进行中的行程，请先结束或恢复它" }
+        TripRules.requireCanStart(tripDao.getActive() != null)
         tripDao.insertSession(
             TripSessionEntity(
                 vehicleId = vehicleId,
@@ -118,11 +128,10 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
         database.withTransaction {
             val active = tripDao.getActive() ?: error("当前没有进行中的行程")
-            require(endedAtEpochMillis >= active.startedAtEpochMillis) { "结束时间不能早于开始时间" }
             tripDao.updateSession(
                 active.copy(
                     endedAtEpochMillis = endedAtEpochMillis,
-                    elapsedSeconds = (endedAtEpochMillis - active.startedAtEpochMillis) / 1000,
+                    elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis),
                     status = TripStatus.COMPLETED
                 )
             )
