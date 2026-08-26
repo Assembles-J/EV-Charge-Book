@@ -39,7 +39,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val summary = ChargingStatistics.summarize(records, start, end)
-                MainUiState(
+                _uiState.value.copy(
                     vehicle = vehicle,
                     chargingRecords = records,
                     monthCost = summary.monthCost,
@@ -50,6 +50,22 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     totalEnergy = summary.totalEnergy
                 )
             }.collect { _uiState.value = it }
+        }
+    }
+
+    fun exportBackup(appVersion: String, onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            runCatching { repository.exportBackup(appVersion) }
+                .onSuccess(onReady)
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份导出失败") }
+        }
+    }
+
+    fun restoreBackup(content: String) {
+        viewModelScope.launch {
+            runCatching { repository.restoreBackup(content) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "本地备份已恢复") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份恢复失败") }
         }
     }
 
