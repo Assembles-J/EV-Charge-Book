@@ -1,6 +1,6 @@
 # EV Charge Book 前端设计
 
-版本: v1.3.0
+版本: v1.4.0
 更新时间: 2026-08-26
 
 ## 1. 技术方案
@@ -11,12 +11,13 @@ Android Native:
 - Jetpack Compose / Material 3
 - ViewModel + StateFlow
 - Room / SQLite
-- DataStore（v0.2 selectedVehicleId）
 - Coroutines
+- Repository Gradle Wrapper
+- DataStore（v0.2 selectedVehicleId）
 - Android Location API / foreground service（v0.2）
 - MapLibre Native adapter（v0.2 地图展示）
 
-当前包名 `com.evchargebook`。继续避免为早期功能引入不必要的 DI/微型 Clean Architecture 仪式。
+当前包名 `com.evchargebook`。继续避免为早期功能引入不必要的 DI 或形式化 Clean Architecture 层级。
 
 ---
 
@@ -31,13 +32,95 @@ Compose
  -> UI
 ```
 
-Dashboard / Records / Stats 必须共享真实数据口径。
+Dashboard / Records / Stats 共享同一真实数据口径。
 
-v0.1 剩余重点是充电记录完整编辑与 CI/APK 验收，新定位/地图需求不得阻塞 v0.1。
+v0.1 已完成：
+
+- 车辆读取 / 编辑 / 保存
+- 充电记录新增 / 编辑 / 删除
+- 日期 / 时间选择
+- charger type / remark
+- 删除确认
+- success / error Snackbar
+- empty state
+- Material 3 theme
+- edge-to-edge
+- ChargingRecordRules
+- ChargingStatistics
+- domain rules / statistics unit tests
+
+当前前端阶段不是继续扩功能，而是通过 CI / APK / 真机走查验证完整闭环。
 
 ---
 
-## 3. v0.2 模块扩展
+## 3. v0.1 页面状态
+
+### Dashboard
+
+- 真实车辆信息
+- 本月费用 / 电量 / 次数 / 平均电价
+- Energy Hero 使用月充电量与车辆电池容量做等效展示
+- 最近充电记录
+- 无记录时 EmptyState
+
+Energy Hero 是展示型派生指标，不代表车辆实时 SOC、剩余电量或 SOH。
+
+### Records
+
+- Room 实时记录列表
+- 新增入口
+- 点击进入编辑
+- 删除前确认
+
+### Record Edit / Add
+
+字段：
+
+- charge time
+- start SOC
+- end SOC
+- energy kWh
+- final paid cost
+- charger type
+- location
+- remark
+
+保存前统一通过 ChargingRecordRules 校验。
+
+### Vehicle
+
+- 读取 Room Vehicle
+- 编辑品牌 / 车型 / 电池容量 / 标称续航
+- 不展示无法从当前数据源获得的实时 SOC / SOH / 实时续航
+
+---
+
+## 4. Domain Rules
+
+v0.1 已将核心规则从 UI / Repository 内联判断中抽出。
+
+ChargingRecordRules 负责：
+
+- startSoc 0..100
+- endSoc 0..100
+- endSoc >= startSoc
+- energyKwh > 0
+- cost >= 0
+
+ChargingStatistics 负责基础聚合：
+
+- monthCost
+- monthEnergy
+- chargingCount
+- totalCost
+- totalEnergy
+- averagePrice
+
+UI 不重复实现这些计算规则。
+
+---
+
+## 5. v0.2 模块扩展
 
 推荐新增:
 
@@ -66,7 +149,7 @@ com.evchargebook
 
 ---
 
-## 4. 多车辆 App State
+## 6. 多车辆 App State
 
 v0.2 引入统一 `selectedVehicleId`。
 
@@ -83,7 +166,7 @@ DataStore selectedVehicleId
 
 ---
 
-## 5. Vehicle Catalog
+## 7. Vehicle Catalog
 
 车型目录与 UserVehicle 分离。
 
@@ -102,7 +185,7 @@ Catalog Search
 
 ---
 
-## 6. LocationProvider
+## 8. LocationProvider
 
 定位核心定义最小接口:
 
@@ -125,7 +208,7 @@ Catalog Search
 
 ---
 
-## 7. TripTrackingService
+## 9. TripTrackingService
 
 v0.2 使用用户主动启动的 location foreground service。
 
@@ -146,7 +229,7 @@ v0.2 不默认申请“永久后台自动位置追踪”来做自动开车识别
 
 ---
 
-## 8. Map Adapter
+## 10. Map Adapter
 
 地图只消费已有轨迹数据:
 
@@ -164,36 +247,29 @@ MapLibre 作为首选开源实现；tile/style provider 单独配置。
 
 ---
 
-## 9. 充电表单
-
-v0.1 字段保持时间、SOC、电量、费用、类型、地点、备注。
-
-v0.2 增加:
-
-- 当前车辆选择
-- 使用当前位置
-
-获取位置失败不得阻塞手工保存。
-
----
-
-## 10. Trip 统计口径
-
-- distance: 相邻有效坐标点累计
-- elapsed time: endedAt - startedAt
-- current/max speed: Location speed，过滤异常值
-- average speed: 必须明确使用 elapsed time 或 moving time；第一版使用 elapsed time 更可解释
-- altitude: 标记 GPS altitude；爬升量先平滑再计算
-
----
-
 ## 11. Build Baseline
 
-当前已具备 Gradle Wrapper。CI / Release 应使用 `./gradlew`，Android SDK 与 `compileSdk` 保持一致。
+当前已具备 Gradle Wrapper。CI / Release 使用 `./gradlew`，Android SDK 与 `compileSdk` 保持一致。
+
+当前验收优先级：
+
+1. CI Green
+2. Debug APK Artifact
+3. 真机安装和业务走查
+4. assembleRelease
+5. signed production publish
 
 ---
 
 ## 12. 变更记录
+
+### v1.4.0
+
+- 对齐 commit `7204c56` 的完整 Record CRUD 与 UI 重构
+- 记录 ChargingRecordRules / ChargingStatistics domain 抽取
+- 增加删除确认、Snackbar、EmptyState、日期时间和充电类型
+- 明确 Energy Hero 不是实时电池状态
+- 前端阶段切换为 CI / APK / 真机验收
 
 ### v1.3.0
 
