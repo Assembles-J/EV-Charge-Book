@@ -67,16 +67,40 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
-    fun addChargingRecord(startSoc:Int,endSoc:Int,energyKwh:Double,cost:Double,location:String?,chargerType:String?,remark:String?,chargeTime:Long) {
+    fun addChargingRecord(
+        startSoc: Int,
+        endSoc: Int,
+        energyKwh: Double,
+        cost: Double,
+        location: String?,
+        chargerType: String?,
+        remark: String?,
+        chargeTime: Long,
+        odometerKm: Double?
+    ) {
         val id = _uiState.value.vehicle?.id ?: return
         viewModelScope.launch {
-            runCatching { repository.addChargingRecord(id,startSoc,endSoc,energyKwh,cost,location,chargerType,remark,chargeTime) }
+            runCatching {
+                repository.addChargingRecord(
+                    vehicleId = id,
+                    startSoc = startSoc,
+                    endSoc = endSoc,
+                    energyKwh = energyKwh,
+                    cost = cost,
+                    location = location,
+                    chargerType = chargerType,
+                    remark = remark,
+                    chargeTimeEpochMillis = chargeTime,
+                    odometerKm = odometerKm
+                )
+            }
                 .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已保存") }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
         }
     }
 
     fun deleteChargingRecord(record: ChargingRecordEntity) { viewModelScope.launch { repository.deleteChargingRecord(record) } }
+
     fun updateChargingRecord(record: ChargingRecordEntity) {
         viewModelScope.launch {
             runCatching { repository.updateChargingRecord(record) }
@@ -84,6 +108,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
         }
     }
+
     fun clearError() { _uiState.value = _uiState.value.copy(errorMessage = null) }
     fun clearSuccess() { _uiState.value = _uiState.value.copy(successMessage = null) }
 
