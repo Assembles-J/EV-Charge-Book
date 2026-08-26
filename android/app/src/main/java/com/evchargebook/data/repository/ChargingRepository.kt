@@ -104,9 +104,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         chargerType: String? = null,
         remark: String? = null,
         chargeTimeEpochMillis: Long = System.currentTimeMillis(),
-        odometerKm: Double? = null
+        odometerKm: Double? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        locationAccuracyMeters: Double? = null
     ) {
         ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost, odometerKm)
+        require((latitude == null) == (longitude == null)) { "定位坐标不完整" }
 
         chargingRecordDao.insert(
             ChargingRecordEntity(
@@ -119,7 +123,10 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                 location = location?.trim()?.takeIf { it.isNotEmpty() },
                 chargerType = chargerType,
                 remark = remark?.trim()?.takeIf { it.isNotEmpty() },
-                odometerKm = odometerKm
+                odometerKm = odometerKm,
+                latitude = latitude,
+                longitude = longitude,
+                locationAccuracyMeters = locationAccuracyMeters
             )
         )
     }
@@ -130,6 +137,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
         ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
+        require((record.latitude == null) == (record.longitude == null)) { "定位坐标不完整" }
         chargingRecordDao.update(
             record.copy(
                 location = record.location?.trim()?.takeIf { it.isNotEmpty() },
@@ -144,11 +152,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         require(vehicle.batteryCapacityKwh > 0) { "电池容量必须大于 0" }
         require(vehicle.rangeKm > 0) { "续航必须大于 0" }
 
-        if (vehicle.id == 0L) {
-            vehicleDao.insert(vehicle)
-        } else {
-            vehicleDao.update(vehicle)
-        }
+        if (vehicle.id == 0L) vehicleDao.insert(vehicle) else vehicleDao.update(vehicle)
     }
 
     suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
