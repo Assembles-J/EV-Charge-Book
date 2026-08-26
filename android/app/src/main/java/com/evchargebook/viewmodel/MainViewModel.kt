@@ -58,20 +58,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     init {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
-        viewModelScope.launch { repository.trips.collect { trips -> _uiState.value = _uiState.value.copy(trips = trips) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
-        viewModelScope.launch {
-            combine(repository.chargingRecords, repository.trips) { records, trips ->
-                ChargingTripCoverage.summarize(records, trips)
-            }.collect { coverage ->
-                _uiState.value = _uiState.value.copy(
-                    tripCoverageIntervalCount = coverage.intervals.size,
-                    tripCoverageOdometerKm = coverage.odometerDistanceKm,
-                    tripCoverageDistanceKm = coverage.completedTripDistanceKm,
-                    tripCoverageRatio = coverage.coverageRatio
-                )
-            }
-        }
         viewModelScope.launch {
             selectedTripId.flatMapLatest { tripId ->
                 tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList())
@@ -80,18 +67,26 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
             }
         }
         viewModelScope.launch {
-            combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords) { vehicle, vehicles, catalogVehicles, records ->
+            combine(
+                repository.vehicle,
+                repository.vehicles,
+                repository.catalogVehicles,
+                repository.chargingRecords,
+                repository.trips
+            ) { vehicle, vehicles, catalogVehicles, records, trips ->
                 val now = Instant.now().atZone(ZoneId.systemDefault())
                 val month = YearMonth.from(now)
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val summary = ChargingStatistics.summarize(records, start, end)
                 val intervals = ChargingIntervalAnalytics.summarize(records)
+                val coverage = ChargingTripCoverage.summarize(records, trips)
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
                     catalogVehicles = catalogVehicles,
                     chargingRecords = records,
+                    trips = trips,
                     monthCost = summary.monthCost,
                     monthEnergy = summary.monthEnergy,
                     averagePrice = summary.averagePrice,
@@ -102,7 +97,11 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     invalidIntervalCount = intervals.invalidIntervalCount,
                     intervalDistanceKm = intervals.totalDistanceKm,
                     intervalEnergyPer100Km = intervals.energyPer100Km,
-                    intervalCostPer100Km = intervals.costPer100Km
+                    intervalCostPer100Km = intervals.costPer100Km,
+                    tripCoverageIntervalCount = coverage.intervals.size,
+                    tripCoverageOdometerKm = coverage.odometerDistanceKm,
+                    tripCoverageDistanceKm = coverage.completedTripDistanceKm,
+                    tripCoverageRatio = coverage.coverageRatio
                 )
             }.collect { _uiState.value = it }
         }
