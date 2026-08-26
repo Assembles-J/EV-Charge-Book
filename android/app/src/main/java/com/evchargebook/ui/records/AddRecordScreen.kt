@@ -24,6 +24,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.location.AndroidLocationProvider
@@ -39,6 +40,7 @@ import java.util.Locale
 fun AddRecordScreen(
     vehicleId: Long,
     records: List<ChargingRecordEntity>,
+    batteryCapacityKwh: Double? = null,
     commonPlaces: List<String> = emptyList(),
     onBack: () -> Unit,
     onSave: (
@@ -94,6 +96,13 @@ fun AddRecordScreen(
     val previousOdometer = remember(records, vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, vehicleId, chargeTime) }
     val odometerValue = odometer.toDoubleOrNull()
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
+    val anomalyWarnings = ChargingAnomalyRules.evaluate(
+        startSoc = startSoc.toIntOrNull(),
+        endSoc = endSoc.toIntOrNull(),
+        energyKwh = energy.toDoubleOrNull(),
+        cost = cost.toDoubleOrNull(),
+        batteryCapacityKwh = batteryCapacityKwh
+    )
 
     Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
@@ -144,6 +153,9 @@ fun AddRecordScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     AddNumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
+                }
+                anomalyWarnings.forEach { warning ->
+                    Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
 
