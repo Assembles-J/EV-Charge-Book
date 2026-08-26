@@ -15,6 +15,7 @@ import com.evchargebook.domain.ChargerCategory
 import com.evchargebook.domain.ChargingEstimateConfidence
 import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingTripCoverageInterval
+import com.evchargebook.domain.MonthlyChargingComparison
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
 import java.text.SimpleDateFormat
@@ -26,6 +27,7 @@ import java.util.Locale
     Scaffold(topBar = { TopAppBar(title = { Column { Text("能耗分析"); Text("所有数据均来自本地充电记录", style = MaterialTheme.typography.labelMedium) } }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
             item { MonthSummary(state) }
+            MonthlyChargingComparison.compare(state.monthlyTrend)?.let { comparison -> item { MonthComparisonCard(comparison) } }
             if (state.monthlyTrend.isNotEmpty()) item { MonthlyTrendCard(state) }
             if (state.chargingRecords.isNotEmpty()) item { ChargerTypeCard(state) }
             item { Text("累计账本", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
@@ -48,6 +50,31 @@ import java.util.Locale
             Spacer(Modifier.height(MaterialTheme.spacing.md))
             Row { Text("${one(state.monthEnergy)} kWh", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onTertiaryContainer); Spacer(Modifier.width(MaterialTheme.spacing.md)); Text("${state.chargingCount} 次记录", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onTertiaryContainer) }
         }
+    }
+}
+
+@Composable private fun MonthComparisonCard(comparison: com.evchargebook.domain.MonthlyComparison) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Text("本月 vs 上月", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("${comparison.previous.year}年${comparison.previous.month}月 → ${comparison.current.year}年${comparison.current.month}月", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                ComparisonValue("费用", "¥ ${two(comparison.current.cost)}", comparison.costChangeRate, Modifier.weight(1f))
+                ComparisonValue("补能", "${one(comparison.current.energyKwh)} kWh", comparison.energyChangeRate, Modifier.weight(1f))
+                ComparisonValue("次数", "${comparison.current.chargingCount} 次", comparison.countChangeRate, Modifier.weight(1f))
+            }
+            if (comparison.costChangeRate == null || comparison.energyChangeRate == null || comparison.countChangeRate == null) {
+                Text("上月对应指标为 0，暂无可靠百分比基线；保留绝对值对比，不显示无意义的无限增长率。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable private fun ComparisonValue(label: String, value: String, changeRate: Double?, modifier: Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Text(changeRate?.let(::signedPercent) ?: "暂无可比基线", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -146,4 +173,5 @@ private fun confidenceText(value: ChargingEstimateConfidence) = when (value) { C
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
 private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
 private fun percent(value: Double) = String.format(Locale.US, "%.0f%%", value * 100.0)
+private fun signedPercent(value: Double) = String.format(Locale.US, "%+.0f%%", value * 100.0)
 private fun shortDate(epochMillis: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
