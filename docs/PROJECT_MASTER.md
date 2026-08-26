@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v1.8.0
+版本: v1.9.0
 更新时间: 2026-08-26
 状态: Authority Document / Single Source of Truth
 
@@ -106,7 +106,7 @@ MapLibre 是可选展示层，不再作为 v0.3 前置条件。
 
 ## 6. 当前阶段: v0.3 Analytics
 
-当前已进入本地数据分析阶段。
+当前本地分析基线已稳定，Android Build Run #142 cumulative Green；对应 signed Android Release Run #3 已完成签名构建、Artifact、服务器上传和原子激活。
 
 已实现：
 
@@ -117,18 +117,22 @@ MapLibre 是可选展示层，不再作为 v0.3 前置条件。
 - SOC 差异可信度提示
 - 区间明细
 - 最近 6 个月费用 / 电量趋势
+- 本月 vs 上月费用 / 补能 / 次数对比
+- 上月为 0 时不制造无限增长率，保留绝对值
 - 家充 / 公共慢充 / 公共快充 / 其他 分类
+- 超充归入公共快充
 - charger type 次数 / 电量 / 费用占比
 
-下一优先级：
+当前下一优先级：
 
-1. 最新累计 Android CI 恢复 Green
-2. month-over-month 对比
-3. charger type 成本 / 电量对比
-4. 稀疏数据与估算文案完善
-5. 根据真实使用决定是否增加筛选和更复杂图表
+1. ChargingPlace：先从已有 `location` 文本做派生常用地点聚合，不新增数据库表
+2. 观察常用地点是否真正有价值，再决定是否做录入复用 / 正式 ChargingPlace entity
+3. CSV analysis export
+4. 稀疏数据与估算文案继续完善
+5. Privacy Zone 必须先于路线分享/导出
+6. 只有真实使用证明需要时才增加期间筛选或复杂图表
 
-暂不引入重型 chart framework。
+暂不引入重型 chart framework，也暂不为 ChargingPlace 增加新 schema。
 
 ---
 
@@ -137,6 +141,8 @@ MapLibre 是可选展示层，不再作为 v0.3 前置条件。
 允许来源包括 MANUAL / GPS / OCR / CATALOG / VEHICLE_API / OBD / DERIVED。
 
 不为所有字段制造统一 confidence 分数。优先保存原始值、来源、可获得 accuracy 和计算口径。
+
+ChargingPlace 第一版是从用户已经保存的地点文本派生的统计视图，不应模糊合并两个不同文本为同一地点；只做确定性的空白归一化。
 
 AI 后续只能在可解释数据基础上做总结和建议。
 
@@ -164,6 +170,8 @@ AI 后续只能在可解释数据基础上做总结和建议。
 - Actions Artifact
 - server `.part` + SHA/apksigner + atomic activation
 
+当前最新累计验收：Android Build Run #142 Green；Android Release Run #3 核心发布步骤 Green。
+
 ---
 
 ## 10. 架构约束
@@ -187,6 +195,16 @@ Compose -> MainViewModel -> ChargingRepository -> Room DAO -> Room
 ---
 
 ## 11. 决策记录
+
+### v1.9.0
+
+- Android Build Run #142 cumulative Green
+- Android Release Run #3 signed build/upload/atomic activation accepted
+- month-over-month 与 zero-baseline sparse handling 已完成
+- charger type 次数 / 电量 / 费用结构已完成
+- #18 已关闭，不再作为当前门槛
+- 下一增量固定为无 schema 的 ChargingPlace 派生聚合
+- MapLibre 继续保持低优先级非阻塞
 
 ### v1.8.0
 
