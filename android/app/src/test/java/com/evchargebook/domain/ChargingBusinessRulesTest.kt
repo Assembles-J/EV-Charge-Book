@@ -23,7 +23,9 @@ class ChargingBusinessRulesTest {
             record(id = 3, vehicleId = 2, time = 250, odometer = 9999.0),
             record(id = 4, vehicleId = 1, time = 400, odometer = 1600.0)
         )
-        assertEquals(1200.0, ChargingRecordRules.previousOdometerKm(records, 1, 300), 0.0)
+        val previous = ChargingRecordRules.previousOdometerKm(records, 1, 300)
+            ?: error("expected a previous odometer")
+        assertEquals(1200.0, previous, 0.0)
     }
 
     @Test fun `warns without blocking when odometer is lower than previous reading`() {
