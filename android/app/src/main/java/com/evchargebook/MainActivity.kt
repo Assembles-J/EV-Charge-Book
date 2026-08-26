@@ -1,10 +1,9 @@
 package com.evchargebook
 
-import android.os.Bundle
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
-import androidx.core.content.ContextCompat
+import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -18,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.repository.ChargingRepository
@@ -27,10 +27,11 @@ import com.evchargebook.ui.records.RecordEditScreen
 import com.evchargebook.ui.records.RecordsScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
+import com.evchargebook.ui.trip.TripScreen
+import com.evchargebook.ui.vehicle.BluetoothPromptScreen
+import com.evchargebook.ui.vehicle.VehicleCatalogScreen
 import com.evchargebook.ui.vehicle.VehicleEditScreen
 import com.evchargebook.ui.vehicle.VehicleScreen
-import com.evchargebook.ui.vehicle.VehicleCatalogScreen
-import com.evchargebook.ui.vehicle.BluetoothPromptScreen
 import com.evchargebook.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -74,10 +75,27 @@ fun MainApp(viewModel: MainViewModel) {
     val openBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) pendingRestoreContent = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
     }
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { if (openBluetoothAfterNotificationPermission) { openBluetoothAfterNotificationPermission = false; viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } }
-    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) { if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) { openBluetoothAfterNotificationPermission = true; notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) } else { viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } } }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (openBluetoothAfterNotificationPermission) {
+            openBluetoothAfterNotificationPermission = false
+            viewModel.refreshPairedBluetoothDevices()
+            bluetoothPrompt = true
+        }
+    }
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                openBluetoothAfterNotificationPermission = true
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                viewModel.refreshPairedBluetoothDevices()
+                bluetoothPrompt = true
+            }
+        }
+    }
 
-    val titles = listOf("总览", "记录", "统计", "车辆")
+    val titles = listOf("总览", "记录", "统计", "行程", "车辆")
+    val icons = listOf(Icons.Default.Home, Icons.Default.History, Icons.Default.BarChart, Icons.Default.Route, Icons.Default.DirectionsCar)
     LaunchedEffect(state.successMessage) { state.successMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() } }
     LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() } }
 
@@ -85,7 +103,11 @@ fun MainApp(viewModel: MainViewModel) {
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (!editVehicle && !addVehicle && !selectCatalogVehicle && !bluetoothPrompt && !addRecord && editingRecord == null) {
-                NavigationBar { titles.forEachIndexed { index, title -> NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(listOf(Icons.Default.Home,Icons.Default.History,Icons.Default.BarChart,Icons.Default.DirectionsCar)[index], title) }, label = { Text(title) }) } }
+                NavigationBar {
+                    titles.forEachIndexed { index, title ->
+                        NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(icons[index], title) }, label = { Text(title) })
+                    }
+                }
             }
         }
     ) { padding ->
@@ -107,16 +129,18 @@ fun MainApp(viewModel: MainViewModel) {
                         initialModel = vehicle.model,
                         initialBatteryCapacity = vehicle.batteryCapacityKwh.toString(),
                         initialRange = vehicle.rangeKm.toString(),
-                        onSave = { brand, model, capacity, range ->
-                            viewModel.saveVehicle(brand, model, capacity, range)
-                            editVehicle = false
-                        },
+                        onSave = { brand, model, capacity, range -> viewModel.saveVehicle(brand, model, capacity, range); editVehicle = false },
                         onBack = { editVehicle = false }
                     )
                 }
                 addVehicle -> VehicleEditScreen(
-                    initialBrand = catalogSelection?.brand.orEmpty(), initialModel = catalogSelection?.modelName.orEmpty(), initialBatteryCapacity = catalogSelection?.batteryCapacityKwh?.toString().orEmpty(), initialRange = catalogSelection?.rangeKm?.toString().orEmpty(), title = "添加车辆",
-                    onSave = { brand, model, capacity, range -> viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId); catalogSelection = null; addVehicle = false }, onBack = { addVehicle = false }
+                    initialBrand = catalogSelection?.brand.orEmpty(),
+                    initialModel = catalogSelection?.modelName.orEmpty(),
+                    initialBatteryCapacity = catalogSelection?.batteryCapacityKwh?.toString().orEmpty(),
+                    initialRange = catalogSelection?.rangeKm?.toString().orEmpty(),
+                    title = "添加车辆",
+                    onSave = { brand, model, capacity, range -> viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId); catalogSelection = null; addVehicle = false },
+                    onBack = { addVehicle = false }
                 )
                 selectCatalogVehicle -> VehicleCatalogScreen(state.catalogVehicles, { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true }, { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true }, { selectCatalogVehicle = false })
                 bluetoothPrompt -> BluetoothPromptScreen(state.bluetoothSettings, state.pairedBluetoothDevices, viewModel::saveBluetoothPrompt) { bluetoothPrompt = false }
@@ -124,10 +148,24 @@ fun MainApp(viewModel: MainViewModel) {
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
-                    3 -> VehicleScreen(
-                        vehicle = state.vehicle, vehicles = state.vehicles, onSelect = viewModel::selectVehicle, onAdd = { selectCatalogVehicle = true }, onEdit = { editVehicle = true }, onArchive = { vehicle -> viewModel.archiveVehicle(vehicle.id) },
+                    3 -> TripScreen(state.vehicle, state.vehicles, state.trips, state.activeTrip, viewModel::startTrip, viewModel::stopTrip, viewModel::deleteTrip)
+                    4 -> VehicleScreen(
+                        vehicle = state.vehicle,
+                        vehicles = state.vehicles,
+                        onSelect = viewModel::selectVehicle,
+                        onAdd = { selectCatalogVehicle = true },
+                        onEdit = { editVehicle = true },
+                        onArchive = { vehicle -> viewModel.archiveVehicle(vehicle.id) },
                         onBluetoothPrompt = {
-                            if (Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) { if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) { openBluetoothAfterNotificationPermission = true; notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) } else { viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } } else bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                            if (Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) {
+                                if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                                    openBluetoothAfterNotificationPermission = true
+                                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                } else {
+                                    viewModel.refreshPairedBluetoothDevices()
+                                    bluetoothPrompt = true
+                                }
+                            } else bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                         },
                         onExportBackup = { viewModel.exportBackup(BuildConfig.VERSION_NAME) { content -> pendingExportContent = content; val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()); createBackupLauncher.launch("ev-charge-book-backup-$date.json") } },
                         onImportBackup = { openBackupLauncher.launch(arrayOf("application/json", "text/plain")) }
@@ -139,8 +177,11 @@ fun MainApp(viewModel: MainViewModel) {
 
     pendingRestoreContent?.let { content ->
         AlertDialog(
-            onDismissRequest = { pendingRestoreContent = null }, title = { Text("覆盖当前本地数据？") }, text = { Text("恢复备份会删除当前车辆和充电记录，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
-            confirmButton = { TextButton(onClick = { pendingRestoreContent = null; viewModel.restoreBackup(content) }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) } }, dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
+            onDismissRequest = { pendingRestoreContent = null },
+            title = { Text("覆盖当前本地数据？") },
+            text = { Text("恢复备份会删除当前车辆和充电记录，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
+            confirmButton = { TextButton(onClick = { pendingRestoreContent = null; viewModel.restoreBackup(content) }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
         )
     }
 }
