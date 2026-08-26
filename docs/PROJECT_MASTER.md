@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v1.9.0
+版本: v2.0.0
 更新时间: 2026-08-26
 状态: Authority Document / Single Source of Truth
 
@@ -14,14 +14,15 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 2. 多车辆与车型目录
 3. 位置 / 驾驶行程数据
 4. 充电与行程的数据闭环
-5. 数据分析
-6. 云同步与 AI
+5. 本地分析与可靠性
+6. 跨设备同步 / 云恢复
+7. Web / AI 增值能力
 
-首个验证车型仍为零跑 C16，但产品、数据库和 UI 不绑定单一品牌。
+首个验证车型为零跑 C16，但产品、数据库和 UI 不绑定单一品牌。
 
 ---
 
-## 2. 权威文档体系
+## 2. 权威文档
 
 - PRODUCT.md
 - FEATURE_MATRIX.md
@@ -38,7 +39,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - LOCAL_AGENT_HANDOFF.md
 - NEXT_PHASE_DESIGN.md
 
-实现与文档冲突时，先以当前代码与 CI 事实确认状态，再修正文档。
+实现与文档冲突时，先以当前代码、CI 与真机事实为准，再修正文档。
 
 ---
 
@@ -49,172 +50,224 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - 真实数据来源
 - 用户录入成本低
 - 统计口径可解释
-- 原始事实 / 派生值 / 估算值必须区分
+- 原始事实 / 派生值 / 估算值明确区分
 - 不伪造实时 SOC / SOH / 续航
 - 定位记录与地图 SDK 解耦
 - 车型目录与用户车辆分离
-- 外部供应商必须可替换
-- Local First 必须具备可恢复路径
+- 外部供应商可替换
+- 云同步不能成为唯一恢复路径
+- 无网络和云端故障不能阻塞本地记账 / Trip
 
 ---
 
 ## 4. v0.1 状态: Released / Accepted
 
-v0.1 已完成正式发布和验收：充电记录 CRUD、车辆编辑、Dashboard/Records/Stats、核心规则测试、Android CI、真机 CRUD、signed production APK 与原子发布。
+已完成充电记录 CRUD、车辆编辑、Dashboard/Records/Stats、核心规则测试、Android CI、真机 CRUD、signed production APK 与原子发布。
 
 ---
 
-## 5. v0.2 状态: Core Code Complete / Device Acceptance Parallel
+## 5. v0.2 状态: Core Accepted
 
-v0.2 已不再处于主要功能开发阶段。
+已完成并经过当前真机功能验证：
 
-### 已完成核心
-
-- odometer foundation + Room migration
-- Local Backup / Restore + 真机恢复验收
-- Multi Vehicle + 车型目录
-- Bluetooth 指定设备连接提示 -> Trip 用户确认
-- Android LocationManager 当前位置
-- WGS84 lat/lng/accuracy
+- odometer + migration
+- Local Backup / Restore
+- Multi Vehicle / Vehicle Catalog
+- Bluetooth 指定设备连接 / 已连接状态 -> Trip 用户确认
+- Android LocationManager + WGS84 + accuracy
 - AddressResolver + Android Geocoder
 - TripSession / TripPoint
-- foreground location service
-- Trip start/stop/recovery/detail
+- foreground tracking / notification
+- Trip start / stop / interrupted resume / detail
 - distance / elapsed / moving / stopped
 - speed / bearing / GPS altitude / accuracy
 - GPS bad-point / jump filtering
-- stationary point throttling
+- stationary throttling
 - TripRouteGeometry + 无底图真实轨迹预览
-- ChargingIntervalAnalytics
-- odometer / Trip coverage evidence
-- SOC estimate confidence hints
 
-### 仍需实体设备验收
+Trip #15 与 Bluetooth #21 已按最新真机功能反馈关闭。
 
-- 指定车载蓝牙连接事件
-- 开始行程不闪退
-- foreground 锁屏持续定位
-- INTERRUPTED 恢复
-- 实际驾驶距离 / 速度 / 海拔合理性
-- 当前定位 / Geocoder 在目标设备上的表现
-
-这些验收由用户实机并行完成，不阻塞本地 analytics 代码继续推进。
-
-MapLibre 是可选展示层，不再作为 v0.3 前置条件。
+MapLibre 继续作为可选展示层，不是业务阶段门槛。
 
 ---
 
-## 6. 当前阶段: v0.3 Analytics
-
-当前本地分析基线已稳定，Android Build Run #142 cumulative Green；对应 signed Android Release Run #3 已完成签名构建、Artifact、服务器上传和原子激活。
+## 6. v0.3 状态: Feature Complete Candidate
 
 已实现：
 
-- 充电区间里程差
+- 充电区间里程
 - 费用 / 100km 账本估算
 - 补入电量 / 100km 账本估算
-- Trip 覆盖率辅助证据
-- SOC 差异可信度提示
+- Trip 覆盖辅助证据
+- SOC 可信度提示
 - 区间明细
-- 最近 6 个月费用 / 电量趋势
-- 本月 vs 上月费用 / 补能 / 次数对比
-- 上月为 0 时不制造无限增长率，保留绝对值
-- 家充 / 公共慢充 / 公共快充 / 其他 分类
-- 超充归入公共快充
-- charger type 次数 / 电量 / 费用占比
+- 6 个月费用 / 电量趋势
+- 本月 vs 上月对比与 zero-baseline 降级
+- charger type 次数 / 电量 / 费用结构
+- ChargingPlace 文本派生聚合
+- Top 常用地点录入复用
+- 当前车辆 CSV 分析导出
+- 非阻塞异常输入提示
 
-当前下一优先级：
+已确认基线：Android Build Run #169 Green，覆盖常用地点 + CSV。异常提示已经进入 main，等待后续累计 Android CI 一并验收。
 
-1. ChargingPlace：先从已有 `location` 文本做派生常用地点聚合，不新增数据库表
-2. 观察常用地点是否真正有价值，再决定是否做录入复用 / 正式 ChargingPlace entity
-3. CSV analysis export
-4. 稀疏数据与估算文案继续完善
-5. Privacy Zone 必须先于路线分享/导出
-6. 只有真实使用证明需要时才增加期间筛选或复杂图表
-
-暂不引入重型 chart framework，也暂不为 ChargingPlace 增加新 schema。
+v0.3 不再扩重型 chart、独立 ChargingPlace 表或无真实需求的期间筛选。
 
 ---
 
-## 7. 数据可信度原则
+## 7. 当前阶段: v0.4 Local First Sync Foundation
 
-允许来源包括 MANUAL / GPS / OCR / CATALOG / VEHICLE_API / OBD / DERIVED。
+### 7.1 当前原则
 
-不为所有字段制造统一 confidence 分数。优先保存原始值、来源、可获得 accuracy 和计算口径。
+先解决“同一条数据跨设备是谁”，再接 HTTP / Spring Boot。
 
-ChargingPlace 第一版是从用户已经保存的地点文本派生的统计视图，不应模糊合并两个不同文本为同一地点；只做确定性的空白归一化。
+```text
+Room local id
+    = 当前设备内部关系键
 
-AI 后续只能在可解释数据基础上做总结和建议。
+syncId
+    = 跨设备稳定业务身份
+```
+
+不重写现有 Room id / vehicleId / tripId 关系。
+
+### 7.2 Phase A 当前代码
+
+Vehicle + ChargingRecord 已进入同步身份实现：
+
+- stable `syncId`
+- `updatedAtEpochMillis`
+- ChargingRecord `isDeleted` tombstone
+- Room v6 -> v7 explicit migration
+- 旧数据自动补 sync identity
+- 正常充电查询 / analytics 排除 tombstone
+- 用户删除 ChargingRecord 改为 tombstone
+- Backup schema v6 保存 sync metadata / tombstone
+- 旧 Backup 缺 syncId 时生成新稳定 ID
+- sync identity JVM tests
+
+当前累计 Android code commit：`56830c03275a68a518f873cfcbfecb094a362758`。
+
+Android Build Run #177 已创建但仍在 GitHub runner 队列。Phase A 在 Build/Test + Debug APK Green 前不得标记 Accepted。
+
+### 7.3 下一步
+
+Phase A CI Green 后：
+
+1. 定义 Vehicle / ChargingRecord sync change DTO / envelope
+2. 固定幂等 upsert 规则
+3. 固定 tombstone conflict 规则
+4. 固定 pull cursor / protocol version
+5. 再实现最小 HTTPS sync client/server
+6. 第一批服务端只同步 Vehicle + ChargingRecord
+7. TripSession / TripPoint 后接
+
+第一版不使用 CRDT、Kafka、MQ、WebSocket 或微服务。
 
 ---
 
-## 8. 隐私与恢复
+## 8. 同步冲突原则
 
-- 默认本地保存
-- 持续定位记录必须可见
-- 云同步轨迹需要明确同意
-- 分享路线之前实现 Privacy Zone
-- Local Backup / Restore 是云同步之前的正式恢复路径
-- 恢复失败不得破坏当前数据
+第一版保持可解释：
+
+- stable syncId 确定同一实体
+- explicit edit 通过 updatedAt 决定新旧
+- 不做字段级自动拼接
+- 删除使用 tombstone，避免旧设备复活记录
+- odometer / SOC / GPS 等事实不做“智能纠错”
+- 重复 push / pull 必须幂等
+- selected/default vehicle 属于设备 UX 状态，不应因为切换当前车辆制造无意义云冲突
+
+如果实际测试证明设备时钟偏差成为问题，再引入 server revision/cursor；当前不提前复杂化。
 
 ---
 
-## 9. Android / 发布基线
+## 9. 恢复与隐私
+
+- Local JSON Backup 长期保留
+- Cloud Sync 不是唯一恢复路径
+- restore 失败不得破坏当前数据
+- 持续定位必须可见
+- 路线公开分享/导出之前实现 Privacy Zone
+- 云同步轨迹需要明确产品同意与隐私说明
+
+---
+
+## 10. 发布 / CI 基线
 
 - JDK 17
 - Android SDK 36
 - Build Tools 36.0.0
 - repository Gradle Wrapper
-- CI 与 Production Release 分离
+- Android CI 与 Production Release 分离
 - signed APK
 - Actions Artifact
 - server `.part` + SHA/apksigner + atomic activation
 
-当前最新累计验收：Android Build Run #142 Green；Android Release Run #3 核心发布步骤 Green。
+最近已确认：Build Run #169 Green；同步 Phase A 等待累计 Run #177。
 
 ---
 
-## 10. 架构约束
+## 11. 架构约束
 
-保持：
+Android 保持：
 
 ```text
 Compose -> MainViewModel -> ChargingRepository -> Room DAO -> Room
 ```
 
-不要为当前规模引入 Hilt/Koin、多 module Clean Architecture 或无明确收益的抽象。
+v0.4 云端第一版保持：
 
-每轮开发结束必须：
+```text
+Android Room
+   <-> HTTPS Sync API
+Spring Boot Monolith
+   -> PostgreSQL
+```
 
-- Gradle test/build
-- GitHub CI Green
-- 更新对应 Issue
-- 阶段变化时更新 ROADMAP / PROJECT_MASTER
-- 不把“代码写完”等同于“真机验收完成”
+不要引入 Hilt/Koin、多 module Clean Architecture、微服务、MQ 或其他当前没有收益的基础设施。
 
 ---
 
-## 11. 决策记录
+## 12. 开发验收规则
+
+每轮业务代码必须：
+
+- Android Gradle test/build
+- GitHub CI Green
+- 更新 owning Issue
+- 阶段变化同步 ROADMAP / PROJECT_MASTER
+- schema 改动必须显式 Migration
+- 不把“代码已写”标成“CI Accepted”
+- 不把 CI 通过标成“真机已验收”
+
+---
+
+## 13. 当前 Issues
+
+- #19 Data Reliability：只保留增量可靠性尾项，不阻塞 v0.4
+- #22 UI polish：主要视觉工作已合并，真机视觉复核非阻塞
+- #27 v0.4 Sync 主线
+- #28 Sync Phase A 实现与验收
+- #20 Catalog Coverage：后续可持续车型目录管道
+
+#29/#30/#31/#32/#33 为工具误创建或 duplicate，已关闭，不作为任何业务入口。
+
+---
+
+## 14. 决策记录
+
+### v2.0.0
+
+- Trip / Bluetooth 最新真机功能验证通过并关闭 owning Issues
+- v0.3 补齐常用地点复用、CSV 分析导出、异常提示
+- Build Run #169 Green
+- 正式切换主线到 v0.4 Local First Sync Foundation
+- Vehicle + ChargingRecord Phase A sync identity 已实现，等待累计 Run #177
+- 云同步必须先定 stable identity / tombstone / conflict protocol，再接服务端
 
 ### v1.9.0
 
-- Android Build Run #142 cumulative Green
-- Android Release Run #3 signed build/upload/atomic activation accepted
-- month-over-month 与 zero-baseline sparse handling 已完成
-- charger type 次数 / 电量 / 费用结构已完成
-- #18 已关闭，不再作为当前门槛
-- 下一增量固定为无 schema 的 ChargingPlace 派生聚合
-- MapLibre 继续保持低优先级非阻塞
-
-### v1.8.0
-
-- v0.2 core code 标记完成，实体设备验收并行继续
-- MapLibre 降为非阻塞可视化工作
-- Charging interval / Trip coverage / SOC confidence 已进入稳定数据闭环
-- 正式切换当前主线到 v0.3 Analytics
-- 6 个月趋势与 charger type analytics 已实现
-
-### v1.7.0
-
-- v0.1 Released / Accepted
-- odometer、Backup/Restore、Multi Vehicle 完成基础验收
+- v0.3 analytics 主线稳定
+- ChargingPlace 派生聚合成为下一增量
+- MapLibre 保持非阻塞
