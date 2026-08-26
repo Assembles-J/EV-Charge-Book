@@ -7,6 +7,8 @@ import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.bluetooth.BluetoothPromptSettings
+import com.evchargebook.bluetooth.PairedBluetoothDevice
 import com.evchargebook.domain.ChargingStatistics
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,6 +20,8 @@ data class MainUiState(
     val vehicle: VehicleEntity? = null,
     val vehicles: List<VehicleEntity> = emptyList(),
     val catalogVehicles: List<VehicleCatalogEntity> = emptyList(),
+    val bluetoothSettings: BluetoothPromptSettings = BluetoothPromptSettings(),
+    val pairedBluetoothDevices: List<PairedBluetoothDevice> = emptyList(),
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
     val monthCost: Double = 0.0,
     val monthEnergy: Double = 0.0,
@@ -35,6 +39,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
 
     init {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
+        viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch {
             combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords) { vehicle, vehicles, catalogVehicles, records ->
                 val now = Instant.now().atZone(ZoneId.systemDefault())
@@ -110,6 +115,9 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
         }
     }
+
+    fun refreshPairedBluetoothDevices() { _uiState.value = _uiState.value.copy(pairedBluetoothDevices = repository.pairedBluetoothDevices()) }
+    fun saveBluetoothPrompt(enabled: Boolean, address: String?, name: String?) { viewModelScope.launch { repository.saveBluetoothPrompt(enabled, address, name) } }
 
     fun addChargingRecord(
         startSoc: Int,

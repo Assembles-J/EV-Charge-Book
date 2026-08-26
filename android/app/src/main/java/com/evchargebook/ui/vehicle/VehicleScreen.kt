@@ -16,12 +16,13 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VehicleScreen(vehicle: VehicleEntity?, vehicles: List<VehicleEntity>, onSelect: (Long) -> Unit, onAdd: () -> Unit, onEdit: () -> Unit, onArchive: (VehicleEntity) -> Unit, onExportBackup: () -> Unit, onImportBackup: () -> Unit) {
+fun VehicleScreen(vehicle: VehicleEntity?, vehicles: List<VehicleEntity>, onSelect: (Long) -> Unit, onAdd: () -> Unit, onEdit: () -> Unit, onArchive: (VehicleEntity) -> Unit, onBluetoothPrompt: () -> Unit, onExportBackup: () -> Unit, onImportBackup: () -> Unit) {
     var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
     Scaffold(topBar = { TopAppBar(title = { Text("我的车辆") }) }, floatingActionButton = { ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Default.Add, null) }, text = { Text("添加车辆") }) }) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
             item { Text("当前车辆决定总览、记录与统计的数据范围。归档不会删除历史充电记录。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(vehicles, key = { it.id }) { item -> VehicleRow(item, item.id == vehicle?.id, vehicles.size > 1, { onSelect(item.id) }, { if (item.id == vehicle?.id) onEdit() else onSelect(item.id) }, { archiveCandidate = item }) }
+            item { HorizontalDivider(Modifier.padding(vertical = MaterialTheme.spacing.sm)); Text("车载蓝牙", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text("连接指定车载设备时提醒你主动开始行程。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); OutlinedButton(onClick = onBluetoothPrompt, modifier = Modifier.fillMaxWidth()) { Text("配置连接提示") } }
             item { HorizontalDivider(Modifier.padding(vertical = MaterialTheme.spacing.sm)); Text("本地备份", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text("备份包含所有车辆及其充电记录。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(MaterialTheme.spacing.sm)); Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { OutlinedButton(onClick = onExportBackup, modifier = Modifier.weight(1f)) { Text("导出备份") }; OutlinedButton(onClick = onImportBackup, modifier = Modifier.weight(1f)) { Text("恢复备份") } } }
         }
     }

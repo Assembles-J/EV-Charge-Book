@@ -1,6 +1,10 @@
 package com.evchargebook
 
 import android.os.Bundle
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -26,6 +30,7 @@ import com.evchargebook.ui.theme.EvChargeTheme
 import com.evchargebook.ui.vehicle.VehicleEditScreen
 import com.evchargebook.ui.vehicle.VehicleScreen
 import com.evchargebook.ui.vehicle.VehicleCatalogScreen
+import com.evchargebook.ui.vehicle.BluetoothPromptScreen
 import com.evchargebook.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -53,6 +58,8 @@ fun MainApp(viewModel: MainViewModel) {
     var editVehicle by remember { mutableStateOf(false) }
     var addVehicle by remember { mutableStateOf(false) }
     var selectCatalogVehicle by remember { mutableStateOf(false) }
+    var bluetoothPrompt by remember { mutableStateOf(false) }
+    var openBluetoothAfterNotificationPermission by remember { mutableStateOf(false) }
     var catalogSelection by remember { mutableStateOf<com.evchargebook.data.entity.VehicleCatalogEntity?>(null) }
     var addRecord by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
@@ -78,6 +85,8 @@ fun MainApp(viewModel: MainViewModel) {
                 ?.use { it.readText() }
         }
     }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (openBluetoothAfterNotificationPermission) { openBluetoothAfterNotificationPermission = false; viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } }
+    val bluetoothPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted -> if (granted) { if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) { openBluetoothAfterNotificationPermission = true; notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) } else { viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } } }
 
     val titles = listOf("总览", "记录", "统计", "车辆")
 
@@ -97,7 +106,7 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !addRecord && editingRecord == null) {
+            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !bluetoothPrompt && !addRecord && editingRecord == null) {
                 NavigationBar {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(
@@ -163,6 +172,7 @@ fun MainApp(viewModel: MainViewModel) {
                     )
                 }
                 selectCatalogVehicle -> VehicleCatalogScreen(state.catalogVehicles, { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true }, { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true }, { selectCatalogVehicle = false })
+                bluetoothPrompt -> BluetoothPromptScreen(state.bluetoothSettings, state.pairedBluetoothDevices, viewModel::saveBluetoothPrompt) { bluetoothPrompt = false }
                 else -> when (tab) {
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
@@ -174,6 +184,10 @@ fun MainApp(viewModel: MainViewModel) {
                         onAdd = { selectCatalogVehicle = true },
                         onEdit = { editVehicle = true },
                         onArchive = { vehicle -> viewModel.archiveVehicle(vehicle.id) },
+                        onBluetoothPrompt = {
+                            if (Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED) { if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) { openBluetoothAfterNotificationPermission = true; notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) } else { viewModel.refreshPairedBluetoothDevices(); bluetoothPrompt = true } }
+                            else bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+                        },
                         onExportBackup = {
                             viewModel.exportBackup(BuildConfig.VERSION_NAME) { content ->
                                 pendingExportContent = content

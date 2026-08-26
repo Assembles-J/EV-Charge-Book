@@ -1,6 +1,10 @@
 package com.evchargebook.data.repository
 
 import android.content.Context
+import android.bluetooth.BluetoothAdapter
+import com.evchargebook.bluetooth.BluetoothPromptPreferences
+import com.evchargebook.bluetooth.BluetoothPromptSettings
+import com.evchargebook.bluetooth.PairedBluetoothDevice
 import androidx.room.withTransaction
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -28,9 +32,11 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val vehicleDao = database.vehicleDao()
     private val vehicleCatalogDao = database.vehicleCatalogDao()
     private val chargingRecordDao = database.chargingRecordDao()
+    private val bluetoothPreferences = BluetoothPromptPreferences(context)
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
     val catalogVehicles: Flow<List<VehicleCatalogEntity>> = vehicleCatalogDao.observeAll()
+    val bluetoothSettings: Flow<BluetoothPromptSettings> = bluetoothPreferences.settings
     private val selectedVehicleId: Flow<Long?> = context.vehicleSelectionDataStore.data.map { it[selectedVehicleIdKey] }
     val vehicle: Flow<VehicleEntity?> = combine(vehicles, selectedVehicleId) { vehicles, selectedId ->
         vehicles.firstOrNull { it.id == selectedId } ?: vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
@@ -171,6 +177,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             context.vehicleSelectionDataStore.edit { it[selectedVehicleIdKey] = replacement.id }
         }
     }
+
+    fun pairedBluetoothDevices(): List<PairedBluetoothDevice> = runCatching {
+        BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty()
+            .map { PairedBluetoothDevice(it.address, it.name ?: "未命名设备") }.sortedBy { it.name }
+    }.getOrDefault(emptyList())
+
+    suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) = bluetoothPreferences.save(enabled, deviceAddress, deviceName)
 
     private fun validateVehicle(vehicle: VehicleEntity) {
         require(vehicle.brand.isNotBlank()) { "品牌不能为空" }
