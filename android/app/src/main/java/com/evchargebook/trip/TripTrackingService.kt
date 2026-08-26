@@ -14,6 +14,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Looper
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -107,13 +108,12 @@ class TripTrackingService : Service() {
     private fun requestLocationUpdatesOrInterrupt(tripId: Long) {
         val fineGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val provider = when {
-            fineGranted && locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) -> LocationManager.GPS_PROVIDER
-            coarseGranted && locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) -> LocationManager.NETWORK_PROVIDER
-            else -> null
-        }
+        val providers = buildList {
+            if (fineGranted && runCatching { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)) add(LocationManager.GPS_PROVIDER)
+            if (coarseGranted && runCatching { locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)) add(LocationManager.NETWORK_PROVIDER)
+        }.distinct()
 
-        if (provider == null) {
+        if (providers.isEmpty()) {
             serviceScope.launch {
                 markInterrupted(tripId)
                 stopTrackingAndSelf()
@@ -121,9 +121,18 @@ class TripTrackingService : Service() {
             return
         }
 
-        try {
-            locationManager.requestLocationUpdates(provider, SAMPLE_INTERVAL_MS, SAMPLE_DISTANCE_METERS, locationListener)
-        } catch (_: SecurityException) {
+        val registration = runCatching {
+            providers.forEach { provider ->
+                locationManager.requestLocationUpdates(
+                    provider,
+                    SAMPLE_INTERVAL_MS,
+                    SAMPLE_DISTANCE_METERS,
+                    locationListener,
+                    Looper.getMainLooper()
+                )
+            }
+        }
+        if (registration.isFailure) {
             serviceScope.launch {
                 markInterrupted(tripId)
                 stopTrackingAndSelf()
