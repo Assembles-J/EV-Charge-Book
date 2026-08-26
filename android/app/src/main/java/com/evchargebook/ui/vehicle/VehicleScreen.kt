@@ -27,6 +27,7 @@ fun VehicleScreen(
     onArchive: (VehicleEntity) -> Unit,
     onBluetoothPrompt: () -> Unit,
     onExportBackup: () -> Unit,
+    onExportCsv: () -> Unit,
     onImportBackup: () -> Unit
 ) {
     var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
@@ -77,8 +78,16 @@ fun VehicleScreen(
                 SettingsRow(
                     icon = Icons.Default.UploadFile,
                     title = "导出备份",
-                    subtitle = "保存车辆、充电记录和行程数据",
+                    subtitle = "完整 JSON，可用于恢复车辆、充电记录和行程",
                     onClick = onExportBackup
+                )
+            }
+            item {
+                SettingsRow(
+                    icon = Icons.Default.TableView,
+                    title = "导出分析 CSV",
+                    subtitle = "当前车辆充电账本，可用于 Excel / Python 分析",
+                    onClick = onExportCsv
                 )
             }
             item {
