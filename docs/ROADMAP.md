@@ -121,12 +121,23 @@ Backup / Restore 已验收。
 
 ### P1 Vehicle Catalog (#16)
 
-- [ ] 本地 versioned catalog seed
-- [ ] brand / series / year / trim 搜索
-- [ ] 用户确认 / 覆盖 catalog 参数
-- [ ] 自定义车型兜底
+- [x] 本地 versioned catalog seed
+- [x] brand / series / year / trim 搜索
+- [x] 用户确认 / 覆盖 catalog 参数
+- [x] 自定义车型兜底
 
 当前主线。实现时保持 Catalog reference data 与 UserVehicle snapshot 分离。
+
+### P1.5 Bluetooth connection prompt (#21)
+
+状态: Implemented / CI Accepted / Device Acceptance Pending
+
+- [x] 指定已配对设备选择与持久化
+- [x] Android 12+ Nearby Devices permission
+- [x] Android 13+ notification permission
+- [x] 指定设备连接通知
+- [ ] 真机连接提示验收
+- [ ] 拒绝权限 / 未配置设备 / 功能关闭不产生提示验收
 
 ### P2 Location (#14)
 
@@ -185,8 +196,7 @@ Analytics 必须区分原始事实、派生值和估算值。
 ## 当前执行顺序
 
 ```text
-Vehicle Catalog (#16)
-  -> Bluetooth connection prompt discovery (#21)
+Bluetooth connection prompt discovery (#21)
   -> Location foundation (#14)
   -> Manual Trip Tracking (#15)
   -> Data Reliability / ChargingPlace (#19 remaining)
