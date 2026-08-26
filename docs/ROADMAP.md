@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.2.0
+版本: v2.3.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -33,6 +33,8 @@
 
 ### Odometer & charging data loop (#18)
 
+状态: Completed / Issue Closed
+
 - [x] nullable `odometerKm`
 - [x] Room v1 -> v2 migration
 - [x] Add/Edit/Records 支持里程
@@ -44,7 +46,6 @@
 - [x] SOC delta / estimate confidence hints
 - [x] 区间明细 UI
 - [x] JVM tests
-- [x] Android Build Run #123 cumulative Green
 
 非阻塞测试增强：Room migration instrumentation test 后续归入数据库 QA，不再阻塞 v0.3。
 
@@ -94,7 +95,6 @@
 - [x] address failure preserves coordinates/manual text
 - [x] TripRouteGeometry presentation model
 - [x] no-basemap real trajectory preview
-- [x] Android Build Run #118 cumulative Green
 - [ ] physical current-location / reverse-geocode acceptance
 
 MapLibre remains optional visualization work and does not block analytics:
@@ -125,7 +125,7 @@ MapLibre remains optional visualization work and does not block analytics:
 - [ ] real-drive distance/speed/altitude plausibility
 - [ ] interrupted resume physical acceptance
 
-### Data Reliability remaining (#19)
+### Data Reliability remaining
 
 These are incremental quality features, not v0.3 blockers:
 
@@ -138,7 +138,7 @@ These are incremental quality features, not v0.3 blockers:
 
 ## v0.3 - Analytics
 
-状态: **Active Development**
+状态: **Active Development / Cumulative CI Green**
 
 Already implemented:
 
@@ -152,18 +152,26 @@ Already implemented:
 - [x] charger type classification and mix
 - [x] home / public slow / public fast / other shares
 - [x] supercharging classified as public fast
+- [x] charger-type count / energy / cost comparison
+- [x] month-over-month comparison card
+- [x] zero-baseline sparse-data handling: keep absolute values, suppress meaningless infinite percentage
+- [x] Android Build Run #142 cumulative Green + Debug APK
 
-Current acceptance gate:
+Release verification:
 
-- [ ] latest cumulative Android CI Green after charger-type classification fix
+- [x] Android Release Run #3 signed APK build
+- [x] Actions artifact
+- [x] server upload
+- [x] atomic activation
 
-Next analytics work:
+Next work:
 
-- [ ] month-over-month comparison cards
-- [ ] trend deltas and sparse-data handling
-- [ ] charger-type cost / energy comparison
+- [ ] ChargingPlace derived common-place aggregation from existing location text
+- [ ] common-place reuse in record entry only after aggregation proves useful
+- [ ] CSV analysis export
+- [ ] analytics wording polish for sparse samples and estimates
 - [ ] selected-period filters only if needed by actual usage
-- [ ] analytics summary wording that clearly labels estimates
+- [ ] Privacy Zone before any route sharing/export
 
 Do not add heavy charting frameworks yet; Compose primitives are sufficient until data density proves otherwise.
 
@@ -184,17 +192,28 @@ Cloud sync must not become the only recovery path.
 ## 当前执行顺序
 
 ```text
-latest Android CI -> Green
-  -> close v0.2 odometer/data-loop implementation issue (#18)
+ChargingPlace derived aggregation
+  -> cumulative Android CI
+  -> CSV analysis export
   -> physical Trip / Bluetooth / Location acceptance continues in parallel
-  -> v0.3 month-over-month + charger-type analytics
-  -> ChargingPlace / CSV / Privacy Zone as incremental reliability work
+  -> Privacy Zone before route sharing/export
   -> v0.4 cloud/catalog only after local analytics is useful
 ```
 
 ---
 
 ## 变更记录
+
+### v2.3.0
+
+- cumulative Android Build Run #142 Green
+- charger type fix and diagnostic coverage accepted
+- month-over-month comparison completed
+- zero-baseline sparse comparison handled without fake growth percentages
+- charger type cost / energy comparison already present in Stats
+- Android Release Run #3 signed build/upload/atomic activation accepted
+- #18 confirmed closed; removed stale acceptance gates
+- next active work moved to ChargingPlace derived aggregation
 
 ### v2.2.0
 
