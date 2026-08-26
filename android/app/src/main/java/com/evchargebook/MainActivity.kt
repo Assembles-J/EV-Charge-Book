@@ -101,7 +101,19 @@ fun MainApp(viewModel: MainViewModel) {
                     }
                 )
                 editingRecord != null -> RecordEditScreen(record = editingRecord!!, records = state.chargingRecords, onSave = { viewModel.updateChargingRecord(it); editingRecord = null }, onBack = { editingRecord = null })
-                editVehicle -> state.vehicle?.let { vehicle -> VehicleEditScreen(vehicle.brand, vehicle.model, vehicle.batteryCapacityKwh.toString(), vehicle.rangeKm.toString(), { brand, model, capacity, range -> viewModel.saveVehicle(brand, model, capacity, range); editVehicle = false }, { editVehicle = false }) }
+                editVehicle -> state.vehicle?.let { vehicle ->
+                    VehicleEditScreen(
+                        initialBrand = vehicle.brand,
+                        initialModel = vehicle.model,
+                        initialBatteryCapacity = vehicle.batteryCapacityKwh.toString(),
+                        initialRange = vehicle.rangeKm.toString(),
+                        onSave = { brand, model, capacity, range ->
+                            viewModel.saveVehicle(brand, model, capacity, range)
+                            editVehicle = false
+                        },
+                        onBack = { editVehicle = false }
+                    )
+                }
                 addVehicle -> VehicleEditScreen(
                     initialBrand = catalogSelection?.brand.orEmpty(), initialModel = catalogSelection?.modelName.orEmpty(), initialBatteryCapacity = catalogSelection?.batteryCapacityKwh?.toString().orEmpty(), initialRange = catalogSelection?.rangeKm?.toString().orEmpty(), title = "添加车辆",
                     onSave = { brand, model, capacity, range -> viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId); catalogSelection = null; addVehicle = false }, onBack = { addVehicle = false }
