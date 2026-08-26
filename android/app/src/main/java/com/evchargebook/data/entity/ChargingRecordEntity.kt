@@ -1,14 +1,17 @@
 package com.evchargebook.data.entity
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import java.util.UUID
 
 @Entity(
     tableName = "charging_records",
     indices = [
         Index(value = ["vehicleId"]),
-        Index(value = ["chargeTimeEpochMillis"])
+        Index(value = ["chargeTimeEpochMillis"]),
+        Index(value = ["syncId"], unique = true)
     ]
 )
 data class ChargingRecordEntity(
@@ -26,7 +29,13 @@ data class ChargingRecordEntity(
     val odometerKm: Double? = null,
     val latitude: Double? = null,
     val longitude: Double? = null,
-    val locationAccuracyMeters: Double? = null
+    val locationAccuracyMeters: Double? = null,
+    @ColumnInfo(defaultValue = "''")
+    val syncId: String = UUID.randomUUID().toString(),
+    @ColumnInfo(defaultValue = "0")
+    val updatedAtEpochMillis: Long = System.currentTimeMillis(),
+    @ColumnInfo(defaultValue = "0")
+    val isDeleted: Boolean = false
 ) {
     val pricePerKwh: Double
         get() = if (energyKwh > 0.0) cost / energyKwh else 0.0
