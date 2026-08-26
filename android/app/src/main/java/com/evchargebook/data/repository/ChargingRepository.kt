@@ -30,15 +30,20 @@ class ChargingRepository(private val database: AppDatabase) {
         }
     }
 
-    suspend fun exportBackup(appVersion: String): String = BackupCodec.encode(
-        BackupPayload(
+    suspend fun exportBackup(appVersion: String): String {
+        val payload = BackupPayload(
             schemaVersion = BackupCodec.CURRENT_SCHEMA_VERSION,
             exportedAt = System.currentTimeMillis(),
             appVersion = appVersion,
             vehicles = vehicleDao.getAll(),
             chargingRecords = chargingRecordDao.getAll()
         )
-    )
+        val encoded = BackupCodec.encode(payload)
+        val verified = BackupCodec.decode(encoded)
+        require(verified.vehicles.size == payload.vehicles.size) { "车辆备份数量校验失败" }
+        require(verified.chargingRecords.size == payload.chargingRecords.size) { "充电记录备份数量校验失败" }
+        return encoded
+    }
 
     suspend fun restoreBackup(content: String) {
         val payload = BackupCodec.decode(content)
@@ -47,6 +52,9 @@ class ChargingRepository(private val database: AppDatabase) {
             vehicleDao.deleteAll()
             vehicleDao.insertAll(payload.vehicles)
             chargingRecordDao.insertAll(payload.chargingRecords)
+
+            require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
+            require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
         }
     }
 
