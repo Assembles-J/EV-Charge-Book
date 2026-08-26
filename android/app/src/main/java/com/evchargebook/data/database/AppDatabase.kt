@@ -18,7 +18,7 @@ import com.evchargebook.data.entity.VehicleEntity
 
 @Database(
     entities = [VehicleEntity::class, ChargingRecordEntity::class, VehicleCatalogEntity::class, TripSessionEntity::class, TripPointEntity::class],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -70,6 +70,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE vehicles ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE vehicles ADD COLUMN updatedAtEpochMillis INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE vehicles SET syncId = lower(hex(randomblob(16))) WHERE syncId = ''")
+                db.execSQL("UPDATE vehicles SET updatedAtEpochMillis = CASE WHEN createdAtEpochMillis > 0 THEN createdAtEpochMillis ELSE CAST(strftime('%s','now') AS INTEGER) * 1000 END WHERE updatedAtEpochMillis = 0")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_vehicles_syncId ON vehicles(syncId)")
+
+                db.execSQL("ALTER TABLE charging_records ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE charging_records ADD COLUMN updatedAtEpochMillis INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE charging_records ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("UPDATE charging_records SET syncId = lower(hex(randomblob(16))) WHERE syncId = ''")
+                db.execSQL("UPDATE charging_records SET updatedAtEpochMillis = chargeTimeEpochMillis WHERE updatedAtEpochMillis = 0")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_charging_records_syncId ON charging_records(syncId)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -80,7 +97,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ev-charge-book.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
                     .build()
                     .also { instance = it }
             }
