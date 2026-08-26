@@ -2,12 +2,37 @@ package com.evchargebook.domain
 
 import com.evchargebook.data.entity.ChargingRecordEntity
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ChargingBusinessRulesTest {
     @Test fun `rejects an SOC decrease`() {
         val error = runCatching { ChargingRecordRules.validate(80, 60, 10.0, 10.0) }.exceptionOrNull()
         assertEquals("结束 SOC 不能低于起始 SOC", error?.message)
+    }
+
+    @Test fun `rejects a negative odometer`() {
+        val error = runCatching { ChargingRecordRules.validate(20, 80, 10.0, 10.0, -1.0) }.exceptionOrNull()
+        assertEquals("里程不能小于 0", error?.message)
+    }
+
+    @Test fun `finds the latest earlier odometer for the same vehicle`() {
+        val records = listOf(
+            record(id = 1, vehicleId = 1, time = 100, odometer = 1000.0),
+            record(id = 2, vehicleId = 1, time = 200, odometer = 1200.0),
+            record(id = 3, vehicleId = 2, time = 250, odometer = 9999.0),
+            record(id = 4, vehicleId = 1, time = 400, odometer = 1600.0)
+        )
+        assertEquals(1200.0, ChargingRecordRules.previousOdometerKm(records, 1, 300), 0.0)
+    }
+
+    @Test fun `warns without blocking when odometer is lower than previous reading`() {
+        assertEquals(
+            "当前里程低于上一条记录（1200 km），请确认是否录入正确",
+            ChargingRecordRules.odometerWarning(1200.0, 1190.0)
+        )
+        assertNull(ChargingRecordRules.odometerWarning(1200.0, 1210.0))
+        assertNull(ChargingRecordRules.odometerWarning(null, 1210.0))
     }
 
     @Test fun `summarizes only records inside the requested month`() {
@@ -21,5 +46,21 @@ class ChargingBusinessRulesTest {
         assertEquals(75.0 / 35.0, summary.averagePrice, 0.0)
     }
 
-    private fun record(time: Long, energy: Double, cost: Double) = ChargingRecordEntity(vehicleId = 1, chargeTimeEpochMillis = time, startSoc = 20, endSoc = 50, energyKwh = energy, cost = cost)
+    private fun record(
+        id: Long = 0,
+        vehicleId: Long = 1,
+        time: Long,
+        energy: Double = 10.0,
+        cost: Double = 20.0,
+        odometer: Double? = null
+    ) = ChargingRecordEntity(
+        id = id,
+        vehicleId = vehicleId,
+        chargeTimeEpochMillis = time,
+        startSoc = 20,
+        endSoc = 50,
+        energyKwh = energy,
+        cost = cost,
+        odometerKm = odometer
+    )
 }
