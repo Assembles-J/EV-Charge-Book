@@ -56,8 +56,9 @@ class TripTrackingService : Service() {
                 val tripId = intent.getLongExtra(EXTRA_TRIP_ID, 0L)
                 if (tripId > 0L) beginTracking(tripId) else stopSelf()
             }
+            else -> stopSelf()
         }
-        return START_STICKY
+        return START_REDELIVER_INTENT
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -100,12 +101,7 @@ class TripTrackingService : Service() {
         }
 
         try {
-            locationManager.requestLocationUpdates(
-                provider,
-                SAMPLE_INTERVAL_MS,
-                SAMPLE_DISTANCE_METERS,
-                locationListener
-            )
+            locationManager.requestLocationUpdates(provider, SAMPLE_INTERVAL_MS, SAMPLE_DISTANCE_METERS, locationListener)
         } catch (_: SecurityException) {
             serviceScope.launch { markInterrupted(tripId) }
             stopSelf()
@@ -149,11 +145,9 @@ class TripTrackingService : Service() {
             provider = location.provider
         )
         val pointId = tripDao.insertPoint(point)
-        val storedPoint = point.copy(id = pointId)
-        lastPoint = storedPoint
+        lastPoint = point.copy(id = pointId)
 
-        val startedAt = session.startedAtEpochMillis
-        val elapsed = ((capturedAt - startedAt) / 1000).coerceAtLeast(0)
+        val elapsed = ((capturedAt - session.startedAtEpochMillis) / 1000).coerceAtLeast(0)
         tripDao.updateSession(
             session.copy(
                 distanceMeters = newDistance,
@@ -176,8 +170,7 @@ class TripTrackingService : Service() {
 
     private fun stopFromNotification() {
         serviceScope.launch {
-            val tripId = currentTripId
-            if (tripId != null) completeTrip(tripId)
+            currentTripId?.let { completeTrip(it) }
             stopTrackingAndSelf()
         }
     }
@@ -203,7 +196,12 @@ class TripTrackingService : Service() {
     private fun stopTrackingAndSelf() {
         runCatching { locationManager.removeUpdates(locationListener) }
         currentTripId = null
-        if (Build.VERSION.SDK_INT >= 24) stopForeground(STOP_FOREGROUND_REMOVE) else @Suppress("DEPRECATION") stopForeground(true)
+        if (Build.VERSION.SDK_INT >= 24) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } else {
+            @Suppress("DEPRECATION")
+            stopForeground(true)
+        }
         stopSelf()
     }
 
