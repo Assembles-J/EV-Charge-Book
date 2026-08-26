@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
@@ -24,7 +25,13 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordEditScreen(record: ChargingRecordEntity, records: List<ChargingRecordEntity>, onSave: (ChargingRecordEntity) -> Unit, onBack: () -> Unit) {
+fun RecordEditScreen(
+    record: ChargingRecordEntity,
+    records: List<ChargingRecordEntity>,
+    batteryCapacityKwh: Double? = null,
+    onSave: (ChargingRecordEntity) -> Unit,
+    onBack: () -> Unit
+) {
     val context = LocalContext.current
     val calendar = remember { Calendar.getInstance().apply { timeInMillis = record.chargeTimeEpochMillis } }
     var chargeTime by remember { mutableLongStateOf(record.chargeTimeEpochMillis) }
@@ -41,6 +48,13 @@ fun RecordEditScreen(record: ChargingRecordEntity, records: List<ChargingRecordE
     val timeText = remember(chargeTime) { SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val previousOdometer = remember(records, record.id, record.vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, record.vehicleId, chargeTime, record.id) }
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometer.toDoubleOrNull())
+    val anomalyWarnings = ChargingAnomalyRules.evaluate(
+        startSoc = startSoc.toIntOrNull(),
+        endSoc = endSoc.toIntOrNull(),
+        energyKwh = energy.toDoubleOrNull(),
+        cost = cost.toDoubleOrNull(),
+        batteryCapacityKwh = batteryCapacityKwh
+    )
 
     Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
@@ -64,6 +78,9 @@ fun RecordEditScreen(record: ChargingRecordEntity, records: List<ChargingRecordE
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     NumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     NumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
+                }
+                anomalyWarnings.forEach { warning ->
+                    Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
                 }
             }
             EditSection("车辆与备注") {
