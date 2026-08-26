@@ -33,6 +33,7 @@ import com.evchargebook.ui.vehicle.VehicleCatalogScreen
 import com.evchargebook.ui.vehicle.VehicleEditScreen
 import com.evchargebook.ui.vehicle.VehicleScreen
 import com.evchargebook.viewmodel.MainViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -54,6 +55,7 @@ class MainActivity : ComponentActivity() {
 fun MainApp(viewModel: MainViewModel) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var tab by remember { mutableIntStateOf(0) }
     var editVehicle by remember { mutableStateOf(false) }
@@ -93,11 +95,23 @@ fun MainApp(viewModel: MainViewModel) {
             }
         }
     }
+    val tripLocationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
+        val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (granted) viewModel.startTrip()
+        else scope.launch { snackbarHostState.showSnackbar("需要定位权限才能记录真实行程轨迹") }
+    }
 
     val titles = listOf("总览", "记录", "统计", "行程", "车辆")
     val icons = listOf(Icons.Default.Home, Icons.Default.History, Icons.Default.BarChart, Icons.Default.Route, Icons.Default.DirectionsCar)
     LaunchedEffect(state.successMessage) { state.successMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() } }
     LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() } }
+
+    fun startTripWithPermission() {
+        val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (fineGranted || coarseGranted) viewModel.startTrip()
+        else tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -148,7 +162,7 @@ fun MainApp(viewModel: MainViewModel) {
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
-                    3 -> TripScreen(state.vehicle, state.vehicles, state.trips, state.activeTrip, viewModel::startTrip, viewModel::stopTrip, viewModel::deleteTrip)
+                    3 -> TripScreen(state.vehicle, state.vehicles, state.trips, state.activeTrip, ::startTripWithPermission, viewModel::stopTrip, viewModel::deleteTrip)
                     4 -> VehicleScreen(
                         vehicle = state.vehicle,
                         vehicles = state.vehicles,
@@ -179,7 +193,7 @@ fun MainApp(viewModel: MainViewModel) {
         AlertDialog(
             onDismissRequest = { pendingRestoreContent = null },
             title = { Text("覆盖当前本地数据？") },
-            text = { Text("恢复备份会删除当前车辆和充电记录，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
+            text = { Text("恢复备份会删除当前车辆、充电记录和行程数据，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
             confirmButton = { TextButton(onClick = { pendingRestoreContent = null; viewModel.restoreBackup(content) }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
         )
