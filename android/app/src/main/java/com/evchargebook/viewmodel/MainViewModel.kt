@@ -15,6 +15,8 @@ import com.evchargebook.domain.ChargerCategorySummary
 import com.evchargebook.domain.ChargerTypeAnalytics
 import com.evchargebook.domain.ChargingIntervalAnalytics
 import com.evchargebook.domain.ChargingIntervalSample
+import com.evchargebook.domain.ChargingPlaceAnalytics
+import com.evchargebook.domain.ChargingPlaceSummary
 import com.evchargebook.domain.ChargingStatistics
 import com.evchargebook.domain.ChargingTripCoverage
 import com.evchargebook.domain.ChargingTripCoverageInterval
@@ -57,6 +59,7 @@ data class MainUiState(
     val tripCoverageIntervals: List<ChargingTripCoverageInterval> = emptyList(),
     val monthlyTrend: List<MonthlyChargingBucket> = emptyList(),
     val chargerTypeSummary: List<ChargerCategorySummary> = emptyList(),
+    val chargingPlaceSummary: List<ChargingPlaceSummary> = emptyList(),
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -87,6 +90,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val coverage = ChargingTripCoverage.summarize(records, trips)
                 val monthlyTrend = MonthlyChargingTrend.summarize(records, month, zoneId, monthCount = 6)
                 val chargerTypes = ChargerTypeAnalytics.summarize(records)
+                val chargingPlaces = ChargingPlaceAnalytics.summarize(records)
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
@@ -111,7 +115,8 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     tripCoverageRatio = coverage.coverageRatio,
                     tripCoverageIntervals = coverage.intervals,
                     monthlyTrend = monthlyTrend,
-                    chargerTypeSummary = chargerTypes
+                    chargerTypeSummary = chargerTypes,
+                    chargingPlaceSummary = chargingPlaces
                 )
             }.collect { _uiState.value = it }
         }
