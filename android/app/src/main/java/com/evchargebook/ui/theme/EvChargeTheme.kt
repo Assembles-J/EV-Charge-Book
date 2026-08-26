@@ -37,6 +37,9 @@ private val Surface = Color(0xFFFFFFFF)
 private val Line = Color(0xFFE4E7EC)
 private val Energy = Color(0xFF176B52)
 private val EnergySoft = Color(0xFFE5F3ED)
+private val Electric = Color(0xFF45E6A8)
+private val Cockpit = Color(0xFF11171B)
+private val CockpitInk = Color(0xFFF4F8F6)
 
 private val BrandLight = lightColorScheme(
     primary = Energy,
@@ -47,6 +50,8 @@ private val BrandLight = lightColorScheme(
     onSecondary = Color.White,
     secondaryContainer = Color(0xFFEDF1EF),
     onSecondaryContainer = Color(0xFF29332F),
+    tertiary = Electric,
+    onTertiary = Color(0xFF073B2B),
     background = Canvas,
     onBackground = Ink,
     surface = Surface,
@@ -55,6 +60,9 @@ private val BrandLight = lightColorScheme(
     onSurfaceVariant = MutedInk,
     outline = Line,
     outlineVariant = Color(0xFFEEF0F3),
+    inverseSurface = Cockpit,
+    inverseOnSurface = CockpitInk,
+    inversePrimary = Electric,
     error = Color(0xFFB42318)
 )
 
@@ -67,6 +75,8 @@ private val BrandDark = darkColorScheme(
     onSecondary = Color(0xFF25332E),
     secondaryContainer = Color(0xFF2A3430),
     onSecondaryContainer = Color(0xFFDDE7E2),
+    tertiary = Electric,
+    onTertiary = Color(0xFF063B2B),
     background = Color(0xFF101214),
     onBackground = Color(0xFFF1F3F5),
     surface = Color(0xFF171A1D),
@@ -75,6 +85,9 @@ private val BrandDark = darkColorScheme(
     onSurfaceVariant = Color(0xFFB9C0C8),
     outline = Color(0xFF353B42),
     outlineVariant = Color(0xFF252A2F),
+    inverseSurface = Color(0xFFF1F3F5),
+    inverseOnSurface = Color(0xFF15191C),
+    inversePrimary = Color(0xFF176B52),
     error = Color(0xFFFFB4AB)
 )
 
