@@ -23,6 +23,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.content.ContextCompat
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.location.AndroidLocationProvider
 import com.evchargebook.location.LocationFix
 import com.evchargebook.ui.theme.spacing
@@ -46,6 +47,7 @@ fun AddRecordScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val locationProvider = remember(context) { AndroidLocationProvider(context.applicationContext) }
+    val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context.applicationContext) }
     val calendar = remember { Calendar.getInstance() }
     var chargeTime by remember { mutableLongStateOf(calendar.timeInMillis) }
     var location by remember { mutableStateOf("") }
@@ -59,12 +61,24 @@ fun AddRecordScreen(
     var odometer by remember { mutableStateOf("") }
     var chargerType by remember { mutableStateOf("公共慢充") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var addressMessage by remember { mutableStateOf<String?>(null) }
 
     fun requestCurrentLocation() {
         locating = true
+        addressMessage = null
         scope.launch {
             runCatching { locationProvider.currentLocation() }
-                .onSuccess { fix -> locationFix = fix; errorMessage = null }
+                .onSuccess { fix ->
+                    locationFix = fix
+                    errorMessage = null
+                    val resolved = addressResolver.reverse(fix.latitude, fix.longitude)
+                    if (!resolved.isNullOrBlank()) {
+                        if (location.isBlank()) location = resolved
+                        addressMessage = "已解析地址：$resolved"
+                    } else {
+                        addressMessage = "已保存经纬度；系统地址服务暂时不可用，可手动填写地点"
+                    }
+                }
                 .onFailure { errorMessage = it.message ?: "获取当前位置失败" }
             locating = false
         }
@@ -96,10 +110,11 @@ fun AddRecordScreen(
                 },
                 enabled = !locating,
                 modifier = Modifier.fillMaxWidth()
-            ) { Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(if (locating) "正在获取位置…" else "使用当前位置") }
+            ) { Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(if (locating) "正在获取位置与地址…" else "使用当前位置") }
             locationFix?.let { fix ->
                 Text("已记录坐标：${formatCoordinate(fix.latitude)}, ${formatCoordinate(fix.longitude)} · 精度约 ${fix.accuracyMeters.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            addressMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             Text("充电方式", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) { listOf("家充", "公共慢充", "公共快充").forEach { type -> FilterChip(selected = chargerType == type, onClick = { chargerType = type }, label = { Text(type) }) } }
             Text("车辆里程（可选）", style = MaterialTheme.typography.titleSmall)
