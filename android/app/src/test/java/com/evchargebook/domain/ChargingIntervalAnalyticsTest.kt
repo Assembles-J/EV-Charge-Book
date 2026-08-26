@@ -22,6 +22,7 @@ class ChargingIntervalAnalyticsTest {
         assertEquals(24.0, summary.totalCost, 0.0001)
         assertEquals(19.2, summary.energyPer100Km!!, 0.0001)
         assertEquals(9.6, summary.costPer100Km!!, 0.0001)
+        assertEquals(ChargingEstimateConfidence.HIGH, summary.samples.first().confidence)
     }
 
     @Test
@@ -53,12 +54,32 @@ class ChargingIntervalAnalyticsTest {
         assertNull(summary.costPer100Km)
     }
 
+    @Test
+    fun `classifies estimate confidence from charge end SOC alignment`() {
+        val records = listOf(
+            record(id = 1, time = 1_000, odometer = 10_000.0, endSoc = 80),
+            record(id = 2, time = 2_000, odometer = 10_100.0, endSoc = 84),
+            record(id = 3, time = 3_000, odometer = 10_200.0, endSoc = 95),
+            record(id = 4, time = 4_000, odometer = 10_300.0, endSoc = 70)
+        )
+
+        val samples = ChargingIntervalAnalytics.summarize(records).samples
+
+        assertEquals(4, samples[0].endSocDeltaPoints)
+        assertEquals(ChargingEstimateConfidence.HIGH, samples[0].confidence)
+        assertEquals(11, samples[1].endSocDeltaPoints)
+        assertEquals(ChargingEstimateConfidence.MEDIUM, samples[1].confidence)
+        assertEquals(25, samples[2].endSocDeltaPoints)
+        assertEquals(ChargingEstimateConfidence.LOW, samples[2].confidence)
+    }
+
     private fun record(
         id: Long,
         time: Long,
         odometer: Double?,
         energy: Double = 10.0,
-        cost: Double = 5.0
+        cost: Double = 5.0,
+        endSoc: Int = 80
     ) = ChargingRecordEntity(
         id = id,
         vehicleId = 1,
@@ -66,7 +87,7 @@ class ChargingIntervalAnalyticsTest {
         energyKwh = energy,
         cost = cost,
         startSoc = 20,
-        endSoc = 80,
+        endSoc = endSoc,
         odometerKm = odometer
     )
 }
