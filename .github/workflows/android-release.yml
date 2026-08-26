@@ -111,9 +111,9 @@ jobs:
       - name: Prepare remote directory
         uses: appleboy/ssh-action@v1.2.2
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
           script: |
             set -eu
             mkdir -p /opt/ev-charge-book/releases
@@ -125,9 +125,9 @@ jobs:
       - name: Upload signed APK and deploy script
         uses: appleboy/scp-action@v1.0.0
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
           source: release-upload,scripts/deploy-android-release.sh
           target: /opt/ev-charge-book
           overwrite: true
@@ -140,9 +140,9 @@ jobs:
           APK_FILE: ${{ env.APK_FILE }}
           RELEASE_SHA: ${{ steps.source.outputs.sha }}
         with:
-          host: ${{ secrets.SERVER_IP }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SERVER_SSH_KEY }}
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
           envs: VERSION_CODE,VERSION_NAME,APK_FILE,RELEASE_SHA
           script: |
             set -eu
