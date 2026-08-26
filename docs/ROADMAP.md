@@ -105,19 +105,19 @@ CI 验收：
 - [x] 坏 JSON / 错 schemaVersion 不破坏当前数据
 - [x] 更新 #19 并标记 Backup / Restore accepted
 
-Backup / Restore 已验收；当前进入 Multi Vehicle。
+Backup / Restore 已验收。
 
 ### P1 Multi Vehicle (#17)
 
-状态: Implemented / CI Accepted / Device Acceptance Pending
+状态: Released / Accepted
 
 - [x] selectedVehicleId persisted
 - [x] vehicle list / current vehicle switcher
 - [x] Dashboard / Records / Stats 按车辆隔离
 - [x] Add Record 绑定 selected vehicle
 - [x] 车辆归档
-- [ ] 至少两辆车的真机切换与数据隔离验收
-- [ ] 归档车辆后历史记录保留的真机验收
+- [x] 至少两辆车的真机切换与数据隔离验收
+- [x] 归档车辆后历史记录保留的真机验收
 
 ### P1 Vehicle Catalog (#16)
 
@@ -126,7 +126,7 @@ Backup / Restore 已验收；当前进入 Multi Vehicle。
 - [ ] 用户确认 / 覆盖 catalog 参数
 - [ ] 自定义车型兜底
 
-实现时先稳定 Multi Vehicle context，再接 Catalog。
+当前主线。实现时保持 Catalog reference data 与 UserVehicle snapshot 分离。
 
 ### P2 Location (#14)
 
@@ -185,8 +185,8 @@ Analytics 必须区分原始事实、派生值和估算值。
 ## 当前执行顺序
 
 ```text
-Multi Vehicle (#17)
-  -> Vehicle Catalog (#16)
+Vehicle Catalog (#16)
+  -> Bluetooth connection prompt discovery
   -> Location foundation (#14)
   -> Manual Trip Tracking (#15)
   -> Data Reliability / ChargingPlace (#19 remaining)
@@ -216,7 +216,8 @@ docs/LOCAL_AGENT_HANDOFF.md
 
 - odometer foundation 确认由 Android Build Run #56 验收通过
 - Local Backup / Restore 已通过 Android Build Run #65 和真机验收
-- Multi Vehicle 已通过 Android Build Run #66，等待真机验收
+- Multi Vehicle 已通过 Android Build Run #66 与真机验收，#17 已关闭
+- Bluetooth 仅提升“连接指定车载蓝牙后提示开始”的可行性验证；不提前实现自动开始记录或 OBD 遥测
 - 新增 LOCAL_AGENT_HANDOFF.md
 - 清理历史 Issue #1 / #2
 - 更新 #18 / #19 为真实当前状态

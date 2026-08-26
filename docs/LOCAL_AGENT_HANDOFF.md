@@ -20,13 +20,13 @@ v0.1 已正式 Released / Accepted。
 
 ## 2. 本地 Agent 第一任务
 
-不要继续进入车型目录、定位或 Trip；当前任务为 Multi Vehicle (#17)。
+不要进入定位或 Trip；当前任务为 Vehicle Catalog (#16)。
 
 BuildConfig 编译阻塞已由最小改动修复：启用 Android `buildFeatures.buildConfig`。本地 `testDebugUnitTest` 与 `assembleDebug` 已通过，Android Build Run #65 Green，Debug APK Artifact 为 `ev-charge-book-debug-65`。
 
-Backup / Restore 已完成真机验收。Multi Vehicle 结束前不得开始 Catalog / Location / Trip。
+Backup / Restore 与 Multi Vehicle 均已完成真机验收。Vehicle Catalog 结束前不得开始 Location / Trip。
 
-Multi Vehicle 基础已实现并通过 Android Build Run #66；当前待验收当前车辆切换、按车辆数据隔离和归档保留历史记录。
+Multi Vehicle 已通过 Android Build Run #66 与真机验收，Issue #17 已关闭。
 
 ## 3. 已完成: v0.1
 
@@ -103,8 +103,8 @@ CI 与真机验收均已通过，覆盖以下场景:
 严格按以下顺序推进:
 
 ```text
-P1 Multi Vehicle (#17)
- -> P1 Vehicle Catalog (#16)
+P1 Vehicle Catalog (#16)
+ -> Bluetooth connection prompt discovery
  -> P2 Location foundation (#14)
  -> P2 Manual Trip Tracking (#15)
  -> Data Reliability / ChargingPlace (#19 remaining)

@@ -121,18 +121,18 @@ Android Build Run #65 已通过，Debug APK Artifact 已生成，并已完成真
 Run ID: `32942654435`
 Commit: `94127ae874c33015eb88bb461be37f3869618b0f`
 
-当前进入 P1 Multi Vehicle；完成该阶段验收前不得开始 Vehicle Catalog / Location / Trip 新功能。
+Multi Vehicle 已验收，当前进入 P1 Vehicle Catalog；完成该阶段验收前不得开始 Location / Trip 新功能。
 
 ### P1: 多车辆 / 车型目录
 
-Backup / Restore 已验收，当前开始 Multi Vehicle：
+Backup / Restore 与 Multi Vehicle 已验收，当前开始 Vehicle Catalog：
 
 - selected/default vehicle
 - Dashboard / Records / Stats 按车辆隔离
 - 多车辆创建 / 归档
 - 本地车型目录 + 自定义兜底
 
-Multi Vehicle 基础已实现并通过 Android Build Run #66；等待真机验收后再进入 Vehicle Catalog。
+Multi Vehicle 已通过 Android Build Run #66 与真机验收；当前进入 Vehicle Catalog。
 
 实现顺序优先 Multi Vehicle context，再接 Vehicle Catalog，避免 catalog 绑死 UserVehicle。
 
@@ -220,8 +220,8 @@ Custom Vehicle fallback
 ## 10. 当前执行顺序
 
 ```text
-Multi Vehicle (#17)
- -> Vehicle Catalog (#16)
+Vehicle Catalog (#16)
+ -> Bluetooth connection prompt discovery
  -> Location foundation (#14)
  -> Manual Trip Tracking (#15)
  -> Data Reliability / ChargingPlace (#19 remaining)
@@ -265,7 +265,7 @@ Compose -> MainViewModel -> ChargingRepository -> Room DAO -> Room
 - v0.1 正式标记 Released / Accepted
 - odometer foundation 已实现并通过 Android Build Run #56
 - Local Backup / Restore 已完成 CI 与真机验收
-- Local Agent 当前任务固定为 Multi Vehicle (#17)
+- Multi Vehicle #17 已验收并关闭；Local Agent 当前任务为 Vehicle Catalog (#16)
 - 清理历史 Issue #1 / #2；#18 / #19 更新为真实当前状态
 
 ### v1.6.0
