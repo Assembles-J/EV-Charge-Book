@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v1.6.0
+版本: v1.7.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -32,29 +32,27 @@
 - [x] 核心规则 / 统计单元测试
 - [x] Material 3 主题与主要页面视觉重构
 - [x] Gradle Wrapper / Android build scripts
+- [x] Android CI Green
+- [x] Debug APK Artifact
+- [x] 真机安装 / 启动
+- [x] 新增 / 编辑 / 删除充电记录真机走查
+- [x] 车辆编辑真机走查
+- [x] Dashboard / Records / Stats 数据一致性走查
 - [x] CI / Release workflow 基线
 - [x] 服务器原子 APK 部署脚本
+- [x] Release metadata 绑定真实 checkout SHA
+- [x] latest 原子激活顺序修正
 
-### 当前验收阶段
-
-P0 - Build / Installability
-
-- [ ] Android CI Green
-- [ ] Debug APK Artifact 验收
-- [ ] 真机安装 / 启动
-- [ ] 新增 / 编辑 / 删除充电记录真机走查
-- [ ] 车辆编辑真机走查
-- [ ] Dashboard / Records / Stats 数据一致性走查
-
-P1 - Production Release
+### 当前验收阶段: Production Release
 
 - [ ] assembleRelease Green
 - [ ] production signing secrets 验证
 - [ ] `/opt/ev-charge-book` 服务器目录权限验证
 - [ ] 首次 signed APK production publish
 - [ ] apksigner / SHA-256 / latest 原子切换验收
+- [ ] v0.1 release accepted
 
-v0.1 不继续扩功能。CI / 真机验收发现的问题只做阻塞修复。
+v0.1 不继续扩功能。Production Release 只修发布阻塞问题。
 
 ---
 
@@ -178,11 +176,11 @@ AI 必须区分事实、推算和建议，并利用 DataSource / accuracy 信息
 ## 当前执行顺序
 
 ```text
-v0.1 CI Green
-  -> Debug APK Artifact
-  -> Physical Device Acceptance
-  -> assembleRelease Green
+Production assembleRelease
+  -> Signing Secrets
+  -> Server Permission
   -> Signed Production APK
+  -> apksigner / SHA-256 / atomic latest acceptance
   -> v0.1 Release Accepted
   -> v0.2 odometerKm
   -> Local Backup / Restore
@@ -198,6 +196,15 @@ v0.1 CI Green
 
 ## 变更记录
 
+### v1.7.0
+
+- Android Build Run #45 Green
+- Debug APK Artifact 验收完成
+- 真机核心 CRUD / 启动 / 数据一致性验收通过，无阻塞 Bug
+- v0.1 当前唯一主线切换为 Production Release
+- 修正 release metadata SHA 来源，绑定实际 checkout commit
+- 修正服务器发布顺序，latest 只在 APK 与 metadata 准备完成后激活
+
 ### v1.6.0
 
 - commit `7204c56` 完成充电记录完整编辑、日期时间、充电类型、删除确认与反馈
@@ -205,17 +212,3 @@ v0.1 CI Green
 - Android CI Green 与 Debug APK 提升为当前 P0
 - v0.2 第一优先级固定为 odometerKm，其后为 Local Backup / Restore
 - 地图 / 行程继续后置，避免阻塞数据闭环和可恢复性
-
-### v1.5.0
-
-- 将 odometerKm 提升为 v0.2 P0 数据闭环能力
-- 增加充电与行程的非硬外键关联原则
-- 增加 DataSource / 规则异常检测
-- 增加 ChargingPlace
-- 将 Local Backup / Restore 提前到云同步之前
-- 增加 Trip 中断恢复、停车时间和采样体积控制
-
-### v1.4.0
-
-- 增加 v0.2 Vehicle & Trip Foundation
-- 地图、定位、行程、车型库、多车辆正式进入路线
