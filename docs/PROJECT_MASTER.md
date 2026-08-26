@@ -116,21 +116,12 @@ Issue #18 保持 open，只追踪 migration test、正式 charging interval calc
 - Room transaction restore
 - export / restore count validation
 
-但当前尚未验收完成。
+Android Build Run #65 已通过，Debug APK Artifact 已生成；真机验收仍未完成。
 
-最新 Android Build Run #64 失败：
+Run ID: `32942654435`
+Commit: `94127ae874c33015eb88bb461be37f3869618b0f`
 
-```text
-MainActivity.kt:154:52
-Unresolved reference 'BuildConfig'
-```
-
-Run ID: `32940521828`
-Commit: `f8e18498a47970b1c4cfc417e3bc46608df5a304`
-
-本地 Agent 第一优先级是用最小改动修复该编译问题，恢复 main CI Green，然后完成 Backup / Restore 真机验收。
-
-CI Green 前不得开始 Multi Vehicle / Catalog / Location / Trip 新功能。
+下一优先级是完成 Backup / Restore 真机验收。验收完成前不得开始 Multi Vehicle / Catalog / Location / Trip 新功能。
 
 ### P1: 多车辆 / 车型目录
 
@@ -227,9 +218,7 @@ Custom Vehicle fallback
 ## 10. 当前执行顺序
 
 ```text
-Fix Run #64 BuildConfig compile blocker
- -> Android CI Green + Debug APK
- -> Backup / Restore physical-device acceptance
+Backup / Restore physical-device acceptance
  -> Multi Vehicle (#17)
  -> Vehicle Catalog (#16)
  -> Location foundation (#14)
@@ -274,9 +263,8 @@ Compose -> MainViewModel -> ChargingRepository -> Room DAO -> Room
 
 - v0.1 正式标记 Released / Accepted
 - odometer foundation 已实现并通过 Android Build Run #56
-- Local Backup / Restore 第一版已实现，但 Run #64 被 BuildConfig 编译问题阻塞
-- 新增 LOCAL_AGENT_HANDOFF.md 作为本地 Agent 接手入口
-- 本地 Agent 第一任务固定为恢复 main CI Green，再做 Backup/Restore 真机验收
+- Local Backup / Restore 第一版已通过 Android Build Run #65，等待真机验收
+- Local Agent 当前任务固定为 Backup/Restore 真机验收
 - 清理历史 Issue #1 / #2；#18 / #19 更新为真实当前状态
 
 ### v1.6.0

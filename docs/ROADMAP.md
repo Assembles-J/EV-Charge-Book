@@ -74,7 +74,7 @@ Issue #18 后续尾项：
 
 ### P0.5 Local Backup / Restore
 
-状态: Implemented / CI Blocked / Device Acceptance Pending
+状态: Implemented / CI Accepted / Device Acceptance Pending
 
 已实现：
 
@@ -91,22 +91,14 @@ Issue #18 后续尾项：
 - [x] record -> vehicle 引用校验
 - [x] Vehicle 页面备份 / 恢复入口
 
-当前阻塞：
+CI 验收：
 
-```text
-Android Build Run #64
-Run ID: 32940521828
-Commit: f8e18498a47970b1c4cfc417e3bc46608df5a304
-
-MainActivity.kt:154:52
-Unresolved reference 'BuildConfig'
-```
+- [x] 最小改动启用 BuildConfig/versionName 获取
+- [x] Android Build Run #65 Green（Run ID: `32942654435`）
+- [x] Debug APK Artifact（`ev-charge-book-debug-65`）
 
 接下来必须按顺序完成：
 
-- [ ] 最小改动修复 BuildConfig/versionName 获取
-- [ ] Android CI Green
-- [ ] Debug APK Artifact
 - [ ] 真机导出备份
 - [ ] 真机覆盖确认
 - [ ] 真机恢复 Vehicle / ChargingRecord / odometer / remark
@@ -189,9 +181,7 @@ Analytics 必须区分原始事实、派生值和估算值。
 ## 当前执行顺序
 
 ```text
-Fix Run #64 BuildConfig compile blocker
-  -> Android CI Green + Debug APK
-  -> Backup / Restore device acceptance
+Backup / Restore device acceptance
   -> Multi Vehicle (#17)
   -> Vehicle Catalog (#16)
   -> Location foundation (#14)
@@ -222,8 +212,8 @@ docs/LOCAL_AGENT_HANDOFF.md
 ### v2.0.0
 
 - odometer foundation 确认由 Android Build Run #56 验收通过
-- Local Backup / Restore 第一版实现完成，但 Run #64 被 BuildConfig 编译问题阻塞
-- 当前主线切换为 BuildConfig fix -> CI Green -> Backup/Restore 真机验收
+- Local Backup / Restore 第一版已通过 Android Build Run #65，等待真机验收
+- 当前主线为 Backup/Restore 真机验收
 - 新增 LOCAL_AGENT_HANDOFF.md
 - 清理历史 Issue #1 / #2
 - 更新 #18 / #19 为真实当前状态

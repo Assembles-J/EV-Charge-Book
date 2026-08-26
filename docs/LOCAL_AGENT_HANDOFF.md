@@ -14,34 +14,17 @@ v0.1 已正式 Released / Accepted。
 
 当前代码基线（交接时）:
 
-- latest Android feature commit: `f8e18498a47970b1c4cfc417e3bc46608df5a304`
-- Android Build Run #64: Failed
-- Run ID: `32940521828`
+- latest Android feature commit: `94127ae874c33015eb88bb461be37f3869618b0f`
+- Android Build Run #65: Green
+- Run ID: `32942654435`
 
 ## 2. 本地 Agent 第一任务
 
-不要继续扩业务功能，先恢复 `main` CI Green。
+不要继续扩业务功能，先完成 Backup / Restore 真机验收。
 
-当前唯一已确认编译阻塞:
+BuildConfig 编译阻塞已由最小改动修复：启用 Android `buildFeatures.buildConfig`。本地 `testDebugUnitTest` 与 `assembleDebug` 已通过，Android Build Run #65 Green，Debug APK Artifact 为 `ev-charge-book-debug-65`。
 
-```text
-android/app/src/main/java/com/evchargebook/MainActivity.kt:154:52
-Unresolved reference 'BuildConfig'
-```
-
-处理原则:
-
-1. 用最小改动修复 BuildConfig/versionName 获取问题。
-2. 不为此引入 DI、配置框架或额外架构层。
-3. 本地执行与 CI 一致的命令:
-
-```bash
-cd android
-./gradlew --no-daemon testDebugUnitTest :app:assembleDebug
-```
-
-4. push 后必须确认 GitHub Android Build Green 和 Debug APK Artifact。
-5. CI 未 Green 前不要开始 Multi Vehicle / Catalog / Location / Trip。
+真机验收前不得开始 Multi Vehicle / Catalog / Location / Trip。
 
 ## 3. 已完成: v0.1
 
@@ -101,9 +84,7 @@ Issue: #19
 - record -> vehicle 引用检查
 - Vehicle 页面备份/恢复入口
 
-当前未验收原因不是业务逻辑失败，而是 Run #64 在 `MainActivity.kt` 编译时找不到 `BuildConfig`。
-
-CI 修好后的验收顺序:
+CI 已通过；现在按以下顺序完成真机验收:
 
 1. Debug APK Artifact
 2. 真机导出备份
@@ -120,8 +101,7 @@ CI 修好后的验收顺序:
 严格按以下顺序推进:
 
 ```text
-P0  Fix Run #64 / CI Green
- -> P0.5 Backup / Restore device acceptance
+P0.5 Backup / Restore device acceptance
  -> P1 Multi Vehicle (#17)
  -> P1 Vehicle Catalog (#16)
  -> P2 Location foundation (#14)
