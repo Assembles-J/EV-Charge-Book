@@ -14,7 +14,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 3
+    const val CURRENT_SCHEMA_VERSION = 4
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -49,6 +49,9 @@ object BackupCodec {
                     putNullable("location", record.location)
                     putNullable("remark", record.remark)
                     putNullable("odometerKm", record.odometerKm)
+                    putNullable("latitude", record.latitude)
+                    putNullable("longitude", record.longitude)
+                    putNullable("locationAccuracyMeters", record.locationAccuracyMeters)
                 })
             }
         })
@@ -97,7 +100,10 @@ object BackupCodec {
                         chargerType = item.optNullableString("chargerType"),
                         location = item.optNullableString("location"),
                         remark = item.optNullableString("remark"),
-                        odometerKm = item.optNullableDouble("odometerKm")
+                        odometerKm = item.optNullableDouble("odometerKm"),
+                        latitude = item.optNullableDouble("latitude"),
+                        longitude = item.optNullableDouble("longitude"),
+                        locationAccuracyMeters = item.optNullableDouble("locationAccuracyMeters")
                     )
                 )
             }
@@ -106,6 +112,7 @@ object BackupCodec {
         val vehicleIds = vehicles.map { it.id }.toSet()
         require(vehicles.isNotEmpty()) { "备份中没有车辆数据" }
         require(records.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的充电记录" }
+        require(records.all { (it.latitude == null) == (it.longitude == null) }) { "备份中存在不完整的定位坐标" }
 
         return BackupPayload(
             schemaVersion = schemaVersion,
