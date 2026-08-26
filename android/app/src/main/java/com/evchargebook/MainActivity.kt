@@ -1,6 +1,7 @@
 package com.evchargebook
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -43,16 +44,40 @@ class MainActivity : ComponentActivity() {
         val db = AppDatabase.getInstance(applicationContext)
         MainViewModel.Factory(ChargingRepository(db, applicationContext))
     }
+    private var openTripConfirmation by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        openTripConfirmation = intent.getBooleanExtra(EXTRA_OPEN_TRIP_CONFIRMATION, false)
         enableEdgeToEdge()
-        setContent { EvChargeTheme { MainApp(vm) } }
+        setContent {
+            EvChargeTheme {
+                MainApp(
+                    viewModel = vm,
+                    openTripConfirmation = openTripConfirmation,
+                    onTripConfirmationConsumed = { openTripConfirmation = false }
+                )
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_OPEN_TRIP_CONFIRMATION, false)) openTripConfirmation = true
+    }
+
+    companion object {
+        const val EXTRA_OPEN_TRIP_CONFIRMATION = "open_trip_confirmation"
     }
 }
 
 @Composable
-fun MainApp(viewModel: MainViewModel) {
+fun MainApp(
+    viewModel: MainViewModel,
+    openTripConfirmation: Boolean = false,
+    onTripConfirmationConsumed: () -> Unit = {}
+) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -68,6 +93,14 @@ fun MainApp(viewModel: MainViewModel) {
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(openTripConfirmation) {
+        if (openTripConfirmation) {
+            tab = 3
+            snackbarHostState.showSnackbar("已检测到车辆蓝牙连接，请确认是否开始本次行程")
+            onTripConfirmationConsumed()
+        }
+    }
 
     val createBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         val content = pendingExportContent
