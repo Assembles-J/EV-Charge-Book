@@ -19,6 +19,7 @@ import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.domain.TripRules
+import com.evchargebook.trip.TripTrackingService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -113,16 +114,29 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         }
     }
 
-    suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long = database.withTransaction {
-        require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
-        TripRules.requireCanStart(tripDao.getActive() != null)
-        tripDao.insertSession(
-            TripSessionEntity(
-                vehicleId = vehicleId,
-                startedAtEpochMillis = startedAtEpochMillis,
-                status = TripStatus.RECORDING
+    suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long {
+        val tripId = database.withTransaction {
+            require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
+            TripRules.requireCanStart(tripDao.getActive() != null)
+            tripDao.insertSession(
+                TripSessionEntity(
+                    vehicleId = vehicleId,
+                    startedAtEpochMillis = startedAtEpochMillis,
+                    status = TripStatus.RECORDING
+                )
             )
-        )
+        }
+        try {
+            TripTrackingService.start(context, tripId)
+        } catch (error: Throwable) {
+            database.withTransaction {
+                tripDao.getSession(tripId)?.let { session ->
+                    tripDao.updateSession(session.copy(status = TripStatus.INTERRUPTED))
+                }
+            }
+            throw error
+        }
+        return tripId
     }
 
     suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
@@ -136,6 +150,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                 )
             )
         }
+        TripTrackingService.stop(context)
     }
 
     suspend fun deleteTrip(trip: TripSessionEntity) {
