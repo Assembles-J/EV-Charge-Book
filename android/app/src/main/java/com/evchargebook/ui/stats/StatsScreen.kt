@@ -66,7 +66,21 @@ import java.util.Locale
                 }
             }
 
-            Text("说明：这是按充电账本补入电量/费用与相邻里程计算的区间估算，不等同于车辆 BMS 或表显真实电耗。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (state.tripCoverageIntervalCount > 0 && state.tripCoverageRatio != null) {
+                HorizontalDivider()
+                Text("Trip 辅助证据", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    StatValue("轨迹覆盖", "${percent(state.tripCoverageRatio)}", Modifier.weight(1f))
+                    StatValue("Trip 距离", "${one(state.tripCoverageDistanceKm)} km", Modifier.weight(1f))
+                }
+                Text("${state.tripCoverageIntervalCount} 个区间有完整 Trip 证据；对应里程表区间 ${one(state.tripCoverageOdometerKm)} km。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                val difference = state.tripCoverageOdometerKm - state.tripCoverageDistanceKm
+                if (kotlin.math.abs(difference) >= 1.0) {
+                    Text("Trip 与里程表相差 ${one(kotlin.math.abs(difference))} km。该差异仅用于发现漏记、GPS 漂移或边界问题，不自动修正任何原始数据。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+            }
+
+            Text("说明：这是按充电账本补入电量/费用与相邻里程计算的区间估算，不等同于车辆 BMS 或表显真实电耗。Trip 只作为辅助证据。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -84,3 +98,4 @@ import java.util.Locale
 
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
 private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
+private fun percent(value: Double) = String.format(Locale.US, "%.0f%%", value * 100.0)
