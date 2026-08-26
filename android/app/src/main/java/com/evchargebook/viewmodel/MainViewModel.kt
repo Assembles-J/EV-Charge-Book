@@ -11,6 +11,8 @@ import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.domain.ChargerCategorySummary
+import com.evchargebook.domain.ChargerTypeAnalytics
 import com.evchargebook.domain.ChargingIntervalAnalytics
 import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingStatistics
@@ -53,6 +55,7 @@ data class MainUiState(
     val tripCoverageRatio: Double? = null,
     val tripCoverageIntervals: List<ChargingTripCoverageInterval> = emptyList(),
     val monthlyTrend: List<MonthlyChargingBucket> = emptyList(),
+    val chargerTypeSummary: List<ChargerCategorySummary> = emptyList(),
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -67,20 +70,11 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
         viewModelScope.launch {
-            selectedTripId.flatMapLatest { tripId ->
-                tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList())
-            }.collect { points ->
-                _uiState.value = _uiState.value.copy(selectedTripId = selectedTripId.value, selectedTripPoints = points)
-            }
+            selectedTripId.flatMapLatest { tripId -> tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList()) }
+                .collect { points -> _uiState.value = _uiState.value.copy(selectedTripId = selectedTripId.value, selectedTripPoints = points) }
         }
         viewModelScope.launch {
-            combine(
-                repository.vehicle,
-                repository.vehicles,
-                repository.catalogVehicles,
-                repository.chargingRecords,
-                repository.trips
-            ) { vehicle, vehicles, catalogVehicles, records, trips ->
+            combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords, repository.trips) { vehicle, vehicles, catalogVehicles, records, trips ->
                 val zoneId = ZoneId.systemDefault()
                 val now = Instant.now().atZone(zoneId)
                 val month = YearMonth.from(now)
@@ -90,6 +84,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val intervals = ChargingIntervalAnalytics.summarize(records)
                 val coverage = ChargingTripCoverage.summarize(records, trips)
                 val monthlyTrend = MonthlyChargingTrend.summarize(records, month, zoneId, monthCount = 6)
+                val chargerTypes = ChargerTypeAnalytics.summarize(records)
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
@@ -113,7 +108,8 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     tripCoverageDistanceKm = coverage.completedTripDistanceKm,
                     tripCoverageRatio = coverage.coverageRatio,
                     tripCoverageIntervals = coverage.intervals,
-                    monthlyTrend = monthlyTrend
+                    monthlyTrend = monthlyTrend,
+                    chargerTypeSummary = chargerTypes
                 )
             }.collect { _uiState.value = it }
         }
@@ -121,91 +117,22 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
 
     fun exportBackup(appVersion: String, onReady: (String) -> Unit) { viewModelScope.launch { runCatching { repository.exportBackup(appVersion) }.onSuccess(onReady).onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份导出失败") } } }
     fun restoreBackup(content: String) { viewModelScope.launch { runCatching { repository.restoreBackup(content) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "本地备份已恢复") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份恢复失败") } } }
-
-    fun startTrip() {
-        val vehicleId = _uiState.value.vehicle?.id ?: return
-        viewModelScope.launch {
-            runCatching { repository.startTrip(vehicleId) }
-                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已开始") }
-                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法开始行程") }
-        }
-    }
-
-    fun resumeTrip(tripId: Long) {
-        viewModelScope.launch {
-            runCatching { repository.resumeTrip(tripId) }
-                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程记录已恢复") }
-                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法恢复行程") }
-        }
-    }
-
-    fun stopTrip() {
-        viewModelScope.launch {
-            runCatching { repository.stopActiveTrip() }
-                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已结束") }
-                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法结束行程") }
-        }
-    }
-
+    fun startTrip() { val vehicleId = _uiState.value.vehicle?.id ?: return; viewModelScope.launch { runCatching { repository.startTrip(vehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已开始") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法开始行程") } } }
+    fun resumeTrip(tripId: Long) { viewModelScope.launch { runCatching { repository.resumeTrip(tripId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程记录已恢复") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法恢复行程") } } }
+    fun stopTrip() { viewModelScope.launch { runCatching { repository.stopActiveTrip() }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已结束") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法结束行程") } } }
     fun openTripDetail(tripId: Long) { selectedTripId.value = tripId }
     fun closeTripDetail() { selectedTripId.value = null; _uiState.value = _uiState.value.copy(selectedTripId = null, selectedTripPoints = emptyList()) }
-
-    fun deleteTrip(trip: TripSessionEntity) {
-        viewModelScope.launch {
-            runCatching { repository.deleteTrip(trip) }
-                .onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }
-                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") }
-        }
-    }
-
-    fun saveVehicle(brand: String, model: String, battery: Double, range: Int) {
-        val current = _uiState.value.vehicle ?: return
-        viewModelScope.launch { runCatching { repository.saveVehicle(current.copy(brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } }
-    }
-
+    fun deleteTrip(trip: TripSessionEntity) { viewModelScope.launch { runCatching { repository.deleteTrip(trip) }.onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") } } }
+    fun saveVehicle(brand: String, model: String, battery: Double, range: Int) { val current = _uiState.value.vehicle ?: return; viewModelScope.launch { runCatching { repository.saveVehicle(current.copy(brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) { viewModelScope.launch { runCatching { repository.addVehicle(brand, model, battery, range, catalogVehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun selectVehicle(vehicleId: Long) { viewModelScope.launch { runCatching { repository.selectVehicle(vehicleId) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun archiveVehicle(vehicleId: Long) { viewModelScope.launch { runCatching { repository.archiveVehicle(vehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已归档，历史记录仍保留") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun refreshPairedBluetoothDevices() { _uiState.value = _uiState.value.copy(pairedBluetoothDevices = repository.pairedBluetoothDevices()) }
     fun saveBluetoothPrompt(enabled: Boolean, address: String?, name: String?) { viewModelScope.launch { repository.saveBluetoothPrompt(enabled, address, name) } }
-
-    fun addChargingRecord(
-        startSoc: Int,
-        endSoc: Int,
-        energyKwh: Double,
-        cost: Double,
-        location: String?,
-        chargerType: String?,
-        remark: String?,
-        chargeTime: Long,
-        odometerKm: Double?,
-        latitude: Double?,
-        longitude: Double?,
-        locationAccuracyMeters: Double?
-    ) {
+    fun addChargingRecord(startSoc: Int, endSoc: Int, energyKwh: Double, cost: Double, location: String?, chargerType: String?, remark: String?, chargeTime: Long, odometerKm: Double?, latitude: Double?, longitude: Double?, locationAccuracyMeters: Double?) {
         val id = _uiState.value.vehicle?.id ?: return
-        viewModelScope.launch {
-            runCatching {
-                repository.addChargingRecord(
-                    vehicleId = id,
-                    startSoc = startSoc,
-                    endSoc = endSoc,
-                    energyKwh = energyKwh,
-                    cost = cost,
-                    location = location,
-                    chargerType = chargerType,
-                    remark = remark,
-                    chargeTimeEpochMillis = chargeTime,
-                    odometerKm = odometerKm,
-                    latitude = latitude,
-                    longitude = longitude,
-                    locationAccuracyMeters = locationAccuracyMeters
-                )
-            }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已保存") }
-                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
-        }
+        viewModelScope.launch { runCatching { repository.addChargingRecord(id, startSoc, endSoc, energyKwh, cost, location, chargerType, remark, chargeTime, odometerKm, latitude, longitude, locationAccuracyMeters) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已保存") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } }
     }
-
     fun deleteChargingRecord(record: ChargingRecordEntity) { viewModelScope.launch { repository.deleteChargingRecord(record) } }
     fun updateChargingRecord(record: ChargingRecordEntity) { viewModelScope.launch { runCatching { repository.updateChargingRecord(record) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已更新") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun clearError() { _uiState.value = _uiState.value.copy(errorMessage = null) }
