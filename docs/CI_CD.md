@@ -1,22 +1,12 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v1.2.0
-更新时间: 2026-08-25
+版本: v1.3.0
+更新时间: 2026-08-26
 状态: Authority Subdocument
 
 ## 1. 目标
 
-EV Charge Book 的构建、签名、发布和服务器分发逻辑遵循 Assembles-J 组织现有项目的统一发布思路，主要参考 Third-Hand production deployment：
-
-- CI 与 Production Release 分离
-- Release 使用 GitHub Actions `production` Environment
-- Android Release APK 必须签名
-- 版本号由 GitHub Actions run number 驱动
-- APK 同时保留 GitHub Actions Artifact
-- `/opt/<project>/releases` 保存不可变版本文件
-- `.part` 临时上传 + 原子激活
-- 稳定 latest 下载入口
-- `workflow_dispatch` 手动生产发布门禁
+遵循 Assembles-J 组织发布思路：CI 与 Production Release 分离、signed APK、Actions Artifact、production Environment、服务器不可变 release 与原子激活。
 
 ---
 
@@ -24,192 +14,122 @@ EV Charge Book 的构建、签名、发布和服务器分发逻辑遵循 Assembl
 
 当前已具备:
 
-- `android/build.gradle.kts`
-- `android/settings.gradle.kts`
-- `android/app/build.gradle.kts`
+- android/build.gradle.kts
+- android/settings.gradle.kts
+- android/app/build.gradle.kts
 - AndroidManifest
-- Room/KSP/Compose 依赖声明
-- production signing 环境变量接口
+- `android/gradlew` / `gradlew.bat`
+- `android/gradle/wrapper/**`
 
-CI 固定使用:
+当前统一构建参数:
 
 - JDK 17
-- Android API 37
+- compile/target SDK 36
+- CI 安装 Android platform 36
 - Build Tools 36.0.0
-- Gradle 9.5.0
-- AGP 9.3.1
+- Gradle Wrapper 9.5.0
 
-Gradle Wrapper 是推荐的本地一致性工具，但不再阻塞第一次远程 CI 验证。CI 由 `gradle/actions/setup-gradle` 安装固定 Gradle 版本，避免“缺 Wrapper 就静默跳过构建”。
+CI 与 Release 必须优先使用仓库的 `./gradlew`，避免本地、CI 两套 Gradle 来源。
 
 ---
 
-## 3. CI 流程
+## 3. 2026-08-26 CI 故障复盘
 
-PR / main Android 变更:
+Android Build run #41 在 `Install Android SDK packages` 失败，业务代码尚未进入编译阶段。
+
+根因:
+
+```text
+project compileSdk = 36
+workflow requested platforms;android-37
+sdkmanager: Failed to find package 'platforms;android-37'
+```
+
+已修复:
+
+- android-build.yml -> platform 36
+- android-release.yml -> platform 36
+- CI / Release -> `./gradlew`
+- wrapper 文件加入 baseline validation
+
+因此在新的 Action 成功前，不得声称 Debug CI Green。
+
+---
+
+## 4. CI 流程
 
 ```text
 Checkout
- -> Validate build files
+ -> Validate build + wrapper
  -> JDK 17
- -> Android SDK 37
- -> Gradle 9.5.0
- -> testDebugUnitTest
- -> assembleDebug
+ -> Android SDK 36 / Build Tools 36
+ -> Gradle cache
+ -> ./gradlew testDebugUnitTest :app:assembleDebug
  -> Debug APK Artifact
 ```
 
-CI 必须真实执行构建；禁止因为工程缺少非必要辅助文件而直接报告成功。
-
 ---
 
-## 4. Production Release 流程
+## 5. Production Release
 
-当前保持手动触发:
+当前仍 `workflow_dispatch` 手动门禁:
 
 ```text
-workflow_dispatch
- -> Checkout selected ref
- -> VERSION_CODE / VERSION_NAME
- -> Restore production keystore
- -> Gradle 9.5.0 assembleRelease
+Checkout ref
+ -> validate signing + wrapper
+ -> SDK 36
+ -> restore keystore
+ -> ./gradlew :app:assembleRelease
  -> apksigner verify
  -> SHA-256
  -> Actions Artifact
  -> SCP *.part
- -> Remote verify
- -> Atomic mv into releases/
- -> Update latest symlink
- -> Write release metadata
+ -> atomic activate under /opt/ev-charge-book/releases
+ -> update latest
 ```
 
-完成 Debug CI Green 和首次 signed release 验收后，再评估 main Android 变更自动 production release。
-
 ---
 
-## 5. 版本规则
+## 6. 版本 / Secrets
 
-MVP:
-
-- `VERSION_CODE = github.run_number`
-- `VERSION_NAME = 0.1.<github.run_number>`
-- APK: `ev-charge-book-0.1.<run_number>.apk`
-
-VERSION_CODE 不随产品 minor 版本重置。
-
----
-
-## 6. production Environment / Secrets
-
-Environment: `production`
+- VERSION_CODE = github.run_number
+- VERSION_NAME = 0.1.<run_number>（v0.1）
 
 Secrets:
 
-- `ANDROID_KEYSTORE_BASE64`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-- `SERVER_IP`
-- `SERVER_USER`
-- `SERVER_SSH_KEY`
-
-不得提交 keystore、密码或 SSH 私钥。
+- ANDROID_KEYSTORE_BASE64
+- ANDROID_KEYSTORE_PASSWORD
+- ANDROID_KEY_ALIAS
+- ANDROID_KEY_PASSWORD
+- SERVER_IP
+- SERVER_USER
+- SERVER_SSH_KEY
 
 ---
 
-## 7. Android Signing Contract
+## 7. 自动 Production Release 门禁
 
-`app/build.gradle.kts` 读取:
-
-- `ANDROID_KEYSTORE_FILE`
-- `ANDROID_KEYSTORE_PASSWORD`
-- `ANDROID_KEY_ALIAS`
-- `ANDROID_KEY_PASSWORD`
-- `APP_VERSION_CODE`
-- `APP_VERSION_NAME`
-
-Production workflow 负责恢复 keystore 并注入这些环境变量。
-
-本地没有 production signing 环境变量时允许生成开发 release 包用于编译验证，但正式生产验收必须由 production workflow 完成并执行 `apksigner verify`。
-
----
-
-## 8. 服务器目录与原子发布
-
-```text
-/opt/ev-charge-book/
-  releases/
-  latest/
-  release-meta/
-  release-upload/
-```
-
-上传使用 `<apk>.part`，校验完成后移动到不可变 `releases/`，最后才更新 `latest/ev-charge-book-latest.apk`。
-
-失败时不得改变 latest。
-
----
-
-## 9. Artifact
-
-Debug:
-
-- `ev-charge-book-debug-<run_number>`
-- 7 days
-
-Release:
-
-- `ev-charge-book-<version>`
-- 14 days
-
-服务器 release 为长期分发源；Actions Artifact 用于构建审计和短期下载。
-
----
-
-## 10. 自动 Production Release 门禁
-
-开启 main 自动 production release 前必须满足:
+必须满足:
 
 - Debug CI Green
-- Debug APK Artifact 可下载
-- `assembleRelease` Green
-- production signing Secrets 已验证
-- `/opt/ev-charge-book` 可写
+- Debug APK 可下载
+- assembleRelease Green
+- production signing secrets 验证
+- server directory permission 验证
 - 首次 signed APK 原子发布完成
 
-Gradle Wrapper 不再作为 Production Release 的硬门禁，但仍建议后续由本地 Android Studio 生成并提交。
+再启用 main Android 变更自动 production release。
 
 ---
 
-## 11. 与组织逻辑的关系
+## 8. 变更记录
 
-v0.1 没有后端，因此不复制 Third-Hand 的 Docker/backend 健康检查。
+### v1.3.0
 
-保持统一骨架:
-
-- production Environment
-- Secret 命名
-- run-number version
-- signed APK
-- Actions Artifact
-- `/opt/<project>/releases`
-- `.part` atomic activation
-- SSH/SCP
-
-v0.3 引入后端后，再增加 backend/android scope detection。
-
----
-
-## 12. 变更记录
+- Gradle Wrapper 已实际提交，恢复为 CI/Release 标准入口
+- SDK 从 stale 37 配置统一到项目 SDK 36
+- 记录 run #41 失败根因，明确失败发生在 SDK 安装而非业务编译
 
 ### v1.2.0
 
-- Android Gradle build baseline 已落地
-- CI 固定 Gradle 9.5.0 并开始真实 build/test
-- Gradle Wrapper 从硬门禁调整为推荐项
-- production release 同步改用固定 Gradle 9.5.0
-- 保持 production 手动发布门禁直到首次签名验收
-
-### v1.1.0
-
-- 对齐 Assembles-J / Third-Hand 发布逻辑
-- 建立 signed APK、production Environment 和服务器原子发布规范
+- Android build baseline 和 production workflow 落地
