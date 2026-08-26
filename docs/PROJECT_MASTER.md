@@ -36,6 +36,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 11. VEHICLE_CATALOG_MULTI_VEHICLE.md
 12. DATA_QUALITY_BACKUP.md
 13. LOCAL_AGENT_HANDOFF.md - 当前本地 Agent 接手入口
+14. NEXT_PHASE_DESIGN.md - 后续业务阶段设计
 
 实现与文档冲突时，先以当前代码事实确认状态，再修正文档。
 

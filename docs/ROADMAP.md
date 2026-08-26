@@ -186,7 +186,7 @@ Analytics 必须区分原始事实、派生值和估算值。
 
 ```text
 Vehicle Catalog (#16)
-  -> Bluetooth connection prompt discovery
+  -> Bluetooth connection prompt discovery (#21)
   -> Location foundation (#14)
   -> Manual Trip Tracking (#15)
   -> Data Reliability / ChargingPlace (#19 remaining)
