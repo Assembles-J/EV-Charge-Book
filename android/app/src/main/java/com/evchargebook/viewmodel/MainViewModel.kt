@@ -16,6 +16,8 @@ import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingStatistics
 import com.evchargebook.domain.ChargingTripCoverage
 import com.evchargebook.domain.ChargingTripCoverageInterval
+import com.evchargebook.domain.MonthlyChargingBucket
+import com.evchargebook.domain.MonthlyChargingTrend
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -50,6 +52,7 @@ data class MainUiState(
     val tripCoverageDistanceKm: Double = 0.0,
     val tripCoverageRatio: Double? = null,
     val tripCoverageIntervals: List<ChargingTripCoverageInterval> = emptyList(),
+    val monthlyTrend: List<MonthlyChargingBucket> = emptyList(),
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -78,13 +81,15 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 repository.chargingRecords,
                 repository.trips
             ) { vehicle, vehicles, catalogVehicles, records, trips ->
-                val now = Instant.now().atZone(ZoneId.systemDefault())
+                val zoneId = ZoneId.systemDefault()
+                val now = Instant.now().atZone(zoneId)
                 val month = YearMonth.from(now)
-                val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                val end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                val start = month.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+                val end = month.plusMonths(1).atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
                 val summary = ChargingStatistics.summarize(records, start, end)
                 val intervals = ChargingIntervalAnalytics.summarize(records)
                 val coverage = ChargingTripCoverage.summarize(records, trips)
+                val monthlyTrend = MonthlyChargingTrend.summarize(records, month, zoneId, monthCount = 6)
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
@@ -107,7 +112,8 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     tripCoverageOdometerKm = coverage.odometerDistanceKm,
                     tripCoverageDistanceKm = coverage.completedTripDistanceKm,
                     tripCoverageRatio = coverage.coverageRatio,
-                    tripCoverageIntervals = coverage.intervals
+                    tripCoverageIntervals = coverage.intervals,
+                    monthlyTrend = monthlyTrend
                 )
             }.collect { _uiState.value = it }
         }
