@@ -23,6 +23,12 @@ interface TripDao {
     @Query("SELECT * FROM trip_sessions WHERE id = :tripId LIMIT 1")
     suspend fun getSession(tripId: Long): TripSessionEntity?
 
+    @Query("SELECT * FROM trip_sessions ORDER BY startedAtEpochMillis")
+    suspend fun getAllSessions(): List<TripSessionEntity>
+
+    @Query("SELECT * FROM trip_points ORDER BY tripId, capturedAtEpochMillis")
+    suspend fun getAllPoints(): List<TripPointEntity>
+
     @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY capturedAtEpochMillis")
     fun observePoints(tripId: Long): Flow<List<TripPointEntity>>
 
@@ -32,12 +38,21 @@ interface TripDao {
     @Insert
     suspend fun insertSession(session: TripSessionEntity): Long
 
+    @Insert
+    suspend fun insertSessions(sessions: List<TripSessionEntity>)
+
     @Update
     suspend fun updateSession(session: TripSessionEntity)
 
     @Insert
     suspend fun insertPoint(point: TripPointEntity): Long
 
+    @Insert
+    suspend fun insertPoints(points: List<TripPointEntity>)
+
     @Delete
     suspend fun deleteSession(session: TripSessionEntity)
+
+    @Query("DELETE FROM trip_sessions")
+    suspend fun deleteAllSessions()
 }
