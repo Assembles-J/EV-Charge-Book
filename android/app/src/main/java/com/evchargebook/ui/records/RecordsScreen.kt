@@ -54,6 +54,7 @@ fun RecordsScreen(records: List<ChargingRecordEntity>, onDelete: (ChargingRecord
                 Text(record.location ?: "未命名充电地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 record.chargerType?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
                 Text(format(record.chargeTimeEpochMillis), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                record.odometerKm?.let { Text("里程 ${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Spacer(Modifier.height(MaterialTheme.spacing.xs))
                 Text("SOC ${record.startSoc}% → ${record.endSoc}%  ·  ${one(record.energyKwh)} kWh", style = MaterialTheme.typography.bodyMedium)
             }
@@ -66,5 +67,6 @@ fun RecordsScreen(records: List<ChargingRecordEntity>, onDelete: (ChargingRecord
     }
 }
 private fun format(value: Long) = DateTimeFormatter.ofPattern("M月d日 HH:mm").withLocale(Locale.SIMPLIFIED_CHINESE).withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(value))
+private fun formatKm(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
 private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
