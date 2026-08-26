@@ -20,6 +20,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingRecordRules
@@ -92,13 +93,8 @@ fun AddRecordScreen(
     val odometerValue = odometer.toDoubleOrNull()
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }
-    ) { padding ->
-        Column(
-            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
-        ) {
+    Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             FormSection("时间与地点", "先记录事实，详细备注可以之后再补。") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
@@ -166,6 +162,7 @@ private fun FormSection(title: String, subtitle: String, content: @Composable Co
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SingleChoiceSegment(options: List<String>, selected: String, onSelect: (String) -> Unit) {
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
