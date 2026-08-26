@@ -7,6 +7,7 @@ import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.UUID
 
 data class BackupPayload(
     val schemaVersion: Int,
@@ -19,7 +20,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 5
+    const val CURRENT_SCHEMA_VERSION = 6
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -37,6 +38,8 @@ object BackupCodec {
                     put("isDefault", vehicle.isDefault)
                     put("isArchived", vehicle.isArchived)
                     put("createdAtEpochMillis", vehicle.createdAtEpochMillis)
+                    put("syncId", vehicle.syncId)
+                    put("updatedAtEpochMillis", vehicle.updatedAtEpochMillis)
                 })
             }
         })
@@ -57,6 +60,9 @@ object BackupCodec {
                     putNullable("latitude", record.latitude)
                     putNullable("longitude", record.longitude)
                     putNullable("locationAccuracyMeters", record.locationAccuracyMeters)
+                    put("syncId", record.syncId)
+                    put("updatedAtEpochMillis", record.updatedAtEpochMillis)
+                    put("isDeleted", record.isDeleted)
                 })
             }
         })
@@ -116,9 +122,11 @@ object BackupCodec {
         val vehicles = buildList {
             for (index in 0 until vehiclesJson.length()) {
                 val item = vehiclesJson.getJSONObject(index)
+                val id = item.getLong("id")
+                val createdAt = item.optLong("createdAtEpochMillis", id)
                 add(
                     VehicleEntity(
-                        id = item.getLong("id"),
+                        id = id,
                         catalogVehicleId = item.optNullableString("catalogVehicleId"),
                         brand = item.getString("brand"),
                         model = item.getString("model"),
@@ -126,7 +134,9 @@ object BackupCodec {
                         rangeKm = item.getInt("rangeKm"),
                         isDefault = item.optBoolean("isDefault", false),
                         isArchived = item.optBoolean("isArchived", false),
-                        createdAtEpochMillis = item.optLong("createdAtEpochMillis", item.getLong("id"))
+                        createdAtEpochMillis = createdAt,
+                        syncId = item.optString("syncId").takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
+                        updatedAtEpochMillis = item.optLong("updatedAtEpochMillis", createdAt)
                     )
                 )
             }
@@ -136,11 +146,12 @@ object BackupCodec {
         val records = buildList {
             for (index in 0 until recordsJson.length()) {
                 val item = recordsJson.getJSONObject(index)
+                val chargeTime = item.getLong("chargeTimeEpochMillis")
                 add(
                     ChargingRecordEntity(
                         id = item.getLong("id"),
                         vehicleId = item.getLong("vehicleId"),
-                        chargeTimeEpochMillis = item.getLong("chargeTimeEpochMillis"),
+                        chargeTimeEpochMillis = chargeTime,
                         energyKwh = item.getDouble("energyKwh"),
                         cost = item.getDouble("cost"),
                         startSoc = item.getInt("startSoc"),
@@ -151,7 +162,10 @@ object BackupCodec {
                         odometerKm = item.optNullableDouble("odometerKm"),
                         latitude = item.optNullableDouble("latitude"),
                         longitude = item.optNullableDouble("longitude"),
-                        locationAccuracyMeters = item.optNullableDouble("locationAccuracyMeters")
+                        locationAccuracyMeters = item.optNullableDouble("locationAccuracyMeters"),
+                        syncId = item.optString("syncId").takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
+                        updatedAtEpochMillis = item.optLong("updatedAtEpochMillis", chargeTime),
+                        isDeleted = item.optBoolean("isDeleted", false)
                     )
                 )
             }
@@ -213,7 +227,11 @@ object BackupCodec {
         val vehicleIds = vehicles.map { it.id }.toSet()
         val tripIds = sessions.map { it.id }.toSet()
         require(vehicles.isNotEmpty()) { "备份中没有车辆数据" }
+        require(vehicles.all { it.syncId.isNotBlank() }) { "备份中存在缺失同步身份的车辆" }
+        require(vehicles.map { it.syncId }.distinct().size == vehicles.size) { "备份中存在重复车辆同步身份" }
         require(records.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的充电记录" }
+        require(records.all { it.syncId.isNotBlank() }) { "备份中存在缺失同步身份的充电记录" }
+        require(records.map { it.syncId }.distinct().size == records.size) { "备份中存在重复充电记录同步身份" }
         require(records.all { (it.latitude == null) == (it.longitude == null) }) { "备份中存在不完整的定位坐标" }
         require(sessions.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的行程" }
         require(sessions.all { it.status in setOf(TripStatus.RECORDING, TripStatus.INTERRUPTED, TripStatus.COMPLETED) }) { "备份中存在未知行程状态" }
