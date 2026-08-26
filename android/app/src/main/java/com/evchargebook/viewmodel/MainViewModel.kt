@@ -12,8 +12,10 @@ import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.ChargingIntervalAnalytics
+import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingStatistics
 import com.evchargebook.domain.ChargingTripCoverage
+import com.evchargebook.domain.ChargingTripCoverageInterval
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -42,10 +44,12 @@ data class MainUiState(
     val intervalDistanceKm: Double = 0.0,
     val intervalEnergyPer100Km: Double? = null,
     val intervalCostPer100Km: Double? = null,
+    val intervalSamples: List<ChargingIntervalSample> = emptyList(),
     val tripCoverageIntervalCount: Int = 0,
     val tripCoverageOdometerKm: Double = 0.0,
     val tripCoverageDistanceKm: Double = 0.0,
     val tripCoverageRatio: Double? = null,
+    val tripCoverageIntervals: List<ChargingTripCoverageInterval> = emptyList(),
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -98,10 +102,12 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     intervalDistanceKm = intervals.totalDistanceKm,
                     intervalEnergyPer100Km = intervals.energyPer100Km,
                     intervalCostPer100Km = intervals.costPer100Km,
+                    intervalSamples = intervals.samples,
                     tripCoverageIntervalCount = coverage.intervals.size,
                     tripCoverageOdometerKm = coverage.odometerDistanceKm,
                     tripCoverageDistanceKm = coverage.completedTripDistanceKm,
-                    tripCoverageRatio = coverage.coverageRatio
+                    tripCoverageRatio = coverage.coverageRatio,
+                    tripCoverageIntervals = coverage.intervals
                 )
             }.collect { _uiState.value = it }
         }
