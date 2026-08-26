@@ -37,9 +37,10 @@ class ChargingRepository(
         location: String?,
         chargerType: String? = null,
         remark: String? = null,
-        chargeTimeEpochMillis: Long = System.currentTimeMillis()
+        chargeTimeEpochMillis: Long = System.currentTimeMillis(),
+        odometerKm: Double? = null
     ) {
-        ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost)
+        ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost, odometerKm)
 
         chargingRecordDao.insert(
             ChargingRecordEntity(
@@ -51,7 +52,8 @@ class ChargingRepository(
                 cost = cost,
                 location = location?.trim()?.takeIf { it.isNotEmpty() },
                 chargerType = chargerType,
-                remark = remark
+                remark = remark?.trim()?.takeIf { it.isNotEmpty() },
+                odometerKm = odometerKm
             )
         )
     }
@@ -61,8 +63,13 @@ class ChargingRepository(
     }
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
-        ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost)
-        chargingRecordDao.update(record.copy(location = record.location?.trim()?.takeIf { it.isNotEmpty() }))
+        ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
+        chargingRecordDao.update(
+            record.copy(
+                location = record.location?.trim()?.takeIf { it.isNotEmpty() },
+                remark = record.remark?.trim()?.takeIf { it.isNotEmpty() }
+            )
+        )
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {
