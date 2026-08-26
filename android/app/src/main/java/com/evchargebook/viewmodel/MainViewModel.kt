@@ -20,6 +20,7 @@ import com.evchargebook.domain.ChargingTripCoverage
 import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.domain.MonthlyChargingBucket
 import com.evchargebook.domain.MonthlyChargingTrend
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -60,6 +61,7 @@ data class MainUiState(
     val errorMessage: String? = null
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
