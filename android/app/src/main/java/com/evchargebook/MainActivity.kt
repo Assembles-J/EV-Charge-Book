@@ -26,6 +26,7 @@ import androidx.core.content.ContextCompat
 import com.evchargebook.bluetooth.BluetoothConnectionStateChecker
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.export.ChargingCsvExporter
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.ui.dashboard.DashboardScreen
 import com.evchargebook.ui.records.AddRecordScreen
@@ -98,6 +99,7 @@ fun MainApp(
     var addRecord by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
+    var pendingCsvContent by remember { mutableStateOf<String?>(null) }
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
     var pendingResumeTripId by remember { mutableStateOf<Long?>(null) }
     var promptedConnectedAddress by remember { mutableStateOf<String?>(null) }
@@ -146,6 +148,11 @@ fun MainApp(
         val content = pendingExportContent
         if (uri != null && content != null) context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(content) }
         pendingExportContent = null
+    }
+    val createCsvLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("text/csv")) { uri ->
+        val content = pendingCsvContent
+        if (uri != null && content != null) context.contentResolver.openOutputStream(uri)?.bufferedWriter(Charsets.UTF_8)?.use { it.write(content) }
+        pendingCsvContent = null
     }
     val openBackupLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) pendingRestoreContent = context.contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }
@@ -301,6 +308,11 @@ fun MainApp(
                             } else bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                         },
                         onExportBackup = { viewModel.exportBackup(BuildConfig.VERSION_NAME) { content -> pendingExportContent = content; val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()); createBackupLauncher.launch("ev-charge-book-backup-$date.json") } },
+                        onExportCsv = {
+                            pendingCsvContent = ChargingCsvExporter.encode(state.chargingRecords)
+                            val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                            createCsvLauncher.launch("ev-charge-book-analysis-$date.csv")
+                        },
                         onImportBackup = { openBackupLauncher.launch(arrayOf("application/json", "text/plain")) }
                     )
                 }
