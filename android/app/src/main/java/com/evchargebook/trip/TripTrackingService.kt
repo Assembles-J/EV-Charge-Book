@@ -22,6 +22,7 @@ import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.domain.TripRules
+import com.evchargebook.domain.TripSamplingRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -131,7 +132,7 @@ class TripTrackingService : Service() {
     }
 
     private suspend fun handleLocation(tripId: Long, location: Location) {
-        if (!isUsableLocation(location)) return
+        if (!isBasicLocationValid(location)) return
         val session = tripDao.getSession(tripId) ?: return
         if (session.status != TripStatus.RECORDING) return
 
@@ -145,11 +146,13 @@ class TripTrackingService : Service() {
             result[0].toDouble().coerceAtLeast(0.0)
         } ?: 0.0
         val deltaSeconds = previous?.let { ((capturedAt - it.capturedAtEpochMillis) / 1000).coerceAtLeast(0) } ?: 0
+        val speed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
+        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
+        val decision = TripSamplingRules.decide(deltaSeconds, segmentDistance, speed, accuracy)
+        if (!decision.accept) return
 
-        val speed = location.speed.takeIf { location.hasSpeed() && it >= 0f && it <= MAX_REASONABLE_SPEED_MPS }?.toDouble()
-        val moving = deltaSeconds > 0 && ((speed ?: 0.0) >= MOVING_SPEED_MPS || segmentDistance >= MOVING_DISTANCE_METERS)
-        val newMovingSeconds = (session.movingSeconds ?: 0) + if (moving) deltaSeconds else 0
-        val newStoppedSeconds = (session.stoppedSeconds ?: 0) + if (!moving && deltaSeconds > 0) deltaSeconds else 0
+        val newMovingSeconds = TripSamplingRules.movingSeconds(session.movingSeconds ?: 0, deltaSeconds, decision.moving)
+        val newStoppedSeconds = TripSamplingRules.stoppedSeconds(session.stoppedSeconds ?: 0, deltaSeconds, decision.moving)
         val newDistance = session.distanceMeters + segmentDistance
         val altitude = location.altitude.takeIf { location.hasAltitude() }
 
@@ -161,7 +164,7 @@ class TripTrackingService : Service() {
             altitudeMeters = altitude,
             speedMps = speed,
             bearingDegrees = location.bearing.takeIf { location.hasBearing() }?.toDouble(),
-            horizontalAccuracyMeters = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble(),
+            horizontalAccuracyMeters = accuracy,
             verticalAccuracyMeters = if (Build.VERSION.SDK_INT >= 26 && location.hasVerticalAccuracy()) location.verticalAccuracyMeters.toDouble() else null,
             speedAccuracyMps = if (Build.VERSION.SDK_INT >= 26 && location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond.toDouble() else null,
             provider = location.provider
@@ -222,11 +225,9 @@ class TripTrackingService : Service() {
         stopSelf()
     }
 
-    private fun isUsableLocation(location: Location): Boolean {
+    private fun isBasicLocationValid(location: Location): Boolean {
         if (!location.latitude.isFinite() || !location.longitude.isFinite()) return false
         if (location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0) return false
-        if (location.hasAccuracy() && location.accuracy > MAX_HORIZONTAL_ACCURACY_METERS) return false
-        if (location.hasSpeed() && (location.speed < 0f || location.speed > MAX_REASONABLE_SPEED_MPS)) return false
         return true
     }
 
@@ -236,33 +237,17 @@ class TripTrackingService : Service() {
         .setContentText("定位仅用于本次主动开始的行程")
         .setOngoing(true)
         .setOnlyAlertOnce(true)
-        .setContentIntent(
-            PendingIntent.getActivity(
-                this,
-                0,
-                Intent(this, MainActivity::class.java),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
-        )
+        .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         .addAction(
             android.R.drawable.ic_media_pause,
             "结束行程",
-            PendingIntent.getService(
-                this,
-                1,
-                Intent(this, TripTrackingService::class.java).setAction(ACTION_STOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            PendingIntent.getService(this, 1, Intent(this, TripTrackingService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         )
         .build()
 
     private fun createNotificationChannel() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(
-            NotificationChannel(CHANNEL_ID, "行程记录", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "用户主动开启行程后显示持续定位状态"
-            }
-        )
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "行程记录", NotificationManager.IMPORTANCE_LOW).apply { description = "用户主动开启行程后显示持续定位状态" })
     }
 
     companion object {
@@ -273,15 +258,9 @@ class TripTrackingService : Service() {
         private const val NOTIFICATION_ID = 2201
         private const val SAMPLE_INTERVAL_MS = 4_000L
         private const val SAMPLE_DISTANCE_METERS = 8f
-        private const val MAX_HORIZONTAL_ACCURACY_METERS = 100f
-        private const val MAX_REASONABLE_SPEED_MPS = 100f
-        private const val MOVING_SPEED_MPS = 1.0
-        private const val MOVING_DISTANCE_METERS = 5.0
 
         fun start(context: Context, tripId: Long) {
-            val intent = Intent(context, TripTrackingService::class.java)
-                .setAction(ACTION_START)
-                .putExtra(EXTRA_TRIP_ID, tripId)
+            val intent = Intent(context, TripTrackingService::class.java).setAction(ACTION_START).putExtra(EXTRA_TRIP_ID, tripId)
             ContextCompat.startForegroundService(context, intent)
         }
 
