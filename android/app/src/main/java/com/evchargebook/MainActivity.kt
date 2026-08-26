@@ -235,6 +235,7 @@ fun MainApp(
                 addRecord -> AddRecordScreen(
                     vehicleId = state.vehicle?.id ?: 0L,
                     records = state.chargingRecords,
+                    commonPlaces = state.chargingPlaceSummary.map { it.displayName },
                     onBack = { addRecord = false },
                     onSave = { location, start, end, energy, cost, type, remark, time, odometer, latitude, longitude, accuracy ->
                         viewModel.addChargingRecord(start, end, energy, cost, location, type, remark, time, odometer, latitude, longitude, accuracy)
