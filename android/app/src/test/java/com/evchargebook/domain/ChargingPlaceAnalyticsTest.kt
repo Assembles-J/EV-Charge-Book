@@ -23,7 +23,7 @@ class ChargingPlaceAnalyticsTest {
         assertEquals(50.0, home.energyKwh, 0.0001)
         assertEquals(28.0, home.cost, 0.0001)
         assertEquals(0.56, home.averagePricePerKwh!!, 0.0001)
-        assertEquals(2_000, home.latestChargeTimeEpochMillis)
+        assertEquals(2_000L, home.latestChargeTimeEpochMillis)
     }
 
     @Test
