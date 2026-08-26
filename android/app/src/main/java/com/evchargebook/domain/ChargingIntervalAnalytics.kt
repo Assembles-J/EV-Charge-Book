@@ -1,6 +1,13 @@
 package com.evchargebook.domain
 
 import com.evchargebook.data.entity.ChargingRecordEntity
+import kotlin.math.abs
+
+enum class ChargingEstimateConfidence {
+    HIGH,
+    MEDIUM,
+    LOW
+}
 
 data class ChargingIntervalSample(
     val previousRecordId: Long,
@@ -9,7 +16,9 @@ data class ChargingIntervalSample(
     val replenishedEnergyKwh: Double,
     val replenishmentCost: Double,
     val energyPer100Km: Double,
-    val costPer100Km: Double
+    val costPer100Km: Double,
+    val endSocDeltaPoints: Int,
+    val confidence: ChargingEstimateConfidence
 )
 
 data class ChargingIntervalSummary(
@@ -53,6 +62,7 @@ object ChargingIntervalAnalytics {
                 return@forEach
             }
 
+            val endSocDelta = abs(current.endSoc - previous.endSoc)
             samples += ChargingIntervalSample(
                 previousRecordId = previous.id,
                 currentRecordId = current.id,
@@ -60,7 +70,9 @@ object ChargingIntervalAnalytics {
                 replenishedEnergyKwh = current.energyKwh,
                 replenishmentCost = current.cost,
                 energyPer100Km = current.energyKwh / distance * 100.0,
-                costPer100Km = current.cost / distance * 100.0
+                costPer100Km = current.cost / distance * 100.0,
+                endSocDeltaPoints = endSocDelta,
+                confidence = confidenceForEndSocDelta(endSocDelta)
             )
         }
 
@@ -77,5 +89,11 @@ object ChargingIntervalAnalytics {
             energyPer100Km = if (totalDistance > 0.0) totalEnergy / totalDistance * 100.0 else null,
             costPer100Km = if (totalDistance > 0.0) totalCost / totalDistance * 100.0 else null
         )
+    }
+
+    fun confidenceForEndSocDelta(deltaPoints: Int): ChargingEstimateConfidence = when {
+        deltaPoints <= 5 -> ChargingEstimateConfidence.HIGH
+        deltaPoints <= 15 -> ChargingEstimateConfidence.MEDIUM
+        else -> ChargingEstimateConfidence.LOW
     }
 }
