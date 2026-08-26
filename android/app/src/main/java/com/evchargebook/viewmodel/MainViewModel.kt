@@ -11,6 +11,7 @@ import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.domain.ChargingIntervalAnalytics
 import com.evchargebook.domain.ChargingStatistics
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -35,6 +36,11 @@ data class MainUiState(
     val chargingCount: Int = 0,
     val totalCost: Double = 0.0,
     val totalEnergy: Double = 0.0,
+    val intervalSampleCount: Int = 0,
+    val invalidIntervalCount: Int = 0,
+    val intervalDistanceKm: Double = 0.0,
+    val intervalEnergyPer100Km: Double? = null,
+    val intervalCostPer100Km: Double? = null,
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -63,6 +69,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val summary = ChargingStatistics.summarize(records, start, end)
+                val intervals = ChargingIntervalAnalytics.summarize(records)
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
@@ -73,7 +80,12 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                     averagePrice = summary.averagePrice,
                     chargingCount = summary.chargingCount,
                     totalCost = summary.totalCost,
-                    totalEnergy = summary.totalEnergy
+                    totalEnergy = summary.totalEnergy,
+                    intervalSampleCount = intervals.samples.size,
+                    invalidIntervalCount = intervals.invalidIntervalCount,
+                    intervalDistanceKm = intervals.totalDistanceKm,
+                    intervalEnergyPer100Km = intervals.energyPer100Km,
+                    intervalCostPer100Km = intervals.costPer100Km
                 )
             }.collect { _uiState.value = it }
         }
