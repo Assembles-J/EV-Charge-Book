@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.ChargingStatistics
 import kotlinx.coroutines.flow.*
@@ -16,6 +17,7 @@ import java.time.YearMonth
 data class MainUiState(
     val vehicle: VehicleEntity? = null,
     val vehicles: List<VehicleEntity> = emptyList(),
+    val catalogVehicles: List<VehicleCatalogEntity> = emptyList(),
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
     val monthCost: Double = 0.0,
     val monthEnergy: Double = 0.0,
@@ -34,7 +36,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     init {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch {
-            combine(repository.vehicle, repository.vehicles, repository.chargingRecords) { vehicle, vehicles, records ->
+            combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords) { vehicle, vehicles, catalogVehicles, records ->
                 val now = Instant.now().atZone(ZoneId.systemDefault())
                 val month = YearMonth.from(now)
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
@@ -43,6 +45,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 _uiState.value.copy(
                     vehicle = vehicle,
                     vehicles = vehicles,
+                    catalogVehicles = catalogVehicles,
                     chargingRecords = records,
                     monthCost = summary.monthCost,
                     monthEnergy = summary.monthEnergy,
@@ -85,9 +88,9 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
-    fun addVehicle(brand: String, model: String, battery: Double, range: Int) {
+    fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
         viewModelScope.launch {
-            runCatching { repository.addVehicle(brand, model, battery, range) }
+            runCatching { repository.addVehicle(brand, model, battery, range, catalogVehicleId) }
                 .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
         }

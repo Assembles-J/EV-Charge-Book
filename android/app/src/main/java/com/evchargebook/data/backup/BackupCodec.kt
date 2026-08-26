@@ -24,6 +24,7 @@ object BackupCodec {
             payload.vehicles.forEach { vehicle ->
                 put(JSONObject().apply {
                     put("id", vehicle.id)
+                    putNullable("catalogVehicleId", vehicle.catalogVehicleId)
                     put("brand", vehicle.brand)
                     put("model", vehicle.model)
                     put("batteryCapacityKwh", vehicle.batteryCapacityKwh)
@@ -67,6 +68,7 @@ object BackupCodec {
                 add(
                     VehicleEntity(
                         id = item.getLong("id"),
+                        catalogVehicleId = item.optNullableString("catalogVehicleId"),
                         brand = item.getString("brand"),
                         model = item.getString("model"),
                         batteryCapacityKwh = item.getDouble("batteryCapacityKwh"),

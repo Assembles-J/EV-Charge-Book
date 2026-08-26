@@ -25,6 +25,7 @@ import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
 import com.evchargebook.ui.vehicle.VehicleEditScreen
 import com.evchargebook.ui.vehicle.VehicleScreen
+import com.evchargebook.ui.vehicle.VehicleCatalogScreen
 import com.evchargebook.viewmodel.MainViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -51,6 +52,8 @@ fun MainApp(viewModel: MainViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var editVehicle by remember { mutableStateOf(false) }
     var addVehicle by remember { mutableStateOf(false) }
+    var selectCatalogVehicle by remember { mutableStateOf(false) }
+    var catalogSelection by remember { mutableStateOf<com.evchargebook.data.entity.VehicleCatalogEntity?>(null) }
     var addRecord by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
@@ -94,7 +97,7 @@ fun MainApp(viewModel: MainViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!editVehicle && !addVehicle && !addRecord && editingRecord == null) {
+            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !addRecord && editingRecord == null) {
                 NavigationBar {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(
@@ -146,18 +149,20 @@ fun MainApp(viewModel: MainViewModel) {
                 }
                 addVehicle -> {
                     VehicleEditScreen(
-                        initialBrand = "",
-                        initialModel = "",
-                        initialBatteryCapacity = "",
-                        initialRange = "",
+                        initialBrand = catalogSelection?.brand.orEmpty(),
+                        initialModel = catalogSelection?.modelName.orEmpty(),
+                        initialBatteryCapacity = catalogSelection?.batteryCapacityKwh?.toString().orEmpty(),
+                        initialRange = catalogSelection?.rangeKm?.toString().orEmpty(),
                         title = "添加车辆",
                         onSave = { brand, model, capacity, range ->
-                            viewModel.addVehicle(brand, model, capacity, range)
+                            viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId)
+                            catalogSelection = null
                             addVehicle = false
                         },
                         onBack = { addVehicle = false }
                     )
                 }
+                selectCatalogVehicle -> VehicleCatalogScreen(state.catalogVehicles, { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true }, { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true }, { selectCatalogVehicle = false })
                 else -> when (tab) {
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
@@ -166,7 +171,7 @@ fun MainApp(viewModel: MainViewModel) {
                         vehicle = state.vehicle,
                         vehicles = state.vehicles,
                         onSelect = viewModel::selectVehicle,
-                        onAdd = { addVehicle = true },
+                        onAdd = { selectCatalogVehicle = true },
                         onEdit = { editVehicle = true },
                         onArchive = { vehicle -> viewModel.archiveVehicle(vehicle.id) },
                         onExportBackup = {

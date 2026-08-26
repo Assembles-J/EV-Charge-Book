@@ -10,6 +10,7 @@ import com.evchargebook.data.backup.BackupPayload
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.domain.ChargingRecordRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
@@ -17,6 +18,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import org.json.JSONArray
 
 private val Context.vehicleSelectionDataStore by preferencesDataStore(name = "vehicle_selection")
 private val selectedVehicleIdKey = longPreferencesKey("selected_vehicle_id")
@@ -24,9 +26,11 @@ private val selectedVehicleIdKey = longPreferencesKey("selected_vehicle_id")
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChargingRepository(private val database: AppDatabase, private val context: Context) {
     private val vehicleDao = database.vehicleDao()
+    private val vehicleCatalogDao = database.vehicleCatalogDao()
     private val chargingRecordDao = database.chargingRecordDao()
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
+    val catalogVehicles: Flow<List<VehicleCatalogEntity>> = vehicleCatalogDao.observeAll()
     private val selectedVehicleId: Flow<Long?> = context.vehicleSelectionDataStore.data.map { it[selectedVehicleIdKey] }
     val vehicle: Flow<VehicleEntity?> = combine(vehicles, selectedVehicleId) { vehicles, selectedId ->
         vehicles.firstOrNull { it.id == selectedId } ?: vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
@@ -36,6 +40,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
 
     suspend fun ensureDefaultVehicle() {
+        seedVehicleCatalog()
         val activeVehicles = vehicles.first()
         if (activeVehicles.isEmpty()) {
             val id = vehicleDao.insert(
@@ -140,9 +145,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         }
     }
 
-    suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int) {
+    suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
         val vehicle = VehicleEntity(
-            brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range
+            catalogVehicleId = catalogVehicleId, brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range
         )
         validateVehicle(vehicle)
         val id = vehicleDao.insert(vehicle)
@@ -172,5 +177,16 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         require(vehicle.model.isNotBlank()) { "车型不能为空" }
         require(vehicle.batteryCapacityKwh > 0) { "电池容量必须大于 0" }
         require(vehicle.rangeKm > 0) { "续航必须大于 0" }
+    }
+
+    private suspend fun seedVehicleCatalog() {
+        val json = context.assets.open("vehicle_catalog.json").bufferedReader().use { it.readText() }
+        val items = JSONArray(json).let { array -> List(array.length()) { index ->
+            val item = array.getJSONObject(index)
+            VehicleCatalogEntity(
+                catalogId = item.getString("catalogId"), source = item.getString("source"), brand = item.getString("brand"), series = item.getString("series"), modelName = item.getString("modelName"), modelYear = item.optInt("modelYear").takeIf { it != 0 }, trimName = item.optString("trimName").takeIf { it.isNotBlank() }, powertrainType = item.getString("powertrainType"), batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() }, rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
+            )
+        } }
+        vehicleCatalogDao.insertAll(items)
     }
 }
