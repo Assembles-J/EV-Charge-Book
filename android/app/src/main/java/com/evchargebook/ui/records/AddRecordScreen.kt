@@ -6,6 +6,7 @@ import android.app.TimePickerDialog
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -38,6 +39,7 @@ import java.util.Locale
 fun AddRecordScreen(
     vehicleId: Long,
     records: List<ChargingRecordEntity>,
+    commonPlaces: List<String> = emptyList(),
     onBack: () -> Unit,
     onSave: (
         location: String?, startSoc: Int, endSoc: Int, energyKwh: Double, cost: Double,
@@ -101,7 +103,22 @@ fun AddRecordScreen(
                     OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
                     OutlinedButton(onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
                 }
-                OutlinedTextField(location, { location = it }, label = { Text("充电地点") }, placeholder = { Text("例如：公司地库 3 号桩") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(location, { newValue -> location = newValue; if (newValue != location) locationFix = null }, label = { Text("充电地点") }, placeholder = { Text("例如：公司地库 3 号桩") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                if (commonPlaces.isNotEmpty()) {
+                    Text("常用地点", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                        commonPlaces.take(5).forEach { place ->
+                            AssistChip(
+                                onClick = {
+                                    location = place
+                                    locationFix = null
+                                    addressMessage = "已复用地点名称；未复用历史坐标"
+                                },
+                                label = { Text(place) }
+                            )
+                        }
+                    }
+                }
                 TextButton(onClick = {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) requestCurrentLocation()
                     else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
