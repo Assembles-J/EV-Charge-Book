@@ -75,9 +75,7 @@ fun AddRecordScreen(
                     if (!resolved.isNullOrBlank()) {
                         if (location.isBlank()) location = resolved
                         addressMessage = "已解析地址：$resolved"
-                    } else {
-                        addressMessage = "已保存经纬度；系统地址服务暂时不可用，可手动填写地点"
-                    }
+                    } else addressMessage = "已保存经纬度；系统地址服务暂时不可用，可手动填写地点"
                 }
                 .onFailure { errorMessage = it.message ?: "获取当前位置失败" }
             locating = false
@@ -88,45 +86,56 @@ fun AddRecordScreen(
         if (granted) requestCurrentLocation() else errorMessage = "未授予精确定位权限，可继续手动记录充电地点"
     }
 
-    val dateText = remember(chargeTime) { SimpleDateFormat("yyyy年M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
+    val dateText = remember(chargeTime) { SimpleDateFormat("M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val timeText = remember(chargeTime) { SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val previousOdometer = remember(records, vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, vehicleId, chargeTime) }
     val odometerValue = odometer.toDoubleOrNull()
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
 
-    Scaffold(topBar = { TopAppBar(title = { Text("添加充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(MaterialTheme.spacing.md).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-            Text("记录本次充电", style = MaterialTheme.typography.titleLarge)
-            Text("每次记录都会即时更新你的月度与累计统计。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                OutlinedButton(onClick = { DatePickerDialog(context, { _, year, month, day -> calendar.set(year, month, day); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
-                OutlinedButton(onClick = { TimePickerDialog(context, { _, hour, minute -> calendar.set(Calendar.HOUR_OF_DAY, hour); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
-            }
-            OutlinedTextField(location, { location = it }, label = { Text("充电地点（可选）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            OutlinedButton(
-                onClick = {
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }
+    ) { padding ->
+        Column(
+            Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+        ) {
+            Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            FormSection("时间与地点", "先记录事实，详细备注可以之后再补。") {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
+                    OutlinedButton(onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
+                }
+                OutlinedTextField(location, { location = it }, label = { Text("充电地点") }, placeholder = { Text("例如：公司地库 3 号桩") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                TextButton(onClick = {
                     if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) requestCurrentLocation()
                     else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                },
-                enabled = !locating,
-                modifier = Modifier.fillMaxWidth()
-            ) { Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(if (locating) "正在获取位置与地址…" else "使用当前位置") }
-            locationFix?.let { fix ->
-                Text("已记录坐标：${formatCoordinate(fix.latitude)}, ${formatCoordinate(fix.longitude)} · 精度约 ${fix.accuracyMeters.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }, enabled = !locating, contentPadding = PaddingValues(0.dp)) {
+                    Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(if (locating) "正在获取位置…" else "使用当前位置")
+                }
+                locationFix?.let { fix -> Text("${formatCoordinate(fix.latitude)}, ${formatCoordinate(fix.longitude)} · 精度约 ${fix.accuracyMeters.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                addressMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
-            addressMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            Text("充电方式", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) { listOf("家充", "公共慢充", "公共快充").forEach { type -> FilterChip(selected = chargerType == type, onClick = { chargerType = type }, label = { Text(type) }) } }
-            Text("车辆里程（可选）", style = MaterialTheme.typography.titleSmall)
-            AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
-            previousOdometer?.let { Text("上一条有效里程：${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
-            Text("电池与费用", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { AddNumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number); AddNumberField(endSoc, { endSoc = it.filter(Char::isDigit) }, "结束 SOC", "%", Modifier.weight(1f), KeyboardType.Number) }
-            AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.fillMaxWidth(), KeyboardType.Decimal)
-            AddNumberField(cost, { cost = it }, "总费用", "元", Modifier.fillMaxWidth(), KeyboardType.Decimal)
-            OutlinedTextField(remark, { remark = it }, label = { Text("备注（可选）") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+
+            FormSection("充电数据", "SOC、电量与费用是统计的核心字段。") {
+                SingleChoiceSegment(listOf("家充", "公共慢充", "公共快充"), chargerType) { chargerType = it }
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    AddNumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
+                    AddNumberField(endSoc, { endSoc = it.filter(Char::isDigit) }, "结束 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
+                    AddNumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
+                }
+            }
+
+            FormSection("车辆与备注", "里程有助于后续估算每百公里补能成本。") {
+                AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
+                previousOdometer?.let { Text("上一条有效里程 ${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
+                OutlinedTextField(remark, { remark = it }, label = { Text("备注") }, placeholder = { Text("可选") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+            }
+
+            errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
             Button(onClick = {
                 val start = startSoc.toIntOrNull(); val end = endSoc.toIntOrNull(); val energyValue = energy.toDoubleOrNull(); val costValue = cost.toDoubleOrNull(); val odometerKm = odometer.toDoubleOrNull()
                 errorMessage = when {
@@ -142,7 +151,26 @@ fun AddRecordScreen(
                     val fix = locationFix
                     onSave(location.trim().takeIf { it.isNotEmpty() }, start!!, end!!, energyValue!!, costValue!!, chargerType, remark.trim().takeIf { it.isNotEmpty() }, chargeTime, odometerKm, fix?.latitude, fix?.longitude, fix?.accuracyMeters?.toDouble())
                 }
-            }, modifier = Modifier.fillMaxWidth()) { Text("保存记录") }
+            }, modifier = Modifier.fillMaxWidth()) { Text("保存充电记录") }
+            Spacer(Modifier.height(MaterialTheme.spacing.lg))
+        }
+    }
+}
+
+@Composable
+private fun FormSection(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        content()
+    }
+}
+
+@Composable
+private fun SingleChoiceSegment(options: List<String>, selected: String, onSelect: (String) -> Unit) {
+    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(selected = selected == option, onClick = { onSelect(option) }, shape = SegmentedButtonDefaults.itemShape(index, options.size)) { Text(option) }
         }
     }
 }
