@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.domain.ChargingStatistics
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -21,6 +22,7 @@ data class MainUiState(
     val chargingCount: Int = 0,
     val totalCost: Double = 0.0,
     val totalEnergy: Double = 0.0,
+    val successMessage: String? = null,
     val errorMessage: String? = null
 )
 
@@ -36,16 +38,16 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
                 val month = YearMonth.from(now)
                 val start = month.atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 val end = month.plusMonths(1).atDay(1).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-                val monthRecords = records.filter { it.chargeTimeEpochMillis in start until end }
+                val summary = ChargingStatistics.summarize(records, start, end)
                 MainUiState(
                     vehicle = vehicle,
                     chargingRecords = records,
-                    monthCost = monthRecords.sumOf { it.cost },
-                    monthEnergy = monthRecords.sumOf { it.energyKwh },
-                    averagePrice = if (records.sumOf { it.energyKwh } > 0) records.sumOf { it.cost } / records.sumOf { it.energyKwh } else 0.0,
-                    chargingCount = monthRecords.size,
-                    totalCost = records.sumOf { it.cost },
-                    totalEnergy = records.sumOf { it.energyKwh }
+                    monthCost = summary.monthCost,
+                    monthEnergy = summary.monthEnergy,
+                    averagePrice = summary.averagePrice,
+                    chargingCount = summary.chargingCount,
+                    totalCost = summary.totalCost,
+                    totalEnergy = summary.totalEnergy
                 )
             }.collect { _uiState.value = it }
         }
@@ -65,13 +67,25 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
-    fun addChargingRecord(startSoc:Int,endSoc:Int,energyKwh:Double,cost:Double,location:String?) {
+    fun addChargingRecord(startSoc:Int,endSoc:Int,energyKwh:Double,cost:Double,location:String?,chargerType:String?,remark:String?,chargeTime:Long) {
         val id = _uiState.value.vehicle?.id ?: return
-        viewModelScope.launch { repository.addChargingRecord(id,startSoc,endSoc,energyKwh,cost,location) }
+        viewModelScope.launch {
+            runCatching { repository.addChargingRecord(id,startSoc,endSoc,energyKwh,cost,location,chargerType,remark,chargeTime) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已保存") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
     }
 
     fun deleteChargingRecord(record: ChargingRecordEntity) { viewModelScope.launch { repository.deleteChargingRecord(record) } }
+    fun updateChargingRecord(record: ChargingRecordEntity) {
+        viewModelScope.launch {
+            runCatching { repository.updateChargingRecord(record) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电记录已更新") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
     fun clearError() { _uiState.value = _uiState.value.copy(errorMessage = null) }
+    fun clearSuccess() { _uiState.value = _uiState.value.copy(successMessage = null) }
 
     class Factory(private val repository: ChargingRepository): ViewModelProvider.Factory {
         override fun <T:ViewModel> create(modelClass:Class<T>):T {

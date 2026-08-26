@@ -4,6 +4,7 @@ import com.evchargebook.data.dao.ChargingRecordDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.ChargingRecordRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
@@ -38,11 +39,7 @@ class ChargingRepository(
         remark: String? = null,
         chargeTimeEpochMillis: Long = System.currentTimeMillis()
     ) {
-        require(startSoc in 0..100) { "起始 SOC 必须在 0~100 之间" }
-        require(endSoc in 0..100) { "结束 SOC 必须在 0~100 之间" }
-        require(endSoc >= startSoc) { "结束 SOC 不能低于起始 SOC" }
-        require(energyKwh > 0.0) { "充电量必须大于 0" }
-        require(cost >= 0.0) { "费用不能小于 0" }
+        ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost)
 
         chargingRecordDao.insert(
             ChargingRecordEntity(
@@ -61,6 +58,11 @@ class ChargingRepository(
 
     suspend fun deleteChargingRecord(record: ChargingRecordEntity) {
         chargingRecordDao.delete(record)
+    }
+
+    suspend fun updateChargingRecord(record: ChargingRecordEntity) {
+        ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost)
+        chargingRecordDao.update(record.copy(location = record.location?.trim()?.takeIf { it.isNotEmpty() }))
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {

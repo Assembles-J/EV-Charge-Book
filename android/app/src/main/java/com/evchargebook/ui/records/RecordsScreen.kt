@@ -4,13 +4,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.ui.components.EmptyState
+import com.evchargebook.ui.theme.spacing
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -18,57 +22,49 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordsScreen(
-    records: List<ChargingRecordEntity>,
-    onDelete: (ChargingRecordEntity) -> Unit
-) {
+fun RecordsScreen(records: List<ChargingRecordEntity>, onDelete: (ChargingRecordEntity) -> Unit, onAdd: () -> Unit, onEdit: (ChargingRecordEntity) -> Unit) {
+    var pendingDelete by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("充电记录") }) }
+        topBar = { TopAppBar(title = { Column { Text("充电记录"); Text("每一度电，都有迹可循", style = MaterialTheme.typography.labelMedium) } }) },
+        floatingActionButton = { ExtendedFloatingActionButton(onClick = onAdd, icon = { Icon(Icons.Default.Add, null) }, text = { Text("记录充电") }) }
     ) { padding ->
         if (records.isEmpty()) {
-            Box(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-                Text("暂无充电记录。回到总览点击 + 添加第一条记录。")
+            Box(Modifier.fillMaxSize().padding(padding)) { EmptyState("还没有充电记录", "从第一笔充电开始，建立你的能耗账本。", "记录第一次充电", onAdd) }
+        } else LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(MaterialTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+        ) {
+            item { Text("共 ${records.size} 笔 · 累计 ¥ ${two(records.sumOf { it.cost })}", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            items(records, key = { it.id }) { record -> RecordItem(record, onEdit = { onEdit(record) }) { pendingDelete = record } }
+        }
+    }
+    pendingDelete?.let { record ->
+        AlertDialog(onDismissRequest = { pendingDelete = null }, title = { Text("删除这笔记录？") }, text = { Text("删除后将无法恢复，统计数据会同步更新。") },
+            confirmButton = { TextButton(onClick = { onDelete(record); pendingDelete = null }) { Text("删除", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } })
+    }
+}
+
+@Composable private fun RecordItem(record: ChargingRecordEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
+    ElevatedCard(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
+            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = MaterialTheme.shapes.medium) { Icon(Icons.Default.ElectricBolt, null, Modifier.padding(MaterialTheme.spacing.sm), MaterialTheme.colorScheme.onPrimaryContainer) }
+            Spacer(Modifier.width(MaterialTheme.spacing.sm))
+            Column(Modifier.weight(1f)) {
+                Text(record.location ?: "未命名充电地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                record.chargerType?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
+                Text(format(record.chargeTimeEpochMillis), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(MaterialTheme.spacing.xs))
+                Text("SOC ${record.startSoc}% → ${record.endSoc}%  ·  ${one(record.energyKwh)} kWh", style = MaterialTheme.typography.bodyMedium)
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(records, key = { it.id }) { record ->
-                    RecordItem(record = record, onDelete = { onDelete(record) })
-                }
+            Column(horizontalAlignment = Alignment.End) {
+                Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Text("¥ ${two(record.pricePerKwh)}/kWh", style = MaterialTheme.typography.labelSmall)
+                IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "删除此记录") }
             }
         }
     }
 }
-
-@Composable
-private fun RecordItem(record: ChargingRecordEntity, onDelete: () -> Unit) {
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(record.location ?: "未填写地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                Text(formatTime(record.chargeTimeEpochMillis), style = MaterialTheme.typography.bodySmall)
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("SOC ${record.startSoc}% → ${record.endSoc}%")
-                Text("${oneDecimal(record.energyKwh)} kWh · ¥ ${twoDecimals(record.pricePerKwh)}/kWh")
-            }
-            Column(horizontalAlignment = androidx.compose.ui.Alignment.End) {
-                Text("¥ ${twoDecimals(record.cost)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDelete) {
-                    Icon(Icons.Default.Delete, contentDescription = "删除记录")
-                }
-            }
-        }
-    }
-}
-
-private fun formatTime(epochMillis: Long): String =
-    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
-        .withLocale(Locale.SIMPLIFIED_CHINESE)
-        .withZone(ZoneId.systemDefault())
-        .format(Instant.ofEpochMilli(epochMillis))
-
-private fun oneDecimal(value: Double) = String.format(Locale.US, "%.1f", value)
-private fun twoDecimals(value: Double) = String.format(Locale.US, "%.2f", value)
+private fun format(value: Long) = DateTimeFormatter.ofPattern("M月d日 HH:mm").withLocale(Locale.SIMPLIFIED_CHINESE).withZone(ZoneId.systemDefault()).format(Instant.ofEpochMilli(value))
+private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
+private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
