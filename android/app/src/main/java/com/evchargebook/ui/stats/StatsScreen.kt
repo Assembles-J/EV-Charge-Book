@@ -30,12 +30,13 @@ import java.util.Locale
             MonthlyChargingComparison.compare(state.monthlyTrend)?.let { comparison -> item { MonthComparisonCard(comparison) } }
             if (state.monthlyTrend.isNotEmpty()) item { MonthlyTrendCard(state) }
             if (state.chargingRecords.isNotEmpty()) item { ChargerTypeCard(state) }
+            if (state.chargingPlaceSummary.isNotEmpty()) item { CommonPlacesCard(state) }
             item { Text("累计账本", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold) }
             item { Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { StatTile("累计费用", "¥ ${two(state.totalCost)}", Icons.Default.Payments, Modifier.weight(1f)); StatTile("累计补能", "${one(state.totalEnergy)} kWh", Icons.Default.Bolt, Modifier.weight(1f)) } }
             item { StatTile("平均充电单价", "¥ ${two(state.averagePrice)} / kWh", Icons.Default.BarChart, Modifier.fillMaxWidth()) }
             item { IntervalAnalyticsCard(state) }
             if (state.intervalSamples.isNotEmpty()) item { IntervalDetailSection(state) }
-            item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(MaterialTheme.spacing.md)) { Text("数据正在积累", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(MaterialTheme.spacing.xs)); Text("记录更多带里程、地点与真实行程的数据后，这里会继续增加地点结构和更长期趋势分析。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
+            item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(MaterialTheme.spacing.md)) { Text("数据正在积累", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(MaterialTheme.spacing.xs)); Text("记录更多带里程、地点与真实行程的数据后，这里会继续完善地点复用与更长期趋势分析。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
         }
     }
 }
@@ -63,9 +64,7 @@ import java.util.Locale
                 ComparisonValue("补能", "${one(comparison.current.energyKwh)} kWh", comparison.energyChangeRate, Modifier.weight(1f))
                 ComparisonValue("次数", "${comparison.current.chargingCount} 次", comparison.countChangeRate, Modifier.weight(1f))
             }
-            if (comparison.costChangeRate == null || comparison.energyChangeRate == null || comparison.countChangeRate == null) {
-                Text("上月对应指标为 0，暂无可靠百分比基线；保留绝对值对比，不显示无意义的无限增长率。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            if (comparison.costChangeRate == null || comparison.energyChangeRate == null || comparison.countChangeRate == null) Text("上月对应指标为 0，暂无可靠百分比基线；保留绝对值对比，不显示无意义的无限增长率。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -103,20 +102,36 @@ import java.util.Locale
             state.chargerTypeSummary.forEachIndexed { index, item ->
                 if (index > 0) HorizontalDivider()
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column {
-                        Text(chargerCategoryText(item.category), fontWeight = FontWeight.SemiBold)
-                        Text("${item.chargingCount} 次 · ${percent(item.countShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Column {
-                        Text("${one(item.energyKwh)} kWh")
-                        Text("电量 ${percent(item.energyShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Column {
-                        Text("¥ ${two(item.cost)}")
-                        Text("费用 ${percent(item.costShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+                    Column { Text(chargerCategoryText(item.category), fontWeight = FontWeight.SemiBold); Text("${item.chargingCount} 次 · ${percent(item.countShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Column { Text("${one(item.energyKwh)} kWh"); Text("电量 ${percent(item.energyShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                    Column { Text("¥ ${two(item.cost)}"); Text("费用 ${percent(item.costShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 }
             }
+        }
+    }
+}
+
+@Composable private fun CommonPlacesCard(state: MainUiState) {
+    val topPlaces = state.chargingPlaceSummary.take(5)
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Text("常用充电地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text("由已保存的地点文本派生；只折叠空白，不模糊合并相似地址。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            topPlaces.forEachIndexed { index, place ->
+                if (index > 0) HorizontalDivider()
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1.4f)) {
+                        Text(place.displayName, fontWeight = FontWeight.SemiBold)
+                        Text("${place.chargingCount} 次 · 最近 ${shortDate(place.latestChargeTimeEpochMillis)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text("${one(place.energyKwh)} kWh")
+                        Text("¥ ${two(place.cost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(place.averagePricePerKwh?.let { "¥ ${two(it)}/kWh" } ?: "--", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            if (state.chargingPlaceSummary.size > topPlaces.size) Text("当前展示前 ${topPlaces.size} 个地点，共 ${state.chargingPlaceSummary.size} 个已记录地点。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
