@@ -24,12 +24,7 @@ import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RecordEditScreen(
-    record: ChargingRecordEntity,
-    records: List<ChargingRecordEntity>,
-    onSave: (ChargingRecordEntity) -> Unit,
-    onBack: () -> Unit
-) {
+fun RecordEditScreen(record: ChargingRecordEntity, records: List<ChargingRecordEntity>, onSave: (ChargingRecordEntity) -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val calendar = remember { Calendar.getInstance().apply { timeInMillis = record.chargeTimeEpochMillis } }
     var chargeTime by remember { mutableLongStateOf(record.chargeTimeEpochMillis) }
@@ -42,37 +37,42 @@ fun RecordEditScreen(
     var odometer by remember { mutableStateOf(record.odometerKm?.toString().orEmpty()) }
     var chargerType by remember { mutableStateOf(record.chargerType ?: "公共慢充") }
     var error by remember { mutableStateOf<String?>(null) }
-    val dateText = remember(chargeTime) { SimpleDateFormat("yyyy年M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
+    val dateText = remember(chargeTime) { SimpleDateFormat("M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val timeText = remember(chargeTime) { SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
-    val previousOdometer = remember(records, record.id, record.vehicleId, chargeTime) {
-        ChargingRecordRules.previousOdometerKm(records, record.vehicleId, chargeTime, record.id)
-    }
-    val odometerValue = odometer.toDoubleOrNull()
-    val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
+    val previousOdometer = remember(records, record.id, record.vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, record.vehicleId, chargeTime, record.id) }
+    val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometer.toDoubleOrNull())
 
-    Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回记录") } }) }) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(MaterialTheme.spacing.md).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-            Text("补全本次充电信息", style = MaterialTheme.typography.titleLarge)
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                OutlinedButton(onClick = { DatePickerDialog(context, { _, year, month, day -> calendar.set(year, month, day); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
-                OutlinedButton(onClick = { TimePickerDialog(context, { _, hour, minute -> calendar.set(Calendar.HOUR_OF_DAY, hour); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
+    Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
+            Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            EditSection("时间与地点") {
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
+                    OutlinedButton(onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
+                }
+                OutlinedTextField(location, { location = it }, label = { Text("充电地点") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             }
-            OutlinedTextField(location, { location = it }, label = { Text("充电地点") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
-            Text("充电方式", style = MaterialTheme.typography.titleSmall)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) { listOf("家充", "公共慢充", "公共快充").forEach { type -> FilterChip(selected = chargerType == type, onClick = { chargerType = type }, label = { Text(type) }) } }
-            Text("车辆里程（可选）", style = MaterialTheme.typography.titleSmall)
-            NumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth())
-            previousOdometer?.let { Text("上一条有效里程：${formatEditKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-            odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
-            Text("电池与费用", style = MaterialTheme.typography.titleSmall)
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                NumberField(startSoc, { startSoc = it }, "起始 SOC", "%", Modifier.weight(1f))
-                NumberField(endSoc, { endSoc = it }, "结束 SOC", "%", Modifier.weight(1f))
+            EditSection("充电数据") {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                    val options = listOf("家充", "公共慢充", "公共快充")
+                    options.forEachIndexed { index, option -> SegmentedButton(selected = chargerType == option, onClick = { chargerType = option }, shape = SegmentedButtonDefaults.itemShape(index, options.size)) { Text(option) } }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    NumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
+                    NumberField(endSoc, { endSoc = it.filter(Char::isDigit) }, "结束 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                    NumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
+                    NumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
+                }
             }
-            NumberField(energy, { energy = it }, "充电量", "kWh", Modifier.fillMaxWidth())
-            NumberField(cost, { cost = it }, "总费用", "元", Modifier.fillMaxWidth())
-            OutlinedTextField(remark, { remark = it }, label = { Text("备注（可选）") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
-            error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+            EditSection("车辆与备注") {
+                NumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
+                previousOdometer?.let { Text("上一条有效里程 ${formatEditKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
+                OutlinedTextField(remark, { remark = it }, label = { Text("备注") }, placeholder = { Text("可选") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+            }
+            error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
                 val start = startSoc.toIntOrNull(); val end = endSoc.toIntOrNull(); val energyValue = energy.toDoubleOrNull(); val costValue = cost.toDoubleOrNull(); val odometerKm = odometer.toDoubleOrNull()
                 error = when {
@@ -84,13 +84,13 @@ fun RecordEditScreen(
                     odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
                     else -> null
                 }
-                if (error == null) onSave(record.copy(location = location, remark = remark, startSoc = start!!, endSoc = end!!, energyKwh = energyValue!!, cost = costValue!!, chargerType = chargerType, chargeTimeEpochMillis = chargeTime, odometerKm = odometerKm))
+                if (error == null) onSave(record.copy(location = location.trim().takeIf { it.isNotEmpty() }, remark = remark.trim().takeIf { it.isNotEmpty() }, startSoc = start!!, endSoc = end!!, energyKwh = energyValue!!, cost = costValue!!, chargerType = chargerType, chargeTimeEpochMillis = chargeTime, odometerKm = odometerKm))
             }, modifier = Modifier.fillMaxWidth()) { Text("保存修改") }
+            Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
     }
 }
 
-@Composable private fun NumberField(value: String, onChange: (String) -> Unit, label: String, suffix: String, modifier: Modifier) {
-    OutlinedTextField(value = value, onValueChange = onChange, label = { Text(label) }, suffix = { Text(suffix) }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal), modifier = modifier, singleLine = true)
-}
+@Composable private fun EditSection(title: String, content: @Composable ColumnScope.() -> Unit) { Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { Text(title, style = MaterialTheme.typography.titleMedium); content() } }
+@Composable private fun NumberField(value: String, onChange: (String) -> Unit, label: String, suffix: String, modifier: Modifier, keyboardType: KeyboardType) { OutlinedTextField(value, onChange, label = { Text(label) }, suffix = { Text(suffix) }, keyboardOptions = KeyboardOptions(keyboardType = keyboardType), modifier = modifier, singleLine = true) }
 private fun formatEditKm(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
