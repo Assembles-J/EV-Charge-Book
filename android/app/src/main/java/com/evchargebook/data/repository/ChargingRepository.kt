@@ -1,27 +1,30 @@
 package com.evchargebook.data.repository
 
-import android.content.Context
 import android.bluetooth.BluetoothAdapter
+import android.content.Context
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import androidx.room.withTransaction
 import com.evchargebook.bluetooth.BluetoothPromptPreferences
 import com.evchargebook.bluetooth.BluetoothPromptSettings
 import com.evchargebook.bluetooth.PairedBluetoothDevice
-import androidx.room.withTransaction
-import androidx.datastore.preferences.core.longPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.preferencesDataStore
 import com.evchargebook.data.backup.BackupCodec
 import com.evchargebook.data.backup.BackupPayload
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
-import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.TripSessionEntity
+import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleCatalogEntity
+import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.ChargingRecordRules
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import org.json.JSONArray
 
 private val Context.vehicleSelectionDataStore by preferencesDataStore(name = "vehicle_selection")
@@ -32,6 +35,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val vehicleDao = database.vehicleDao()
     private val vehicleCatalogDao = database.vehicleCatalogDao()
     private val chargingRecordDao = database.chargingRecordDao()
+    private val tripDao = database.tripDao()
     private val bluetoothPreferences = BluetoothPromptPreferences(context)
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
@@ -42,8 +46,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         vehicles.firstOrNull { it.id == selectedId } ?: vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
     }
     val chargingRecords: Flow<List<ChargingRecordEntity>> = vehicle.flatMapLatest { selected ->
-        selected?.let { chargingRecordDao.observeForVehicle(it.id) } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+        selected?.let { chargingRecordDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
     }
+    val trips: Flow<List<TripSessionEntity>> = vehicle.flatMapLatest { selected ->
+        selected?.let { tripDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
+    }
+    val activeTrip: Flow<TripSessionEntity?> = tripDao.observeActive()
 
     suspend fun ensureDefaultVehicle() {
         seedVehicleCatalog()
@@ -84,6 +92,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     suspend fun restoreBackup(content: String) {
         val payload = BackupCodec.decode(content)
         database.withTransaction {
+            require(tripDao.getActive() == null) { "请先结束当前行程，再恢复备份" }
             chargingRecordDao.deleteAll()
             vehicleDao.deleteAll()
             vehicleDao.insertAll(payload.vehicles)
@@ -92,6 +101,37 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
         }
+    }
+
+    suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long = database.withTransaction {
+        require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
+        require(tripDao.getActive() == null) { "已有进行中的行程，请先结束或恢复它" }
+        tripDao.insertSession(
+            TripSessionEntity(
+                vehicleId = vehicleId,
+                startedAtEpochMillis = startedAtEpochMillis,
+                status = TripStatus.RECORDING
+            )
+        )
+    }
+
+    suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
+        database.withTransaction {
+            val active = tripDao.getActive() ?: error("当前没有进行中的行程")
+            require(endedAtEpochMillis >= active.startedAtEpochMillis) { "结束时间不能早于开始时间" }
+            tripDao.updateSession(
+                active.copy(
+                    endedAtEpochMillis = endedAtEpochMillis,
+                    elapsedSeconds = (endedAtEpochMillis - active.startedAtEpochMillis) / 1000,
+                    status = TripStatus.COMPLETED
+                )
+            )
+        }
+    }
+
+    suspend fun deleteTrip(trip: TripSessionEntity) {
+        require(trip.status == TripStatus.COMPLETED) { "进行中的行程不能删除" }
+        tripDao.deleteSession(trip)
     }
 
     suspend fun addChargingRecord(
@@ -147,17 +187,17 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {
-        require(vehicle.brand.isNotBlank()) { "品牌不能为空" }
-        require(vehicle.model.isNotBlank()) { "车型不能为空" }
-        require(vehicle.batteryCapacityKwh > 0) { "电池容量必须大于 0" }
-        require(vehicle.rangeKm > 0) { "续航必须大于 0" }
-
+        validateVehicle(vehicle)
         if (vehicle.id == 0L) vehicleDao.insert(vehicle) else vehicleDao.update(vehicle)
     }
 
     suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
         val vehicle = VehicleEntity(
-            catalogVehicleId = catalogVehicleId, brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range
+            catalogVehicleId = catalogVehicleId,
+            brand = brand.trim(),
+            model = model.trim(),
+            batteryCapacityKwh = battery,
+            rangeKm = range
         )
         validateVehicle(vehicle)
         val id = vehicleDao.insert(vehicle)
@@ -172,6 +212,8 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun archiveVehicle(vehicleId: Long) {
         database.withTransaction {
+            val activeTrip = tripDao.getActive()
+            require(activeTrip?.vehicleId != vehicleId) { "请先结束这辆车的当前行程" }
             val activeVehicles = vehicleDao.observeActive().first()
             require(activeVehicles.size > 1) { "请至少保留一辆车辆" }
             val vehicle = activeVehicles.firstOrNull { it.id == vehicleId } ?: error("车辆不可用")
@@ -184,10 +226,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     fun pairedBluetoothDevices(): List<PairedBluetoothDevice> = runCatching {
         BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty()
-            .map { PairedBluetoothDevice(it.address, it.name ?: "未命名设备") }.sortedBy { it.name }
+            .map { PairedBluetoothDevice(it.address, it.name ?: "未命名设备") }
+            .sortedBy { it.name }
     }.getOrDefault(emptyList())
 
-    suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) = bluetoothPreferences.save(enabled, deviceAddress, deviceName)
+    suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) =
+        bluetoothPreferences.save(enabled, deviceAddress, deviceName)
 
     private fun validateVehicle(vehicle: VehicleEntity) {
         require(vehicle.brand.isNotBlank()) { "品牌不能为空" }
@@ -198,12 +242,23 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     private suspend fun seedVehicleCatalog() {
         val json = context.assets.open("vehicle_catalog.json").bufferedReader().use { it.readText() }
-        val items = JSONArray(json).let { array -> List(array.length()) { index ->
-            val item = array.getJSONObject(index)
-            VehicleCatalogEntity(
-                catalogId = item.getString("catalogId"), source = item.getString("source"), brand = item.getString("brand"), series = item.getString("series"), modelName = item.getString("modelName"), modelYear = item.optInt("modelYear").takeIf { it != 0 }, trimName = item.optString("trimName").takeIf { it.isNotBlank() }, powertrainType = item.getString("powertrainType"), batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() }, rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
-            )
-        } }
+        val items = JSONArray(json).let { array ->
+            List(array.length()) { index ->
+                val item = array.getJSONObject(index)
+                VehicleCatalogEntity(
+                    catalogId = item.getString("catalogId"),
+                    source = item.getString("source"),
+                    brand = item.getString("brand"),
+                    series = item.getString("series"),
+                    modelName = item.getString("modelName"),
+                    modelYear = item.optInt("modelYear").takeIf { it != 0 },
+                    trimName = item.optString("trimName").takeIf { it.isNotBlank() },
+                    powertrainType = item.getString("powertrainType"),
+                    batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() },
+                    rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
+                )
+            }
+        }
         vehicleCatalogDao.insertAll(items)
     }
 }
