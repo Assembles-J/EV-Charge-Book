@@ -13,6 +13,7 @@ import com.evchargebook.data.backup.BackupCodec
 import com.evchargebook.data.backup.BackupPayload
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleCatalogEntity
@@ -54,6 +55,8 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         selected?.let { tripDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
     }
     val activeTrip: Flow<TripSessionEntity?> = tripDao.observeActive()
+
+    fun observeTripPoints(tripId: Long): Flow<List<TripPointEntity>> = tripDao.observePoints(tripId)
 
     suspend fun ensureDefaultVehicle() {
         seedVehicleCatalog()
