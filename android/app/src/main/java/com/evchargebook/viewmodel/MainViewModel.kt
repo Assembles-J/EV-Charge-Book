@@ -13,6 +13,7 @@ import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.ChargingIntervalAnalytics
 import com.evchargebook.domain.ChargingStatistics
+import com.evchargebook.domain.ChargingTripCoverage
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -41,6 +42,10 @@ data class MainUiState(
     val intervalDistanceKm: Double = 0.0,
     val intervalEnergyPer100Km: Double? = null,
     val intervalCostPer100Km: Double? = null,
+    val tripCoverageIntervalCount: Int = 0,
+    val tripCoverageOdometerKm: Double = 0.0,
+    val tripCoverageDistanceKm: Double = 0.0,
+    val tripCoverageRatio: Double? = null,
     val successMessage: String? = null,
     val errorMessage: String? = null
 )
@@ -55,6 +60,18 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.trips.collect { trips -> _uiState.value = _uiState.value.copy(trips = trips) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
+        viewModelScope.launch {
+            combine(repository.chargingRecords, repository.trips) { records, trips ->
+                ChargingTripCoverage.summarize(records, trips)
+            }.collect { coverage ->
+                _uiState.value = _uiState.value.copy(
+                    tripCoverageIntervalCount = coverage.intervals.size,
+                    tripCoverageOdometerKm = coverage.odometerDistanceKm,
+                    tripCoverageDistanceKm = coverage.completedTripDistanceKm,
+                    tripCoverageRatio = coverage.coverageRatio
+                )
+            }
+        }
         viewModelScope.launch {
             selectedTripId.flatMapLatest { tripId ->
                 tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList())
