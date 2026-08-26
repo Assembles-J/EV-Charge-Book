@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v1.7.0
+版本: v1.8.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -12,6 +12,8 @@
 ---
 
 ## v0.1 - Local Charging Book
+
+状态: Released / Accepted
 
 目标: 完成真正可安装使用的本地充电记账闭环。
 
@@ -42,17 +44,22 @@
 - [x] 服务器原子 APK 部署脚本
 - [x] Release metadata 绑定真实 checkout SHA
 - [x] latest 原子激活顺序修正
+- [x] production signing secrets 验证
+- [x] assembleRelease Green
+- [x] apksigner verify
+- [x] Signed Production APK Artifact
+- [x] 服务器目录准备 / 上传 / 原子激活
+- [x] v0.1 Release Accepted
 
-### 当前验收阶段: Production Release
+### 首次正式发布
 
-- [ ] assembleRelease Green
-- [ ] production signing secrets 验证
-- [ ] `/opt/ev-charge-book` 服务器目录权限验证
-- [ ] 首次 signed APK production publish
-- [ ] apksigner / SHA-256 / latest 原子切换验收
-- [ ] v0.1 release accepted
+- Android Release Run #1: Green
+- Run ID: `32939069000`
+- Commit: `90d31072b6fecfecce7588968b6ddf1cc3c4ee08`
+- Artifact: `ev-charge-book-0.1.1`
+- Artifact digest: `sha256:c74a283ff4775ad62f7b74ff0d2c21cbb2d760c3e2a3ab8e9747199cbf84259a`
 
-v0.1 不继续扩功能。Production Release 只修发布阻塞问题。
+Production release 暂时保持手动触发；CI 继续自动运行。等 v0.2 稳定后再评估是否自动 production release。
 
 ---
 
@@ -176,12 +183,7 @@ AI 必须区分事实、推算和建议，并利用 DataSource / accuracy 信息
 ## 当前执行顺序
 
 ```text
-Production assembleRelease
-  -> Signing Secrets
-  -> Server Permission
-  -> Signed Production APK
-  -> apksigner / SHA-256 / atomic latest acceptance
-  -> v0.1 Release Accepted
+v0.1 Release Accepted
   -> v0.2 odometerKm
   -> Local Backup / Restore
   -> Multi Vehicle / Catalog
@@ -196,6 +198,15 @@ Production assembleRelease
 
 ## 变更记录
 
+### v1.8.0
+
+- Android Release Run #1 Green
+- Production signing / assembleRelease / apksigner / Actions Artifact 全部通过
+- 服务器目录准备、上传与原子激活成功
+- v0.1 正式标记 Released / Accepted
+- Issue #7 release pipeline acceptance 关闭
+- 当前主线切换到 v0.2 P0 `odometerKm`
+
 ### v1.7.0
 
 - Android Build Run #45 Green
@@ -204,11 +215,3 @@ Production assembleRelease
 - v0.1 当前唯一主线切换为 Production Release
 - 修正 release metadata SHA 来源，绑定实际 checkout commit
 - 修正服务器发布顺序，latest 只在 APK 与 metadata 准备完成后激活
-
-### v1.6.0
-
-- commit `7204c56` 完成充电记录完整编辑、日期时间、充电类型、删除确认与反馈
-- v0.1 从“功能开发阶段”切换为“构建 / 真机 / 发布验收阶段”
-- Android CI Green 与 Debug APK 提升为当前 P0
-- v0.2 第一优先级固定为 odometerKm，其后为 Local Backup / Restore
-- 地图 / 行程继续后置，避免阻塞数据闭环和可恢复性
