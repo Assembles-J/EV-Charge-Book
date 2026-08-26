@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v1.8.0
+版本: v1.9.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -69,10 +69,16 @@ Production release 暂时保持手动触发；CI 继续自动运行。等 v0.2 �
 
 ### P0 数据闭环
 
-- [ ] ChargingRecord 增加可选 `odometerKm`
-- [ ] 里程输入与上一条记录做合理性提示
-- [ ] 通过 vehicleId + 时间 + odometer 建立充电区间与行程分析基础
-- [ ] 不建立错误的一充一行程硬外键
+- [x] ChargingRecord 增加可选 `odometerKm`
+- [x] Room v1 → v2 migration，旧记录无损升级
+- [x] 新增 / 编辑充电记录支持可选总里程
+- [x] 记录列表展示已录入里程
+- [x] 里程输入与上一条同车、早于当前时间的有效记录做合理性提示
+- [x] 里程下降只提示、不阻塞保存
+- [x] 通过 vehicleId + 时间 + odometer 建立充电区间与行程分析基础
+- [x] 不建立错误的一充一行程硬外键
+- [x] odometer 规则与上一条记录选择单元测试
+- [ ] Android Build Run #55 最终验收
 
 ### P0.5 数据可恢复
 
@@ -184,7 +190,8 @@ AI 必须区分事实、推算和建议，并利用 DataSource / accuracy 信息
 
 ```text
 v0.1 Release Accepted
-  -> v0.2 odometerKm
+  -> v0.2 odometerKm implementation
+  -> Android Build Run #55 acceptance
   -> Local Backup / Restore
   -> Multi Vehicle / Catalog
   -> Location + Manual Trip Tracking
@@ -197,6 +204,16 @@ v0.1 Release Accepted
 ---
 
 ## 变更记录
+
+### v1.9.0
+
+- ChargingRecord 新增可选 `odometerKm`
+- Room schema 升级到 v2，并提供 v1 → v2 无损 migration
+- 新增 / 编辑记录支持总里程输入，历史列表展示里程
+- 使用 vehicleId + chargeTime 选择上一条有效里程并做非阻塞下降提示
+- 增加 odometer 校验与 previous-reading 单元测试
+- 编辑记录恢复 remark 保存能力
+- 当前等待 Android Build Run #55 最终验收
 
 ### v1.8.0
 
