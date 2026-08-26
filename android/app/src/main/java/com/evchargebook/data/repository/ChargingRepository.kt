@@ -191,17 +191,26 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         )
     }
 
-    suspend fun deleteChargingRecord(record: ChargingRecordEntity) { chargingRecordDao.delete(record) }
+    suspend fun deleteChargingRecord(record: ChargingRecordEntity) {
+        chargingRecordDao.markDeleted(record.id, System.currentTimeMillis())
+    }
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
         ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
         require((record.latitude == null) == (record.longitude == null)) { "定位坐标不完整" }
-        chargingRecordDao.update(record.copy(location = record.location?.trim()?.takeIf { it.isNotEmpty() }, remark = record.remark?.trim()?.takeIf { it.isNotEmpty() }))
+        chargingRecordDao.update(
+            record.copy(
+                location = record.location?.trim()?.takeIf { it.isNotEmpty() },
+                remark = record.remark?.trim()?.takeIf { it.isNotEmpty() },
+                updatedAtEpochMillis = System.currentTimeMillis()
+            )
+        )
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {
         validateVehicle(vehicle)
-        if (vehicle.id == 0L) vehicleDao.insert(vehicle) else vehicleDao.update(vehicle)
+        val updated = vehicle.copy(updatedAtEpochMillis = System.currentTimeMillis())
+        if (vehicle.id == 0L) vehicleDao.insert(updated) else vehicleDao.update(updated)
     }
 
     suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
@@ -224,7 +233,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             val activeVehicles = vehicleDao.observeActive().first()
             require(activeVehicles.size > 1) { "请至少保留一辆车辆" }
             val vehicle = activeVehicles.firstOrNull { it.id == vehicleId } ?: error("车辆不可用")
-            vehicleDao.update(vehicle.copy(isArchived = true, isDefault = false))
+            vehicleDao.update(vehicle.copy(isArchived = true, isDefault = false, updatedAtEpochMillis = System.currentTimeMillis()))
             val replacement = activeVehicles.first { it.id != vehicleId }
             vehicleDao.setDefault(replacement.id)
             context.vehicleSelectionDataStore.edit { it[selectedVehicleIdKey] = replacement.id }
