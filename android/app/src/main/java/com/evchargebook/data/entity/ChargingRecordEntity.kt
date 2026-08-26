@@ -22,7 +22,8 @@ data class ChargingRecordEntity(
     val endSoc: Int,
     val chargerType: String? = null,
     val location: String? = null,
-    val remark: String? = null
+    val remark: String? = null,
+    val odometerKm: Double? = null
 ) {
     val pricePerKwh: Double
         get() = if (energyKwh > 0.0) cost / energyKwh else 0.0
