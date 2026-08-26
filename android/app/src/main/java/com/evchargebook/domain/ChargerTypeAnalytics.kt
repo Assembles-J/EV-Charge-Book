@@ -46,7 +46,7 @@ object ChargerTypeAnalytics {
         val value = raw?.trim().orEmpty()
         return when {
             value.contains("家充") || value.contains("家用") -> ChargerCategory.HOME
-            value.contains("快") -> ChargerCategory.PUBLIC_FAST
+            value.contains("快") || value.contains("超充") -> ChargerCategory.PUBLIC_FAST
             value.contains("慢") -> ChargerCategory.PUBLIC_SLOW
             else -> ChargerCategory.OTHER
         }
