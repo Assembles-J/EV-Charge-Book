@@ -3,7 +3,9 @@ package com.evchargebook.ui.vehicle
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Upload
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -13,7 +15,13 @@ import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable fun VehicleScreen(vehicle: VehicleEntity?, onEdit: () -> Unit) {
+@Composable
+fun VehicleScreen(
+    vehicle: VehicleEntity?,
+    onEdit: () -> Unit,
+    onExportBackup: () -> Unit,
+    onImportBackup: () -> Unit
+) {
     Scaffold(topBar = { TopAppBar(title = { Text("我的车辆") }, actions = { IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, "编辑车辆") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
             if (vehicle == null) Text("暂未配置车辆", style = MaterialTheme.typography.titleLarge)
@@ -22,6 +30,20 @@ import java.util.Locale
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { VehicleMetric("电池容量", "${one(vehicle.batteryCapacityKwh)} kWh", Modifier.weight(1f)); VehicleMetric("标称续航", "${vehicle.rangeKm} km", Modifier.weight(1f)) }
                 Text("车辆信息用于帮助你理解每次充电；所有数据只保存在本机。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Button(onClick = onEdit, modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Edit, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text("编辑车辆资料") }
+            }
+
+            HorizontalDivider()
+            Text("本地数据", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("备份包含车辆和全部充电记录。恢复会覆盖当前本地数据，并在执行前再次确认。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = onExportBackup, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Download, null)
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("导出本地备份")
+            }
+            OutlinedButton(onClick = onImportBackup, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Upload, null)
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("从备份恢复")
             }
         }
     }
