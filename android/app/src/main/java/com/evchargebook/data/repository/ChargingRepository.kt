@@ -59,15 +59,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         seedVehicleCatalog()
         val activeVehicles = vehicles.first()
         if (activeVehicles.isEmpty()) {
-            val id = vehicleDao.insert(
-                VehicleEntity(
-                    brand = "零跑",
-                    model = "C16 2026款",
-                    batteryCapacityKwh = 67.7,
-                    rangeKm = 520,
-                    isDefault = true
-                )
-            )
+            val id = vehicleDao.insert(VehicleEntity(brand = "零跑", model = "C16 2026款", batteryCapacityKwh = 67.7, rangeKm = 520, isDefault = true))
             selectVehicle(id)
         } else {
             val defaultVehicle = activeVehicles.firstOrNull { it.isDefault } ?: activeVehicles.first()
@@ -106,7 +98,6 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             chargingRecordDao.insertAll(payload.chargingRecords)
             tripDao.insertSessions(payload.tripSessions)
             tripDao.insertPoints(payload.tripPoints)
-
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
             require(tripDao.getAllSessions().size == payload.tripSessions.size) { "行程恢复数量校验失败" }
@@ -118,37 +109,40 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val tripId = database.withTransaction {
             require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
             TripRules.requireCanStart(tripDao.getActive() != null)
-            tripDao.insertSession(
-                TripSessionEntity(
-                    vehicleId = vehicleId,
-                    startedAtEpochMillis = startedAtEpochMillis,
-                    status = TripStatus.RECORDING
-                )
-            )
+            tripDao.insertSession(TripSessionEntity(vehicleId = vehicleId, startedAtEpochMillis = startedAtEpochMillis, status = TripStatus.RECORDING))
         }
+        startTrackingOrInterrupt(tripId)
+        return tripId
+    }
+
+    suspend fun resumeTrip(tripId: Long) {
+        database.withTransaction {
+            val trip = tripDao.getSession(tripId) ?: error("行程不存在")
+            require(trip.status in setOf(TripStatus.RECORDING, TripStatus.INTERRUPTED)) { "只有未完成行程可以恢复" }
+            val active = tripDao.getActive()
+            require(active == null || active.id == tripId) { "已有其他进行中的行程" }
+            if (trip.status == TripStatus.INTERRUPTED) tripDao.updateSession(trip.copy(status = TripStatus.RECORDING))
+        }
+        startTrackingOrInterrupt(tripId)
+    }
+
+    private suspend fun startTrackingOrInterrupt(tripId: Long) {
         try {
             TripTrackingService.start(context, tripId)
         } catch (error: Throwable) {
             database.withTransaction {
                 tripDao.getSession(tripId)?.let { session ->
-                    tripDao.updateSession(session.copy(status = TripStatus.INTERRUPTED))
+                    if (session.status == TripStatus.RECORDING) tripDao.updateSession(session.copy(status = TripStatus.INTERRUPTED))
                 }
             }
             throw error
         }
-        return tripId
     }
 
     suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
         database.withTransaction {
             val active = tripDao.getActive() ?: error("当前没有进行中的行程")
-            tripDao.updateSession(
-                active.copy(
-                    endedAtEpochMillis = endedAtEpochMillis,
-                    elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis),
-                    status = TripStatus.COMPLETED
-                )
-            )
+            tripDao.updateSession(active.copy(endedAtEpochMillis = endedAtEpochMillis, elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis), status = TripStatus.COMPLETED))
         }
         TripTrackingService.stop(context)
     }
@@ -175,7 +169,6 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     ) {
         ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost, odometerKm)
         require((latitude == null) == (longitude == null)) { "定位坐标不完整" }
-
         chargingRecordDao.insert(
             ChargingRecordEntity(
                 vehicleId = vehicleId,
@@ -195,19 +188,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         )
     }
 
-    suspend fun deleteChargingRecord(record: ChargingRecordEntity) {
-        chargingRecordDao.delete(record)
-    }
+    suspend fun deleteChargingRecord(record: ChargingRecordEntity) { chargingRecordDao.delete(record) }
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
         ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
         require((record.latitude == null) == (record.longitude == null)) { "定位坐标不完整" }
-        chargingRecordDao.update(
-            record.copy(
-                location = record.location?.trim()?.takeIf { it.isNotEmpty() },
-                remark = record.remark?.trim()?.takeIf { it.isNotEmpty() }
-            )
-        )
+        chargingRecordDao.update(record.copy(location = record.location?.trim()?.takeIf { it.isNotEmpty() }, remark = record.remark?.trim()?.takeIf { it.isNotEmpty() }))
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {
@@ -216,13 +202,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
 
     suspend fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) {
-        val vehicle = VehicleEntity(
-            catalogVehicleId = catalogVehicleId,
-            brand = brand.trim(),
-            model = model.trim(),
-            batteryCapacityKwh = battery,
-            rangeKm = range
-        )
+        val vehicle = VehicleEntity(catalogVehicleId = catalogVehicleId, brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)
         validateVehicle(vehicle)
         val id = vehicleDao.insert(vehicle)
         selectVehicle(id)
@@ -249,13 +229,10 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
 
     fun pairedBluetoothDevices(): List<PairedBluetoothDevice> = runCatching {
-        BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty()
-            .map { PairedBluetoothDevice(it.address, it.name ?: "未命名设备") }
-            .sortedBy { it.name }
+        BluetoothAdapter.getDefaultAdapter()?.bondedDevices.orEmpty().map { PairedBluetoothDevice(it.address, it.name ?: "未命名设备") }.sortedBy { it.name }
     }.getOrDefault(emptyList())
 
-    suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) =
-        bluetoothPreferences.save(enabled, deviceAddress, deviceName)
+    suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) = bluetoothPreferences.save(enabled, deviceAddress, deviceName)
 
     private fun validateVehicle(vehicle: VehicleEntity) {
         require(vehicle.brand.isNotBlank()) { "品牌不能为空" }
@@ -270,16 +247,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             List(array.length()) { index ->
                 val item = array.getJSONObject(index)
                 VehicleCatalogEntity(
-                    catalogId = item.getString("catalogId"),
-                    source = item.getString("source"),
-                    brand = item.getString("brand"),
-                    series = item.getString("series"),
-                    modelName = item.getString("modelName"),
-                    modelYear = item.optInt("modelYear").takeIf { it != 0 },
-                    trimName = item.optString("trimName").takeIf { it.isNotBlank() },
-                    powertrainType = item.getString("powertrainType"),
-                    batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() },
-                    rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
+                    catalogId = item.getString("catalogId"), source = item.getString("source"), brand = item.getString("brand"), series = item.getString("series"), modelName = item.getString("modelName"),
+                    modelYear = item.optInt("modelYear").takeIf { it != 0 }, trimName = item.optString("trimName").takeIf { it.isNotBlank() }, powertrainType = item.getString("powertrainType"),
+                    batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() }, rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
                 )
             }
         }
