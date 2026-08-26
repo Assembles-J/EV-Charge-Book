@@ -242,6 +242,7 @@ fun MainApp(
                 addRecord -> AddRecordScreen(
                     vehicleId = state.vehicle?.id ?: 0L,
                     records = state.chargingRecords,
+                    batteryCapacityKwh = state.vehicle?.batteryCapacityKwh,
                     commonPlaces = state.chargingPlaceSummary.map { it.displayName },
                     onBack = { addRecord = false },
                     onSave = { location, start, end, energy, cost, type, remark, time, odometer, latitude, longitude, accuracy ->
@@ -249,7 +250,13 @@ fun MainApp(
                         addRecord = false
                     }
                 )
-                editingRecord != null -> RecordEditScreen(record = editingRecord!!, records = state.chargingRecords, onSave = { viewModel.updateChargingRecord(it); editingRecord = null }, onBack = { editingRecord = null })
+                editingRecord != null -> RecordEditScreen(
+                    record = editingRecord!!,
+                    records = state.chargingRecords,
+                    batteryCapacityKwh = state.vehicle?.batteryCapacityKwh,
+                    onSave = { viewModel.updateChargingRecord(it); editingRecord = null },
+                    onBack = { editingRecord = null }
+                )
                 editVehicle -> state.vehicle?.let { vehicle ->
                     VehicleEditScreen(
                         initialBrand = vehicle.brand,
