@@ -7,21 +7,25 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.evchargebook.data.dao.ChargingRecordDao
+import com.evchargebook.data.dao.TripDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleCatalogDao
 import com.evchargebook.data.entity.ChargingRecordEntity
-import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.TripPointEntity
+import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
+import com.evchargebook.data.entity.VehicleEntity
 
 @Database(
-    entities = [VehicleEntity::class, ChargingRecordEntity::class, VehicleCatalogEntity::class],
-    version = 5,
+    entities = [VehicleEntity::class, ChargingRecordEntity::class, VehicleCatalogEntity::class, TripSessionEntity::class, TripPointEntity::class],
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleDao(): VehicleDao
     abstract fun vehicleCatalogDao(): VehicleCatalogDao
     abstract fun chargingRecordDao(): ChargingRecordDao
+    abstract fun tripDao(): TripDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -54,6 +58,18 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS trip_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, vehicleId INTEGER NOT NULL, startedAtEpochMillis INTEGER NOT NULL, endedAtEpochMillis INTEGER, distanceMeters REAL NOT NULL, elapsedSeconds INTEGER NOT NULL, movingSeconds INTEGER, stoppedSeconds INTEGER, averageSpeedMps REAL, maxSpeedMps REAL, startLatitude REAL, startLongitude REAL, endLatitude REAL, endLongitude REAL, startAltitudeMeters REAL, endAltitudeMeters REAL, minAltitudeMeters REAL, maxAltitudeMeters REAL, status TEXT NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_vehicleId ON trip_sessions(vehicleId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_startedAtEpochMillis ON trip_sessions(startedAtEpochMillis)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_status ON trip_sessions(status)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS trip_points (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripId INTEGER NOT NULL, capturedAtEpochMillis INTEGER NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, altitudeMeters REAL, speedMps REAL, bearingDegrees REAL, horizontalAccuracyMeters REAL, verticalAccuracyMeters REAL, speedAccuracyMps REAL, provider TEXT, FOREIGN KEY(tripId) REFERENCES trip_sessions(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_points_tripId ON trip_points(tripId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_points_capturedAtEpochMillis ON trip_points(capturedAtEpochMillis)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -64,7 +80,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ev-charge-book.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
                     .build()
                     .also { instance = it }
             }
