@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v2.0.0
+版本: v2.0.1
 更新时间: 2026-08-26
 状态: Authority Document / Single Source of Truth
 
@@ -36,6 +36,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - LOCATION_TRIP.md
 - VEHICLE_CATALOG_MULTI_VEHICLE.md
 - DATA_QUALITY_BACKUP.md
+- SYNC_PROTOCOL.md
 - LOCAL_AGENT_HANDOFF.md
 - NEXT_PHASE_DESIGN.md
 
@@ -150,19 +151,30 @@ Vehicle + ChargingRecord 已进入同步身份实现：
 
 Android Build Run #177 已创建但仍在 GitHub runner 队列。Phase A 在 Build/Test + Debug APK Green 前不得标记 Accepted。
 
-### 7.3 下一步
+### 7.3 同步协议
+
+`SYNC_PROTOCOL.md` 已固定第一版协议边界：
+
+- protocolVersion
+- Vehicle / ChargingRecord change payload
+- Vehicle 不同步 `isDefault` / selectedVehicleId
+- ChargingRecord 使用 `vehicleSyncId`，不发送本地 vehicleId
+- serverRevision/cursor 用于增量 pull
+- stable syncId + updatedAt 用于实体冲突
+- tombstone 防止旧设备复活已删除记录
+- batch apply 必须 Room transaction，成功后才能推进 cursor
+- 第一版无 CRDT / 微服务 / MQ / WebSocket
+
+### 7.4 下一步
 
 Phase A CI Green 后：
 
-1. 定义 Vehicle / ChargingRecord sync change DTO / envelope
-2. 固定幂等 upsert 规则
-3. 固定 tombstone conflict 规则
-4. 固定 pull cursor / protocol version
-5. 再实现最小 HTTPS sync client/server
-6. 第一批服务端只同步 Vehicle + ChargingRecord
-7. TripSession / TripPoint 后接
-
-第一版不使用 CRDT、Kafka、MQ、WebSocket 或微服务。
+1. 实现 Vehicle / ChargingRecord sync DTO / envelope
+2. 实现纯 Kotlin conflict/apply rules
+3. 固定 pull cursor / push acknowledgement
+4. 再实现最小 HTTPS sync client/server
+5. 第一批服务端只同步 Vehicle + ChargingRecord
+6. TripSession / TripPoint 后接
 
 ---
 
@@ -178,7 +190,7 @@ Phase A CI Green 后：
 - 重复 push / pull 必须幂等
 - selected/default vehicle 属于设备 UX 状态，不应因为切换当前车辆制造无意义云冲突
 
-如果实际测试证明设备时钟偏差成为问题，再引入 server revision/cursor；当前不提前复杂化。
+如果实际测试证明设备时钟偏差成为问题，再引入 server revision/cursor 参与写冲突；当前不提前复杂化。
 
 ---
 
@@ -257,6 +269,11 @@ Spring Boot Monolith
 
 ## 14. 决策记录
 
+### v2.0.1
+
+- `SYNC_PROTOCOL.md` 纳入权威文档体系
+- 固定第一版 payload / idempotency / tombstone / conflict / cursor 边界
+
 ### v2.0.0
 
 - Trip / Bluetooth 最新真机功能验证通过并关闭 owning Issues
@@ -265,9 +282,3 @@ Spring Boot Monolith
 - 正式切换主线到 v0.4 Local First Sync Foundation
 - Vehicle + ChargingRecord Phase A sync identity 已实现，等待累计 Run #177
 - 云同步必须先定 stable identity / tombstone / conflict protocol，再接服务端
-
-### v1.9.0
-
-- v0.3 analytics 主线稳定
-- ChargingPlace 派生聚合成为下一增量
-- MapLibre 保持非阻塞
