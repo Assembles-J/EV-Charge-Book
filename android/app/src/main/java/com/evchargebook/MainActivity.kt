@@ -2,73 +2,180 @@ package com.evchargebook
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.*
-import androidx.compose.material3.*
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.platform.LocalContext
 import com.evchargebook.data.database.AppDatabase
+import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.ui.dashboard.DashboardScreen
-import com.evchargebook.ui.records.*
-import com.evchargebook.ui.stats.StatsScreen
-import com.evchargebook.ui.vehicle.VehicleScreen
-import com.evchargebook.ui.vehicle.VehicleEditScreen
-import com.evchargebook.viewmodel.MainViewModel
 import com.evchargebook.ui.records.AddRecordScreen
+import com.evchargebook.ui.records.RecordEditScreen
+import com.evchargebook.ui.records.RecordsScreen
+import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
+import com.evchargebook.ui.vehicle.VehicleEditScreen
+import com.evchargebook.ui.vehicle.VehicleScreen
+import com.evchargebook.viewmodel.MainViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
-class MainActivity: ComponentActivity(){
- private val vm:MainViewModel by viewModels {
-  val db=AppDatabase.getInstance(applicationContext)
-  MainViewModel.Factory(ChargingRepository(db.vehicleDao(),db.chargingRecordDao()))
- }
- override fun onCreate(savedInstanceState:Bundle?){super.onCreate(savedInstanceState);enableEdgeToEdge();setContent{EvChargeTheme { MainApp(vm) }}}
+class MainActivity : ComponentActivity() {
+    private val vm: MainViewModel by viewModels {
+        val db = AppDatabase.getInstance(applicationContext)
+        MainViewModel.Factory(ChargingRepository(db))
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent { EvChargeTheme { MainApp(vm) } }
+    }
 }
 
 @Composable
-fun MainApp(viewModel:MainViewModel){
- val state by viewModel.uiState.collectAsState()
- val snackbarHostState = remember { SnackbarHostState() }
- var tab by remember{mutableIntStateOf(0)}
- var editVehicle by remember{mutableStateOf(false)}
- var addRecord by remember{mutableStateOf(false)}
- var editingRecord by remember{mutableStateOf<com.evchargebook.data.entity.ChargingRecordEntity?>(null)}
- val titles=listOf("总览","记录","统计","车辆")
- LaunchedEffect(state.successMessage) { state.successMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() } }
-  Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }, bottomBar={ if (!editVehicle && !addRecord && editingRecord == null) NavigationBar{titles.forEachIndexed{i,t->NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Home,Icons.Default.History,Icons.Default.BarChart,Icons.Default.DirectionsCar)[i],t)},label={Text(t)})}}}){p->
-   Surface(Modifier.padding(p)){
-    if(addRecord) {
-     val vehicleId = state.vehicle?.id ?: 0L
-     AddRecordScreen(
-      vehicleId = vehicleId,
-      records = state.chargingRecords,
-      onBack = { addRecord=false },
-      onSave = { location,start,end,energy,cost,type,remark,time,odometer ->
-       viewModel.addChargingRecord(start,end,energy,cost,location,type,remark,time,odometer)
-       addRecord=false
-      }
-     )
-    } else if(editingRecord != null) {
-     RecordEditScreen(
-      record = editingRecord!!,
-      records = state.chargingRecords,
-      onSave = { viewModel.updateChargingRecord(it); editingRecord = null },
-      onBack = { editingRecord = null }
-     )
-    } else if(editVehicle){
-     val v=state.vehicle
-     if(v!=null) VehicleEditScreen(v.brand,v.model,v.batteryCapacityKwh.toString(),v.rangeKm.toString(),{b,m,c,r->viewModel.saveVehicle(b,m,c,r);editVehicle=false},{editVehicle=false})
-    }else when(tab){
-     0->DashboardScreen(state,{addRecord=true})
-     1->RecordsScreen(state.chargingRecords,viewModel::deleteChargingRecord,{addRecord=true},{editingRecord=it})
-     2->StatsScreen(state)
-     3->VehicleScreen(state.vehicle,{editVehicle=true})
+fun MainApp(viewModel: MainViewModel) {
+    val state by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val snackbarHostState = remember { SnackbarHostState() }
+    var tab by remember { mutableIntStateOf(0) }
+    var editVehicle by remember { mutableStateOf(false) }
+    var addRecord by remember { mutableStateOf(false) }
+    var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
+    var pendingExportContent by remember { mutableStateOf<String?>(null) }
+    var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
+
+    val createBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        val content = pendingExportContent
+        if (uri != null && content != null) {
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(content) }
+        }
+        pendingExportContent = null
     }
-   }
-  }
+
+    val openBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            pendingRestoreContent = context.contentResolver.openInputStream(uri)
+                ?.bufferedReader()
+                ?.use { it.readText() }
+        }
+    }
+
+    val titles = listOf("总览", "记录", "统计", "车辆")
+
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearSuccess()
+        }
+    }
+    LaunchedEffect(state.errorMessage) {
+        state.errorMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (!editVehicle && !addRecord && editingRecord == null) {
+                NavigationBar {
+                    titles.forEachIndexed { index, title ->
+                        NavigationBarItem(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            icon = { Icon(listOf(Icons.Default.Home, Icons.Default.History, Icons.Default.BarChart, Icons.Default.DirectionsCar)[index], title) },
+                            label = { Text(title) }
+                        )
+                    }
+                }
+            }
+        }
+    ) { padding ->
+        Surface(Modifier.padding(padding)) {
+            when {
+                addRecord -> {
+                    AddRecordScreen(
+                        vehicleId = state.vehicle?.id ?: 0L,
+                        records = state.chargingRecords,
+                        onBack = { addRecord = false },
+                        onSave = { location, start, end, energy, cost, type, remark, time, odometer ->
+                            viewModel.addChargingRecord(start, end, energy, cost, location, type, remark, time, odometer)
+                            addRecord = false
+                        }
+                    )
+                }
+                editingRecord != null -> {
+                    RecordEditScreen(
+                        record = editingRecord!!,
+                        records = state.chargingRecords,
+                        onSave = { viewModel.updateChargingRecord(it); editingRecord = null },
+                        onBack = { editingRecord = null }
+                    )
+                }
+                editVehicle -> {
+                    state.vehicle?.let { vehicle ->
+                        VehicleEditScreen(
+                            vehicle.brand,
+                            vehicle.model,
+                            vehicle.batteryCapacityKwh.toString(),
+                            vehicle.rangeKm.toString(),
+                            { brand, model, capacity, range ->
+                                viewModel.saveVehicle(brand, model, capacity, range)
+                                editVehicle = false
+                            },
+                            { editVehicle = false }
+                        )
+                    }
+                }
+                else -> when (tab) {
+                    0 -> DashboardScreen(state) { addRecord = true }
+                    1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
+                    2 -> StatsScreen(state)
+                    3 -> VehicleScreen(
+                        vehicle = state.vehicle,
+                        onEdit = { editVehicle = true },
+                        onExportBackup = {
+                            viewModel.exportBackup(BuildConfig.VERSION_NAME) { content ->
+                                pendingExportContent = content
+                                val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                createBackupLauncher.launch("ev-charge-book-backup-$date.json")
+                            }
+                        },
+                        onImportBackup = { openBackupLauncher.launch(arrayOf("application/json", "text/plain")) }
+                    )
+                }
+            }
+        }
+    }
+
+    pendingRestoreContent?.let { content ->
+        AlertDialog(
+            onDismissRequest = { pendingRestoreContent = null },
+            title = { Text("覆盖当前本地数据？") },
+            text = { Text("恢复备份会删除当前车辆和充电记录，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingRestoreContent = null
+                    viewModel.restoreBackup(content)
+                }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
+        )
+    }
 }
