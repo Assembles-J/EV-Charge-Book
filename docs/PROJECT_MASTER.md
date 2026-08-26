@@ -132,6 +132,8 @@ Backup / Restore 已验收，当前开始 Multi Vehicle：
 - 多车辆创建 / 归档
 - 本地车型目录 + 自定义兜底
 
+Multi Vehicle 基础已实现并通过 Android Build Run #66；等待真机验收后再进入 Vehicle Catalog。
+
 实现顺序优先 Multi Vehicle context，再接 Vehicle Catalog，避免 catalog 绑死 UserVehicle。
 
 ### P2: 定位 / 行程

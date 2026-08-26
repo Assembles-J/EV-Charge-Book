@@ -26,6 +26,8 @@ BuildConfig 编译阻塞已由最小改动修复：启用 Android `buildFeatures
 
 Backup / Restore 已完成真机验收。Multi Vehicle 结束前不得开始 Catalog / Location / Trip。
 
+Multi Vehicle 基础已实现并通过 Android Build Run #66；当前待验收当前车辆切换、按车辆数据隔离和归档保留历史记录。
+
 ## 3. 已完成: v0.1
 
 - Room Vehicle / ChargingRecord

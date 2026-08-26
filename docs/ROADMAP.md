@@ -109,11 +109,15 @@ Backup / Restore 已验收；当前进入 Multi Vehicle。
 
 ### P1 Multi Vehicle (#17)
 
-- [ ] selectedVehicleId persisted
-- [ ] vehicle list / current vehicle switcher
-- [ ] Dashboard / Records / Stats 按车辆隔离
-- [ ] Add Record 绑定 selected vehicle
-- [ ] 车辆归档
+状态: Implemented / CI Accepted / Device Acceptance Pending
+
+- [x] selectedVehicleId persisted
+- [x] vehicle list / current vehicle switcher
+- [x] Dashboard / Records / Stats 按车辆隔离
+- [x] Add Record 绑定 selected vehicle
+- [x] 车辆归档
+- [ ] 至少两辆车的真机切换与数据隔离验收
+- [ ] 归档车辆后历史记录保留的真机验收
 
 ### P1 Vehicle Catalog (#16)
 
@@ -212,7 +216,7 @@ docs/LOCAL_AGENT_HANDOFF.md
 
 - odometer foundation 确认由 Android Build Run #56 验收通过
 - Local Backup / Restore 已通过 Android Build Run #65 和真机验收
-- 当前主线为 Multi Vehicle (#17)
+- Multi Vehicle 已通过 Android Build Run #66，等待真机验收
 - 新增 LOCAL_AGENT_HANDOFF.md
 - 清理历史 Issue #1 / #2
 - 更新 #18 / #19 为真实当前状态
