@@ -6,6 +6,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -18,7 +19,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
+import com.evchargebook.bluetooth.BluetoothConnectionStateChecker
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.repository.ChargingRepository
@@ -80,6 +85,7 @@ fun MainApp(
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
     var tab by remember { mutableIntStateOf(0) }
@@ -94,12 +100,44 @@ fun MainApp(
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
     var pendingResumeTripId by remember { mutableStateOf<Long?>(null) }
+    var promptedConnectedAddress by remember { mutableStateOf<String?>(null) }
+
+    fun showBluetoothTripPrompt(message: String) {
+        viewModel.closeTripDetail()
+        tab = 3
+        scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    fun checkConfiguredBluetoothConnection() {
+        val settings = state.bluetoothSettings
+        if (!settings.enabled || settings.deviceAddress.isNullOrBlank()) return
+        BluetoothConnectionStateChecker.check(context, settings.deviceAddress) { connected ->
+            if (connected && promptedConnectedAddress != settings.deviceAddress) {
+                promptedConnectedAddress = settings.deviceAddress
+                showBluetoothTripPrompt("已连接 ${settings.deviceName ?: "车辆蓝牙"}，请确认是否开始本次行程")
+            }
+        }
+    }
+
+    DisposableEffect(lifecycleOwner, state.bluetoothSettings.enabled, state.bluetoothSettings.deviceAddress) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> checkConfiguredBluetoothConnection()
+                Lifecycle.Event.ON_STOP -> promptedConnectedAddress = null
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(state.bluetoothSettings.enabled, state.bluetoothSettings.deviceAddress) {
+        if (state.bluetoothSettings.enabled) checkConfiguredBluetoothConnection()
+    }
 
     LaunchedEffect(openTripConfirmation) {
         if (openTripConfirmation) {
-            viewModel.closeTripDetail()
-            tab = 3
-            snackbarHostState.showSnackbar("已检测到车辆蓝牙连接，请确认是否开始本次行程")
+            showBluetoothTripPrompt("已检测到车辆蓝牙连接，请确认是否开始本次行程")
             onTripConfirmationConsumed()
         }
     }
@@ -167,10 +205,23 @@ fun MainApp(
         }
     }
 
+    val hasOverlayPage = editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || editingRecord != null || state.selectedTripId != null
+    BackHandler(enabled = hasOverlayPage) {
+        when {
+            state.selectedTripId != null -> viewModel.closeTripDetail()
+            editingRecord != null -> editingRecord = null
+            addRecord -> addRecord = false
+            bluetoothPrompt -> bluetoothPrompt = false
+            selectCatalogVehicle -> selectCatalogVehicle = false
+            addVehicle -> { addVehicle = false; catalogSelection = null }
+            editVehicle -> editVehicle = false
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !bluetoothPrompt && !addRecord && editingRecord == null && state.selectedTripId == null) {
+            if (!hasOverlayPage) {
                 NavigationBar {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(icons[index], title) }, label = { Text(title) })
