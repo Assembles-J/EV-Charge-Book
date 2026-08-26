@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.evchargebook.bluetooth.BluetoothPromptSettings
 import com.evchargebook.bluetooth.PairedBluetoothDevice
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
@@ -26,6 +27,8 @@ data class MainUiState(
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
     val trips: List<TripSessionEntity> = emptyList(),
     val activeTrip: TripSessionEntity? = null,
+    val selectedTripId: Long? = null,
+    val selectedTripPoints: List<TripPointEntity> = emptyList(),
     val monthCost: Double = 0.0,
     val monthEnergy: Double = 0.0,
     val averagePrice: Double = 0.0,
@@ -39,12 +42,20 @@ data class MainUiState(
 class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     private val _uiState = MutableStateFlow(MainUiState())
     val uiState: StateFlow<MainUiState> = _uiState.asStateFlow()
+    private val selectedTripId = MutableStateFlow<Long?>(null)
 
     init {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.trips.collect { trips -> _uiState.value = _uiState.value.copy(trips = trips) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
+        viewModelScope.launch {
+            selectedTripId.flatMapLatest { tripId ->
+                tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList())
+            }.collect { points ->
+                _uiState.value = _uiState.value.copy(selectedTripId = selectedTripId.value, selectedTripPoints = points)
+            }
+        }
         viewModelScope.launch {
             combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords) { vehicle, vehicles, catalogVehicles, records ->
                 val now = Instant.now().atZone(ZoneId.systemDefault())
@@ -80,6 +91,14 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
+    fun resumeTrip(tripId: Long) {
+        viewModelScope.launch {
+            runCatching { repository.resumeTrip(tripId) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程记录已恢复") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法恢复行程") }
+        }
+    }
+
     fun stopTrip() {
         viewModelScope.launch {
             runCatching { repository.stopActiveTrip() }
@@ -88,9 +107,13 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
+    fun openTripDetail(tripId: Long) { selectedTripId.value = tripId }
+    fun closeTripDetail() { selectedTripId.value = null; _uiState.value = _uiState.value.copy(selectedTripId = null, selectedTripPoints = emptyList()) }
+
     fun deleteTrip(trip: TripSessionEntity) {
         viewModelScope.launch {
             runCatching { repository.deleteTrip(trip) }
+                .onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") }
         }
     }
