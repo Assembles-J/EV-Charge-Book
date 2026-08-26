@@ -6,7 +6,15 @@ import org.junit.Test
 
 class ChargerTypeAnalyticsTest {
     @Test
-    fun `classifies known charger types and calculates shares`() {
+    fun `classifies known charger types`() {
+        assertEquals(ChargerCategory.HOME, ChargerTypeAnalytics.categoryOf("家充"))
+        assertEquals(ChargerCategory.PUBLIC_SLOW, ChargerTypeAnalytics.categoryOf("公共慢充"))
+        assertEquals(ChargerCategory.PUBLIC_FAST, ChargerTypeAnalytics.categoryOf("公共快充"))
+        assertEquals(ChargerCategory.PUBLIC_FAST, ChargerTypeAnalytics.categoryOf("超充"))
+    }
+
+    @Test
+    fun `calculates charger type shares`() {
         val records = listOf(
             record(1, "家充", 20.0, 6.0),
             record(2, "公共慢充", 30.0, 15.0),
@@ -14,14 +22,16 @@ class ChargerTypeAnalyticsTest {
             record(4, "超充", 10.0, 9.0)
         )
 
-        val summary = ChargerTypeAnalytics.summarize(records).associateBy { it.category }
+        val summaries = ChargerTypeAnalytics.summarize(records)
+        val summary = summaries.associateBy { it.category }
+        val diagnostic = summaries.joinToString()
 
-        assertEquals(1, summary[ChargerCategory.HOME]!!.chargingCount)
-        assertEquals(1, summary[ChargerCategory.PUBLIC_SLOW]!!.chargingCount)
-        assertEquals(2, summary[ChargerCategory.PUBLIC_FAST]!!.chargingCount)
-        assertEquals(0, summary[ChargerCategory.OTHER]!!.chargingCount)
-        assertEquals(0.5, summary[ChargerCategory.PUBLIC_FAST]!!.countShare, 0.0001)
-        assertEquals(0.5, summary[ChargerCategory.PUBLIC_FAST]!!.energyShare, 0.0001)
+        assertEquals("summary=$diagnostic", 1, summary[ChargerCategory.HOME]!!.chargingCount)
+        assertEquals("summary=$diagnostic", 1, summary[ChargerCategory.PUBLIC_SLOW]!!.chargingCount)
+        assertEquals("summary=$diagnostic", 2, summary[ChargerCategory.PUBLIC_FAST]!!.chargingCount)
+        assertEquals("summary=$diagnostic", 0, summary[ChargerCategory.OTHER]!!.chargingCount)
+        assertEquals("summary=$diagnostic", 0.5, summary[ChargerCategory.PUBLIC_FAST]!!.countShare, 0.0001)
+        assertEquals("summary=$diagnostic", 0.5, summary[ChargerCategory.PUBLIC_FAST]!!.energyShare, 0.0001)
     }
 
     @Test
