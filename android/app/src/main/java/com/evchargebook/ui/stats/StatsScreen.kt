@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.evchargebook.domain.ChargingEstimateConfidence
 import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.ui.theme.spacing
@@ -133,6 +134,14 @@ import java.util.Locale
                 StatValue("补入电量", "${one(sample.energyPer100Km)} kWh/100km", Modifier.weight(1f))
                 StatValue("费用", "¥ ${two(sample.costPer100Km)}/100km", Modifier.weight(1f))
             }
+            Text(
+                "估算可信度：${confidenceText(sample.confidence)} · 两次充电结束 SOC 相差 ${sample.endSocDeltaPoints} 个百分点",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (sample.confidence == ChargingEstimateConfidence.LOW) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (sample.confidence != ChargingEstimateConfidence.HIGH) {
+                Text("结束 SOC 差异较大时，本次补入电量不能很好代表上一里程区间的电量消耗；仅降低解读可信度，不修正原始数值。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             coverage?.let {
                 HorizontalDivider()
                 Text("Trip 证据：${it.completedTripCount} 条 · ${one(it.completedTripDistanceKm)} km · 覆盖 ${percent(it.coverageRatio)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -155,6 +164,11 @@ import java.util.Locale
     }
 }
 
+private fun confidenceText(value: ChargingEstimateConfidence) = when (value) {
+    ChargingEstimateConfidence.HIGH -> "高"
+    ChargingEstimateConfidence.MEDIUM -> "中"
+    ChargingEstimateConfidence.LOW -> "低"
+}
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
 private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
 private fun percent(value: Double) = String.format(Locale.US, "%.0f%%", value * 100.0)
