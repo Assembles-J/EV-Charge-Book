@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.3.0
+版本: v2.4.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -23,42 +23,30 @@
 - [x] 真机核心 CRUD 验收
 - [x] signed production APK / atomic server release
 
-首次正式发布：Android Release Run #1，Artifact `ev-charge-book-0.1.1`。
-
 ---
 
 ## v0.2 - Vehicle, Location & Trip Foundation
 
-状态: **Code Complete / CI Accepted in core paths / Device Acceptance in parallel**
+状态: **Core Accepted**
 
 ### Odometer & charging data loop (#18)
 
-状态: Completed / Issue Closed
-
 - [x] nullable `odometerKm`
-- [x] Room v1 -> v2 migration
+- [x] Room migration
 - [x] Add/Edit/Records 支持里程
 - [x] 上一条可靠里程与下降提示
 - [x] ChargingIntervalAnalytics
 - [x] 区间距离 / cost per 100km / charged kWh per 100km
-- [x] 无效区间显式排除并计数
-- [x] Trip completed distance coverage evidence
-- [x] SOC delta / estimate confidence hints
-- [x] 区间明细 UI
-- [x] JVM tests
-
-非阻塞测试增强：Room migration instrumentation test 后续归入数据库 QA，不再阻塞 v0.3。
+- [x] Trip coverage evidence
+- [x] SOC confidence hints
+- [x] 区间明细 + JVM tests
 
 ### Local Backup / Restore (#19)
-
-状态: Accepted
 
 - [x] JSON + schemaVersion
 - [x] SAF export/import
 - [x] 覆盖确认 + Room transaction
-- [x] Vehicle / ChargingRecord / odometer
-- [x] Location lat/lng/accuracy
-- [x] TripSession / TripPoint
+- [x] Vehicle / ChargingRecord / odometer / Location / Trip
 - [x] 引用关系与数量校验
 - [x] 真机恢复验收
 
@@ -73,160 +61,151 @@
 
 ### Bluetooth connection prompt (#21)
 
-状态: Implemented / Device Acceptance Pending
+状态: Accepted / Issue Closed
 
 - [x] paired-device selection / persistence
 - [x] Android 12+ Nearby Devices permission
 - [x] Android 13+ notification permission
 - [x] selected-device ACL_CONNECTED notification
-- [x] notification opens Trip confirmation flow
-- [x] never auto-start location from BroadcastReceiver
-- [ ] physical vehicle Bluetooth acceptance
-- [ ] denied/disabled/non-selected-device acceptance
+- [x] A2DP / HEADSET already-connected state detection
+- [x] notification / app-resume opens Trip confirmation flow
+- [x] never silently auto-start location
+- [x] latest physical functional verification accepted
 
 ### Location (#14)
 
-状态: Foundation + Route Preview Implemented / Device Acceptance Pending
+状态: Foundation Implemented
 
-- [x] LocationProvider abstraction + Android LocationManager
+- [x] LocationProvider + Android LocationManager
 - [x] current position
 - [x] ChargingRecord lat/lng/accuracy
 - [x] AddressResolver + Android Geocoder
 - [x] address failure preserves coordinates/manual text
-- [x] TripRouteGeometry presentation model
-- [x] no-basemap real trajectory preview
-- [ ] physical current-location / reverse-geocode acceptance
+- [x] TripRouteGeometry / no-basemap route preview
 
-MapLibre remains optional visualization work and does not block analytics:
-
-- [ ] external MapProvider adapter
-- [ ] MapLibre map tiles/style prototype
-- [ ] route/start/end rendering on real map
+Optional, non-blocking:
+- [ ] external MapProvider / MapLibre real map rendering
 
 ### Trip (#15)
 
-状态: Core Implemented / Device Acceptance Pending
+状态: Accepted / Issue Closed
 
-- [x] TripSession / TripPoint + Room migration
+- [x] TripSession / TripPoint + migration
 - [x] manual start/stop
-- [x] foreground location service
-- [x] persistent notification + stop action
-- [x] lat/lng/time/accuracy/speed/bearing/altitude
-- [x] distance / elapsed / moving / stopped
-- [x] average/max speed + altitude range
-- [x] crash hardening: foreground failure -> INTERRUPTED
-- [x] interrupted resume uses same TripSession
+- [x] foreground location service + persistent notification
+- [x] WGS84 / accuracy / speed / bearing / altitude
+- [x] distance / elapsed / moving / stopped / average / max speed
+- [x] interrupted resume same TripSession
 - [x] Trip detail + raw point inspection
-- [x] TripSamplingRules
-- [x] poor accuracy / impossible speed / GPS jump filtering
-- [x] stationary point throttling
-- [x] no-basemap route preview
-- [ ] physical start-trip / lock-screen tracking acceptance
-- [ ] real-drive distance/speed/altitude plausibility
-- [ ] interrupted resume physical acceptance
-
-### Data Reliability remaining
-
-These are incremental quality features, not v0.3 blockers:
-
-- [ ] ChargingPlace / common-place reuse
-- [ ] CSV analysis export
-- [ ] Privacy Zone before route sharing/export
-- [ ] source metadata only where it creates user value
+- [x] GPS quality / jump filtering + stationary throttling
+- [x] main-Looper LocationListener + GPS/Network provider fallback
+- [x] provider failure -> INTERRUPTED instead of crash
+- [x] latest physical functional verification accepted
 
 ---
 
-## v0.3 - Analytics
+## v0.3 - Local Analytics & Reliability
 
-状态: **Active Development / Cumulative CI Green**
+状态: **Feature Complete Candidate / CI finalizing**
 
-Already implemented:
+### Analytics
 
-- [x] charging interval actual odometer distance
+- [x] charging interval odometer distance
 - [x] cost/100km estimate
 - [x] charged kWh/100km estimate
 - [x] Trip + odometer coverage evidence
 - [x] SOC confidence hints
 - [x] interval detail samples
-- [x] six-month charging cost / energy trend
-- [x] charger type classification and mix
-- [x] home / public slow / public fast / other shares
+- [x] six-month cost / energy trend
+- [x] month-over-month comparison + zero-baseline handling
+- [x] charger type classification / count / energy / cost mix
 - [x] supercharging classified as public fast
-- [x] charger-type count / energy / cost comparison
-- [x] month-over-month comparison card
-- [x] zero-baseline sparse-data handling: keep absolute values, suppress meaningless infinite percentage
-- [x] Android Build Run #142 cumulative Green + Debug APK
 
-Release verification:
+### Charging places
 
-- [x] Android Release Run #3 signed APK build
-- [x] Actions artifact
-- [x] server upload
-- [x] atomic activation
+- [x] ChargingPlaceAnalytics from existing location text
+- [x] location normalization + count / energy / cost / average price
+- [x] Stats Top common places
+- [x] Add Record Top 5 common-place quick reuse
+- [x] reuse copies text only; historical coordinates are never reused
+- [x] manual place edit clears unsaved GPS fix to prevent coordinate/text mismatch
 
-Next work:
+### Export
 
-- [ ] ChargingPlace derived common-place aggregation from existing location text
-- [ ] common-place reuse in record entry only after aggregation proves useful
-- [ ] CSV analysis export
-- [ ] analytics wording polish for sparse samples and estimates
-- [ ] selected-period filters only if needed by actual usage
-- [ ] Privacy Zone before any route sharing/export
+- [x] full JSON backup remains recovery format
+- [x] selected-vehicle charging CSV analysis export
+- [x] UTF-8 BOM for Excel compatibility
+- [x] CSV escaping + derived price/kWh
+- [x] odometer / coordinate / accuracy fields included
+- [x] CSV JVM tests
+- [x] Android Build Run #169 Green + Debug APK
 
-Do not add heavy charting frameworks yet; Compose primitives are sufficient until data density proves otherwise.
+### Data anomaly hints
+
+Implemented; cumulative CI pending:
+
+- [x] extreme unit price warning
+- [x] energy > 135% battery capacity warning
+- [x] nearly-flat SOC with meaningful energy warning
+- [x] Add/Edit live warnings
+- [x] warnings never block save or mutate raw facts
+- [x] JVM rules tests
+- [ ] latest cumulative Android CI Green
+
+### Non-blocking follow-up
+
+- [ ] Privacy Zone before any route export/share
+- [ ] structured HOME / WORK / PUBLIC / HIGHWAY place type only if actual use proves value
+- [ ] DataSource metadata only where it changes interpretation
+- [ ] Room migration instrumentation QA
+
+No heavy charting framework and no new ChargingPlace Room table until real usage justifies them.
 
 ---
 
 ## v0.4 - Cloud & Catalog Sync
 
+状态: Next Major Phase / Not Started
+
+Candidate scope:
+
 - [ ] Spring Boot monolith
 - [ ] PostgreSQL
-- [ ] account
+- [ ] account / device identity
 - [ ] vehicle / charging / trip sync
 - [ ] catalog update pipeline (#20)
+- [ ] conflict / offline-first sync rules
 
-Cloud sync must not become the only recovery path.
+Cloud sync must not become the only recovery path. Existing local JSON backup remains supported.
 
 ---
 
 ## 当前执行顺序
 
 ```text
-ChargingPlace derived aggregation
-  -> cumulative Android CI
-  -> CSV analysis export
-  -> physical Trip / Bluetooth / Location acceptance continues in parallel
-  -> Privacy Zone before route sharing/export
-  -> v0.4 cloud/catalog only after local analytics is useful
+anomaly-warning cumulative CI
+  -> v0.3 code/document closeout
+  -> Privacy Zone only when route export/share starts
+  -> v0.4 sync/catalog design
+  -> implement smallest useful cloud sync slice
 ```
 
 ---
 
 ## 变更记录
 
+### v2.4.0
+
+- Trip #15 and Bluetooth #21 closed after latest physical functional verification
+- synced PR #24/#25 visual work as non-blocking business baseline
+- ChargingPlace derived aggregation and common-place entry reuse completed
+- CSV analysis export completed; Build Run #169 Green
+- added non-blocking charging anomaly warnings
+- v0.3 moved to Feature Complete Candidate pending final cumulative CI
+- next major phase identified as v0.4 Cloud & Catalog Sync
+
 ### v2.3.0
 
 - cumulative Android Build Run #142 Green
-- charger type fix and diagnostic coverage accepted
-- month-over-month comparison completed
-- zero-baseline sparse comparison handled without fake growth percentages
-- charger type cost / energy comparison already present in Stats
-- Android Release Run #3 signed build/upload/atomic activation accepted
-- #18 confirmed closed; removed stale acceptance gates
+- month-over-month and charger-type analytics completed
 - next active work moved to ChargingPlace derived aggregation
-
-### v2.2.0
-
-- v0.2 core code moved to Code Complete; physical-device acceptance remains parallel
-- synced ChargingIntervalAnalytics, Trip coverage, SOC confidence and interval detail work
-- synced Trip route geometry / no-basemap preview and Run #118
-- v0.3 officially marked Active Development
-- synced six-month trend and charger-type analytics
-- MapLibre explicitly kept non-blocking
-- Room migration instrumentation test moved to non-blocking database QA
-
-### v2.1.0
-
-- synced Location foundation and reverse geocoding
-- synced Bluetooth -> Trip confirmation
-- synced foreground Trip tracking, recovery/detail and sampling-quality work
