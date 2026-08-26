@@ -1,5 +1,6 @@
 package com.evchargebook.ui.dashboard
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -98,34 +99,87 @@ private fun EnergySummary(state: MainUiState) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.primaryContainer
+        color = MaterialTheme.colorScheme.inverseSurface
     ) {
         Column(Modifier.padding(MaterialTheme.spacing.lg)) {
-            Text("本月充电", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-            Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "ENERGY / MONTH",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.58f)
+                    )
+                    Spacer(Modifier.height(MaterialTheme.spacing.xxs))
+                    Text(
+                        state.vehicle?.let { "${it.brand} ${it.model}" } ?: "EV Charge Book",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.82f)
+                    )
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.inversePrimary.copy(alpha = 0.14f),
+                    shape = MaterialTheme.shapes.small,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.inversePrimary.copy(alpha = 0.36f))
+                ) {
+                    Row(
+                        Modifier.padding(horizontal = MaterialTheme.spacing.sm, vertical = MaterialTheme.spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(7.dp),
+                            color = MaterialTheme.colorScheme.inversePrimary,
+                            shape = MaterialTheme.shapes.extraLarge
+                        ) {}
+                        Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                        Text("本月", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inversePrimary)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(MaterialTheme.spacing.lg))
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     one(state.monthEnergy),
-                    style = MaterialTheme.typography.headlineMedium,
+                    style = MaterialTheme.typography.displayMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = MaterialTheme.colorScheme.inverseOnSurface
                 )
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("kWh", style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Text(
+                    "kWh",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.inversePrimary
+                )
             }
-            Spacer(Modifier.height(MaterialTheme.spacing.sm))
-            LinearProgressIndicator(
-                progress = { equivalent.coerceIn(0.0, 1.0).toFloat() },
-                modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.7f)
-            )
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             Text(
-                if (capacity > 0) "约 ${one(equivalent)} 次满充等效" else "完善车辆资料后显示满充等效",
+                "¥ ${two(state.monthCost)} · ${state.chargingCount} 次充电",
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
+                color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.72f)
             )
+
+            Spacer(Modifier.height(MaterialTheme.spacing.lg))
+            LinearProgressIndicator(
+                progress = { equivalent.coerceIn(0.0, 1.0).toFloat() },
+                modifier = Modifier.fillMaxWidth().height(5.dp),
+                color = MaterialTheme.colorScheme.inversePrimary,
+                trackColor = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.10f)
+            )
+            Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    if (capacity > 0) "≈ ${one(equivalent)} 次满充" else "补全车辆电池容量后显示",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.58f)
+                )
+                if (capacity > 0) {
+                    Text(
+                        "${one(capacity)} kWh / 次",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = 0.58f)
+                    )
+                }
+            }
         }
     }
 }
@@ -150,7 +204,7 @@ private fun MetricTile(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Column(Modifier.padding(MaterialTheme.spacing.md)) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
@@ -176,7 +230,7 @@ private fun RecentRecord(record: ChargingRecordEntity) {
         modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         shape = MaterialTheme.shapes.medium,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
             Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
