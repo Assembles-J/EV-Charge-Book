@@ -8,12 +8,14 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.evchargebook.MainActivity
 import com.evchargebook.data.database.AppDatabase
@@ -72,12 +74,28 @@ class TripTrackingService : Service() {
     private fun beginTracking(tripId: Long) {
         if (currentTripId == tripId) return
         currentTripId = tripId
-        startForeground(NOTIFICATION_ID, buildNotification())
+
+        val foregroundStarted = runCatching {
+            ServiceCompat.startForeground(
+                this,
+                NOTIFICATION_ID,
+                buildNotification(),
+                if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
+            )
+        }.isSuccess
+
+        if (!foregroundStarted) {
+            serviceScope.launch {
+                markInterrupted(tripId)
+                stopTrackingAndSelf()
+            }
+            return
+        }
 
         serviceScope.launch {
             val session = tripDao.getSession(tripId)
             if (session == null || session.status != TripStatus.RECORDING) {
-                stopSelf()
+                stopTrackingAndSelf()
                 return@launch
             }
             lastPoint = tripDao.getPoints(tripId).lastOrNull()
@@ -95,16 +113,20 @@ class TripTrackingService : Service() {
         }
 
         if (provider == null) {
-            serviceScope.launch { markInterrupted(tripId) }
-            stopSelf()
+            serviceScope.launch {
+                markInterrupted(tripId)
+                stopTrackingAndSelf()
+            }
             return
         }
 
         try {
             locationManager.requestLocationUpdates(provider, SAMPLE_INTERVAL_MS, SAMPLE_DISTANCE_METERS, locationListener)
         } catch (_: SecurityException) {
-            serviceScope.launch { markInterrupted(tripId) }
-            stopSelf()
+            serviceScope.launch {
+                markInterrupted(tripId)
+                stopTrackingAndSelf()
+            }
         }
     }
 
@@ -196,12 +218,7 @@ class TripTrackingService : Service() {
     private fun stopTrackingAndSelf() {
         runCatching { locationManager.removeUpdates(locationListener) }
         currentTripId = null
-        if (Build.VERSION.SDK_INT >= 24) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-        } else {
-            @Suppress("DEPRECATION")
-            stopForeground(true)
-        }
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 
