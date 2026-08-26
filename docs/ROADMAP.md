@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v1.5.0
+版本: v1.6.0
 更新时间: 2026-08-26
 
 ## 0. 路线原则
@@ -19,26 +19,42 @@
 
 - [x] Room / DAO / Repository / ViewModel
 - [x] 车辆创建 / 编辑持久化
-- [x] 充电记录新增 / 删除
+- [x] 充电记录新增 / 编辑 / 删除
 - [x] 历史真实列表
+- [x] 日期 / 时间选择
+- [x] charger type / remark
+- [x] 删除确认
+- [x] 保存成功 / 错误反馈
+- [x] 空状态
 - [x] Dashboard / Stats 真实基础统计
+- [x] 业务校验抽取到 ChargingRecordRules
+- [x] 统计聚合抽取到 ChargingStatistics
+- [x] 核心规则 / 统计单元测试
+- [x] Material 3 主题与主要页面视觉重构
 - [x] Gradle Wrapper / Android build scripts
 - [x] CI / Release workflow 基线
 - [x] 服务器原子 APK 部署脚本
 
-### 剩余
+### 当前验收阶段
 
-- [ ] 充电记录编辑接入 Repository/ViewModel
-- [ ] 日期 / 时间选择
-- [ ] charger type / remark
-- [ ] 删除确认 / 保存成功反馈
+P0 - Build / Installability
+
 - [ ] Android CI Green
 - [ ] Debug APK Artifact 验收
+- [ ] 真机安装 / 启动
+- [ ] 新增 / 编辑 / 删除充电记录真机走查
+- [ ] 车辆编辑真机走查
+- [ ] Dashboard / Records / Stats 数据一致性走查
+
+P1 - Production Release
+
 - [ ] assembleRelease Green
 - [ ] production signing secrets 验证
+- [ ] `/opt/ev-charge-book` 服务器目录权限验证
 - [ ] 首次 signed APK production publish
+- [ ] apksigner / SHA-256 / latest 原子切换验收
 
-v0.1 不继续扩功能。
+v0.1 不继续扩功能。CI / 真机验收发现的问题只做阻塞修复。
 
 ---
 
@@ -53,21 +69,27 @@ v0.1 不继续扩功能。
 - [ ] 通过 vehicleId + 时间 + odometer 建立充电区间与行程分析基础
 - [ ] 不建立错误的一充一行程硬外键
 
-### 多车辆
+### P0.5 数据可恢复
+
+- [ ] Local Backup / Restore
+- [ ] 导出前后校验记录数和核心字段
+- [ ] 恢复流程支持覆盖确认 / 防误操作
+
+### P1 多车辆
 
 - [ ] 多车辆创建
 - [ ] 当前/默认车辆
 - [ ] Dashboard / Records / Stats 按车辆隔离
 - [ ] 车辆归档
 
-### 车型目录
+### P1 车型目录
 
 - [ ] 本地车型目录 seed
 - [ ] 品牌 / 车系 / 年款 / 配置搜索
 - [ ] 选择车型后参数确认/覆盖
 - [ ] 自定义车型兜底
 
-### 定位 / 地图
+### P2 定位 / 地图
 
 - [ ] 获取当前位置
 - [ ] 充电记录绑定当前位置
@@ -75,7 +97,7 @@ v0.1 不继续扩功能。
 - [ ] MapLibre 轨迹地图
 - [ ] 地图 provider 可替换
 
-### 行程记录
+### P2 行程记录
 
 - [ ] 用户手动开始 / 结束
 - [ ] location foreground service
@@ -87,12 +109,11 @@ v0.1 不继续扩功能。
 - [ ] INTERRUPTED 行程恢复
 - [ ] 控制采样频率和数据库体积
 
-### P1 数据可靠性
+### P2 数据可靠性
 
 - [ ] 关键数据来源 DataSource 设计落地
 - [ ] 规则型异常检测
 - [ ] ChargingPlace 轻量地点复用
-- [ ] Local Backup / Restore
 
 ### 非目标
 
@@ -157,15 +178,18 @@ AI 必须区分事实、推算和建议，并利用 DataSource / accuracy 信息
 ## 当前执行顺序
 
 ```text
-v0.1 Charging Edit
-  -> CI Green + Debug APK
+v0.1 CI Green
+  -> Debug APK Artifact
+  -> Physical Device Acceptance
+  -> assembleRelease Green
   -> Signed Production APK
-  -> v0.1 Acceptance
+  -> v0.1 Release Accepted
   -> v0.2 odometerKm
+  -> Local Backup / Restore
   -> Multi Vehicle / Catalog
   -> Location + Manual Trip Tracking
   -> Trip Recovery / Stop Time
-  -> Local Backup / Data Quality
+  -> Data Quality / ChargingPlace
   -> Map Route Display
   -> v0.3 Analytics
 ```
@@ -173,6 +197,14 @@ v0.1 Charging Edit
 ---
 
 ## 变更记录
+
+### v1.6.0
+
+- commit `7204c56` 完成充电记录完整编辑、日期时间、充电类型、删除确认与反馈
+- v0.1 从“功能开发阶段”切换为“构建 / 真机 / 发布验收阶段”
+- Android CI Green 与 Debug APK 提升为当前 P0
+- v0.2 第一优先级固定为 odometerKm，其后为 Local Backup / Restore
+- 地图 / 行程继续后置，避免阻塞数据闭环和可恢复性
 
 ### v1.5.0
 
