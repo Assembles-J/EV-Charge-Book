@@ -43,9 +43,23 @@ fun MainApp(viewModel:MainViewModel){
   Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }, bottomBar={ if (!editVehicle && !addRecord && editingRecord == null) NavigationBar{titles.forEachIndexed{i,t->NavigationBarItem(selected=tab==i,onClick={tab=i},icon={Icon(listOf(Icons.Default.Home,Icons.Default.History,Icons.Default.BarChart,Icons.Default.DirectionsCar)[i],t)},label={Text(t)})}}}){p->
    Surface(Modifier.padding(p)){
     if(addRecord) {
-     AddRecordScreen(onBack={addRecord=false}, onSave={location,start,end,energy,cost,type,remark,time -> viewModel.addChargingRecord(start,end,energy,cost,location,type,remark,time); addRecord=false})
+     val vehicleId = state.vehicle?.id ?: 0L
+     AddRecordScreen(
+      vehicleId = vehicleId,
+      records = state.chargingRecords,
+      onBack = { addRecord=false },
+      onSave = { location,start,end,energy,cost,type,remark,time,odometer ->
+       viewModel.addChargingRecord(start,end,energy,cost,location,type,remark,time,odometer)
+       addRecord=false
+      }
+     )
     } else if(editingRecord != null) {
-     RecordEditScreen(record = editingRecord!!, onSave = { viewModel.updateChargingRecord(it); editingRecord = null }, onBack = { editingRecord = null })
+     RecordEditScreen(
+      record = editingRecord!!,
+      records = state.chargingRecords,
+      onSave = { viewModel.updateChargingRecord(it); editingRecord = null },
+      onBack = { editingRecord = null }
+     )
     } else if(editVehicle){
      val v=state.vehicle
      if(v!=null) VehicleEditScreen(v.brand,v.model,v.batteryCapacityKwh.toString(),v.rangeKm.toString(),{b,m,c,r->viewModel.saveVehicle(b,m,c,r);editVehicle=false},{editVehicle=false})
