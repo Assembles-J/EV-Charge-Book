@@ -93,9 +93,11 @@ fun MainApp(
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
     var pendingRestoreContent by remember { mutableStateOf<String?>(null) }
+    var pendingResumeTripId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(openTripConfirmation) {
         if (openTripConfirmation) {
+            viewModel.closeTripDetail()
             tab = 3
             snackbarHostState.showSnackbar("已检测到车辆蓝牙连接，请确认是否开始本次行程")
             onTripConfirmationConsumed()
@@ -130,8 +132,14 @@ fun MainApp(
     }
     val tripLocationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { grants ->
         val granted = grants[Manifest.permission.ACCESS_FINE_LOCATION] == true || grants[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (granted) viewModel.startTrip()
-        else scope.launch { snackbarHostState.showSnackbar("需要定位权限才能记录真实行程轨迹") }
+        if (granted) {
+            val resumeId = pendingResumeTripId
+            pendingResumeTripId = null
+            if (resumeId != null) viewModel.resumeTrip(resumeId) else viewModel.startTrip()
+        } else {
+            pendingResumeTripId = null
+            scope.launch { snackbarHostState.showSnackbar("需要定位权限才能记录真实行程轨迹") }
+        }
     }
 
     val titles = listOf("总览", "记录", "统计", "行程", "车辆")
@@ -139,17 +147,30 @@ fun MainApp(
     LaunchedEffect(state.successMessage) { state.successMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearSuccess() } }
     LaunchedEffect(state.errorMessage) { state.errorMessage?.let { snackbarHostState.showSnackbar(it); viewModel.clearError() } }
 
-    fun startTripWithPermission() {
+    fun hasLocationPermission(): Boolean {
         val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (fineGranted || coarseGranted) viewModel.startTrip()
+        return fineGranted || coarseGranted
+    }
+
+    fun startTripWithPermission() {
+        pendingResumeTripId = null
+        if (hasLocationPermission()) viewModel.startTrip()
         else tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+    }
+
+    fun resumeTripWithPermission(tripId: Long) {
+        if (hasLocationPermission()) viewModel.resumeTrip(tripId)
+        else {
+            pendingResumeTripId = tripId
+            tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
     }
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
-            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !bluetoothPrompt && !addRecord && editingRecord == null) {
+            if (!editVehicle && !addVehicle && !selectCatalogVehicle && !bluetoothPrompt && !addRecord && editingRecord == null && state.selectedTripId == null) {
                 NavigationBar {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(icons[index], title) }, label = { Text(title) })
@@ -195,7 +216,20 @@ fun MainApp(
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
-                    3 -> TripScreen(state.vehicle, state.vehicles, state.trips, state.activeTrip, ::startTripWithPermission, viewModel::stopTrip, viewModel::deleteTrip)
+                    3 -> TripScreen(
+                        vehicle = state.vehicle,
+                        vehicles = state.vehicles,
+                        trips = state.trips,
+                        activeTrip = state.activeTrip,
+                        selectedTripId = state.selectedTripId,
+                        selectedTripPoints = state.selectedTripPoints,
+                        onStart = ::startTripWithPermission,
+                        onResume = ::resumeTripWithPermission,
+                        onStop = viewModel::stopTrip,
+                        onOpenDetail = viewModel::openTripDetail,
+                        onCloseDetail = viewModel::closeTripDetail,
+                        onDelete = viewModel::deleteTrip
+                    )
                     4 -> VehicleScreen(
                         vehicle = state.vehicle,
                         vehicles = state.vehicles,
