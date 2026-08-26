@@ -103,7 +103,13 @@ fun AddRecordScreen(
                     OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
                     OutlinedButton(onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
                 }
-                OutlinedTextField(location, { newValue -> location = newValue; if (newValue != location) locationFix = null }, label = { Text("充电地点") }, placeholder = { Text("例如：公司地库 3 号桩") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                OutlinedTextField(location, { newValue ->
+                    if (newValue != location) {
+                        locationFix = null
+                        addressMessage = null
+                    }
+                    location = newValue
+                }, label = { Text("充电地点") }, placeholder = { Text("例如：公司地库 3 号桩") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                 if (commonPlaces.isNotEmpty()) {
                     Text("常用地点", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
