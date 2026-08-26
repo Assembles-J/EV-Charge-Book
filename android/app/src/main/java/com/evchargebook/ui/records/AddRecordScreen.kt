@@ -15,6 +15,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
+import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -23,8 +25,20 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddRecordScreen(
+    vehicleId: Long,
+    records: List<ChargingRecordEntity>,
     onBack: () -> Unit,
-    onSave: (location: String?, startSoc: Int, endSoc: Int, energyKwh: Double, cost: Double, chargerType: String, remark: String?, chargeTime: Long) -> Unit
+    onSave: (
+        location: String?,
+        startSoc: Int,
+        endSoc: Int,
+        energyKwh: Double,
+        cost: Double,
+        chargerType: String,
+        remark: String?,
+        chargeTime: Long,
+        odometerKm: Double?
+    ) -> Unit
 ) {
     val context = LocalContext.current
     val calendar = remember { Calendar.getInstance() }
@@ -35,10 +49,16 @@ fun AddRecordScreen(
     var endSoc by remember { mutableStateOf("") }
     var energy by remember { mutableStateOf("") }
     var cost by remember { mutableStateOf("") }
+    var odometer by remember { mutableStateOf("") }
     var chargerType by remember { mutableStateOf("公共慢充") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     val dateText = remember(chargeTime) { SimpleDateFormat("yyyy年M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val timeText = remember(chargeTime) { SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
+    val previousOdometer = remember(records, vehicleId, chargeTime) {
+        ChargingRecordRules.previousOdometerKm(records, vehicleId, chargeTime)
+    }
+    val odometerValue = odometer.toDoubleOrNull()
+    val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
 
     Scaffold(topBar = { TopAppBar(title = { Text("添加充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).padding(MaterialTheme.spacing.md).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
@@ -51,6 +71,10 @@ fun AddRecordScreen(
             OutlinedTextField(location, { location = it }, label = { Text("充电地点（可选）") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
             Text("充电方式", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) { listOf("家充", "公共慢充", "公共快充").forEach { type -> FilterChip(selected = chargerType == type, onClick = { chargerType = type }, label = { Text(type) }) } }
+            Text("车辆里程（可选）", style = MaterialTheme.typography.titleSmall)
+            AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
+            previousOdometer?.let { Text("上一条有效里程：${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
             Text("电池与费用", style = MaterialTheme.typography.titleSmall)
             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { AddNumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number); AddNumberField(endSoc, { endSoc = it.filter(Char::isDigit) }, "结束 SOC", "%", Modifier.weight(1f), KeyboardType.Number) }
             AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.fillMaxWidth(), KeyboardType.Decimal)
@@ -58,12 +82,21 @@ fun AddRecordScreen(
             OutlinedTextField(remark, { remark = it }, label = { Text("备注（可选）") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Button(onClick = {
-                val start = startSoc.toIntOrNull(); val end = endSoc.toIntOrNull(); val energyValue = energy.toDoubleOrNull(); val costValue = cost.toDoubleOrNull()
-                errorMessage = when { start == null || start !in 0..100 -> "请输入 0~100 的起始 SOC"; end == null || end !in 0..100 -> "请输入 0~100 的结束 SOC"; end < start -> "结束 SOC 不能低于起始 SOC"; energyValue == null || energyValue <= 0 -> "充电量必须大于 0"; costValue == null || costValue < 0 -> "费用不能小于 0"; else -> null }
-                if (errorMessage == null) onSave(location.trim().takeIf { it.isNotEmpty() }, start!!, end!!, energyValue!!, costValue!!, chargerType, remark.trim().takeIf { it.isNotEmpty() }, chargeTime)
+                val start = startSoc.toIntOrNull(); val end = endSoc.toIntOrNull(); val energyValue = energy.toDoubleOrNull(); val costValue = cost.toDoubleOrNull(); val odometerKm = odometer.toDoubleOrNull()
+                errorMessage = when {
+                    start == null || start !in 0..100 -> "请输入 0~100 的起始 SOC"
+                    end == null || end !in 0..100 -> "请输入 0~100 的结束 SOC"
+                    end < start -> "结束 SOC 不能低于起始 SOC"
+                    energyValue == null || energyValue <= 0 -> "充电量必须大于 0"
+                    costValue == null || costValue < 0 -> "费用不能小于 0"
+                    odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
+                    else -> null
+                }
+                if (errorMessage == null) onSave(location.trim().takeIf { it.isNotEmpty() }, start!!, end!!, energyValue!!, costValue!!, chargerType, remark.trim().takeIf { it.isNotEmpty() }, chargeTime, odometerKm)
             }, modifier = Modifier.fillMaxWidth()) { Text("保存记录") }
         }
     }
 }
 
 @Composable private fun AddNumberField(value: String, onChange: (String) -> Unit, label: String, suffix: String, modifier: Modifier, keyboardType: KeyboardType) { OutlinedTextField(value, onChange, label = { Text(label) }, suffix = { Text(suffix) }, keyboardOptions = KeyboardOptions(keyboardType = keyboardType), modifier = modifier, singleLine = true) }
+private fun formatKm(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
