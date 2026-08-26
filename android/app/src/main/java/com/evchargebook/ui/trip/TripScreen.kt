@@ -1,5 +1,6 @@
 package com.evchargebook.ui.trip
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,11 +15,16 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.trip.TripGeoPoint
+import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -188,6 +194,9 @@ private fun TripDetailScreen(
                     }
                 }
             }
+            if (points.size >= 2) {
+                item { TripRoutePreview(points) }
+            }
             item {
                 OutlinedCard(Modifier.fillMaxWidth()) {
                     Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
@@ -196,7 +205,7 @@ private fun TripDetailScreen(
                         firstPoint?.let { Text("起点：${formatCoordinate(it.latitude)}, ${formatCoordinate(it.longitude)}") }
                         lastPoint?.let { Text("终点：${formatCoordinate(it.latitude)}, ${formatCoordinate(it.longitude)}") }
                         if (points.isEmpty()) Text("本次没有保存有效 GPS 轨迹点。不会根据时间或直线距离伪造路线。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        else Text("地图路线将在 MapProvider 接入后直接使用这些 WGS84 轨迹点绘制。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        else Text("当前已可预览真实轨迹形状；后续地图底图只替换渲染层，不改变这些 WGS84 轨迹事实。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -217,6 +226,64 @@ private fun TripDetailScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TripRoutePreview(points: List<TripPointEntity>) {
+    val geometry = remember(points) {
+        TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude) })
+    }
+    if (geometry == null || !geometry.isDrawable) return
+
+    val routeColor = MaterialTheme.colorScheme.primary
+    val startColor = MaterialTheme.colorScheme.tertiary
+    val endColor = MaterialTheme.colorScheme.error
+    val borderColor = MaterialTheme.colorScheme.outlineVariant
+
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("轨迹预览", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("${geometry.points.size} 点", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Canvas(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+            ) {
+                val paddingPx = 20.dp.toPx()
+                val width = (size.width - paddingPx * 2).coerceAtLeast(1f)
+                val height = (size.height - paddingPx * 2).coerceAtLeast(1f)
+                val offsets = geometry.points.map { point ->
+                    Offset(
+                        x = paddingPx + point.x * width,
+                        y = paddingPx + point.y * height
+                    )
+                }
+
+                drawRect(
+                    color = borderColor,
+                    topLeft = Offset(paddingPx / 2, paddingPx / 2),
+                    size = androidx.compose.ui.geometry.Size(size.width - paddingPx, size.height - paddingPx),
+                    style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.dp.toPx())
+                )
+                offsets.zipWithNext().forEach { (from, to) ->
+                    drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+                }
+                drawCircle(startColor, radius = 6.dp.toPx(), center = offsets.first())
+                drawCircle(endColor, radius = 6.dp.toPx(), center = offsets.last())
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("起点", style = MaterialTheme.typography.labelMedium, color = startColor)
+                Text("终点", style = MaterialTheme.typography.labelMedium, color = endColor)
+            }
+            Text(
+                "仅按本次真实 WGS84 轨迹点归一化绘制，不含道路吸附、地图匹配或虚构路线。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
