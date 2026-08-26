@@ -1,17 +1,19 @@
 package com.evchargebook.data.repository
 
-import com.evchargebook.data.dao.ChargingRecordDao
-import com.evchargebook.data.dao.VehicleDao
+import androidx.room.withTransaction
+import com.evchargebook.data.backup.BackupCodec
+import com.evchargebook.data.backup.BackupPayload
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.ChargingRecordRules
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 
-class ChargingRepository(
-    private val vehicleDao: VehicleDao,
-    private val chargingRecordDao: ChargingRecordDao
-) {
+class ChargingRepository(private val database: AppDatabase) {
+    private val vehicleDao = database.vehicleDao()
+    private val chargingRecordDao = database.chargingRecordDao()
+
     val vehicle: Flow<VehicleEntity?> = vehicleDao.observePrimaryVehicle()
     val chargingRecords: Flow<List<ChargingRecordEntity>> = chargingRecordDao.observeAll()
 
@@ -25,6 +27,26 @@ class ChargingRepository(
                     rangeKm = 520
                 )
             )
+        }
+    }
+
+    suspend fun exportBackup(appVersion: String): String = BackupCodec.encode(
+        BackupPayload(
+            schemaVersion = BackupCodec.CURRENT_SCHEMA_VERSION,
+            exportedAt = System.currentTimeMillis(),
+            appVersion = appVersion,
+            vehicles = vehicleDao.getAll(),
+            chargingRecords = chargingRecordDao.getAll()
+        )
+    )
+
+    suspend fun restoreBackup(content: String) {
+        val payload = BackupCodec.decode(content)
+        database.withTransaction {
+            chargingRecordDao.deleteAll()
+            vehicleDao.deleteAll()
+            vehicleDao.insertAll(payload.vehicles)
+            chargingRecordDao.insertAll(payload.chargingRecords)
         }
     }
 
