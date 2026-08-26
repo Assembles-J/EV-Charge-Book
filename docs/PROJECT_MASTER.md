@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v1.5.0
+版本: v1.6.0
 更新时间: 2026-08-26
 状态: Authority Document / Single Source of Truth
 
@@ -56,26 +56,39 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 
 ---
 
-## 4. 当前阶段: v0.1 Local Charging Book
+## 4. 当前阶段: v0.1 Acceptance
 
-已落地:
+v0.1 核心业务闭环已经完成实现：
 
 - Room Vehicle / ChargingRecord
 - DAO / AppDatabase / Repository
 - MainViewModel + StateFlow
 - 车辆编辑持久化
-- 新增 / 删除充电记录
-- 真实 Dashboard / Records / Stats
+- 充电记录新增 / 编辑 / 删除
+- 日期 / 时间选择
+- charger type / remark
+- 删除确认
+- 保存成功 / 错误反馈
+- 空状态
+- Dashboard / Records / Stats 真实数据
+- ChargingRecordRules / ChargingStatistics
+- 核心规则与统计单元测试
+- Material 3 主题与主要页面视觉重构
 - Gradle Wrapper
 - CI / Release / atomic deploy 基线
 
-仍需完成:
+当前不再继续扩 v0.1 功能，进入验收门禁：
 
-- 充电记录更新闭环
-- 日期时间 / 充电类型 / remark
-- 删除确认 / 保存反馈
-- Debug CI Green / APK Artifact
-- signed production APK 首次验收
+```text
+Android CI Green
+ -> Debug APK Artifact
+ -> Physical Device Walkthrough
+ -> assembleRelease Green
+ -> Signed Production APK
+ -> v0.1 Release Accepted
+```
+
+仅修复阻塞构建、安装、数据正确性和发布的问题。
 
 地图、驾驶轨迹、车型库、多车辆、odometer、备份等不得阻塞 v0.1 发布。
 
@@ -101,14 +114,24 @@ Driving interval / Trip data
 
 充电与 Trip 不建立错误的一对一硬外键；通过车辆、时间、里程和行程汇总进行分析关联。
 
-### 多车辆 / 车型目录
+### P0.5: Local Backup / Restore
+
+在多车辆、地图、行程等功能继续扩展前，先保证用户本地数据可恢复：
+
+- backup format 有版本号
+- 备份包含 Vehicle / ChargingRecord
+- 导出前后进行记录数 / 核心字段校验
+- restore 明确覆盖 / 合并策略
+- 破坏性恢复必须二次确认
+
+### P1: 多车辆 / 车型目录
 
 - UserVehicle 支持多辆车
 - selected/default vehicle
 - 本地车型目录 + 自定义兜底
 - Dashboard / Records / Stats 按车辆隔离
 
-### 定位 / 行程
+### P2: 定位 / 行程
 
 - Android Location API 为记录核心
 - WGS84 原始坐标
@@ -119,13 +142,12 @@ Driving interval / Trip data
 - 支持 INTERRUPTED 行程恢复
 - 控制采样频率、电量和数据库体积
 
-### P1: 数据可靠性
+### P2: 数据可靠性
 
 - 关键数据标记 DataSource
 - accuracy 使用系统真实精度字段
 - 确定性规则优先发现异常
 - ChargingPlace 支持常用地点分类
-- Local Backup / Restore 在云同步之前提供
 
 ---
 
@@ -210,16 +232,17 @@ CI 详细状态由 Issue #7 跟踪。
 ## 10. 当前执行顺序
 
 ```text
-Charging Record full CRUD
- -> Android CI Green
- -> Debug APK
+CI Green
+ -> Debug APK Artifact
+ -> Physical Device Acceptance
  -> Signed Production APK
- -> v0.1 Acceptance
+ -> v0.1 Release Accepted
  -> odometerKm
+ -> Local Backup / Restore
  -> Multi Vehicle / Vehicle Catalog
  -> Location / Trip Tracking
  -> Trip Recovery + Stop Time
- -> Local Backup / Data Quality
+ -> Data Quality / ChargingPlace
  -> Map Display
  -> Analytics
 ```
@@ -227,6 +250,14 @@ Charging Record full CRUD
 ---
 
 ## 11. 决策记录
+
+### v1.6.0
+
+- commit `7204c56` 完成充电记录完整编辑与主要 UX 收口
+- v0.1 正式从功能开发阶段切换到 Acceptance 阶段
+- 当前 P0 为 CI Green、Debug APK 与真机走查
+- v0.2 第一优先级固定为 odometerKm，随后 Local Backup / Restore
+- 地图 / 行程继续后置，避免提前扩大复杂度
 
 ### v1.5.0
 
