@@ -1,142 +1,201 @@
 # EV Charge Book Database Design
 
-Version: v1.2.0
-
-更新时间: 2026-08-25
+Version: v1.3.0
+更新时间: 2026-08-26
 
 ## 1. Design Principle
 
-Local First。
-
-v0.1 Android Room/SQLite 是唯一事实数据源；统计值优先动态聚合，不提前持久化冗余汇总表。
+Local First。Room/SQLite 保存用户真实业务数据；统计值优先动态聚合。车型目录属于参考数据，用户车辆属于业务数据，两者分离。
 
 ---
 
-## 2. Vehicle
+## 2. UserVehicle / Vehicle
 
-表名: `vehicles`
+当前 `vehicles` 在 v0.1 已存在:
 
-字段:
+- id
+- brand
+- model
+- batteryCapacityKwh
+- rangeKm
 
-- `id: Long` PK autoGenerate
-- `brand: String`
-- `model: String`
-- `batteryCapacityKwh: Double`
-- `rangeKm: Int`
+v0.2 演进字段:
 
-约束:
+- catalogVehicleId: String? nullable
+- nickname: String?
+- isDefault: Boolean
+- isArchived: Boolean
+- createdAt: Long
 
-- brand/model 非空
-- batteryCapacityKwh > 0
-- rangeKm > 0
-
-v0.1 支持单车优先，但模型保持一对多扩展能力。
+车型目录更新不得自动覆盖用户车辆参数。
 
 ---
 
-## 3. ChargingRecord
+## 3. VehicleCatalog
 
-表名: `charging_records`
+v0.2 新增本地参考表或 seed repository:
 
-字段:
+- catalogId: String PK
+- source
+- sourceModelCode?
+- brand
+- series
+- modelName
+- modelYear?
+- trimName?
+- powertrainType
+- batteryCapacityKwh?
+- rangeKm?
+- rangeStandard?
+- batteryChemistry?
+- manufacturer?
+- isActive
+- sourceUpdatedAt?
 
-- `id: Long` PK autoGenerate
-- `vehicleId: Long`
-- `chargeTimeEpochMillis: Long`
-- `startSoc: Int`
-- `endSoc: Int`
-- `energyKwh: Double`
-- `cost: Double`
-- `chargerType: String?`
-- `location: String?`
-- `remark: String?`
+VehicleCatalog 可重建/更新；UserVehicle 不可因目录刷新丢失。
 
-派生值 `pricePerKwh` 不持久化，读取时按 `cost / energyKwh` 计算，避免修改费用或电量后出现数据不一致。
+---
 
-约束:
+## 4. ChargingRecord
 
-- startSoc/endSoc: 0..100
-- endSoc >= startSoc
-- energyKwh > 0
-- cost >= 0
+现有核心字段保持:
+
+- id
+- vehicleId
+- chargeTimeEpochMillis
+- startSoc / endSoc
+- energyKwh
+- cost
+- chargerType?
+- location?
+- remark?
+
+v0.2 可选增加:
+
+- latitude: Double?
+- longitude: Double?
+- locationAccuracyMeters: Float?
+
+原始坐标统一保存 WGS84；地图 adapter 需要其他坐标系时只在显示层转换。
+
+所有充电查询必须支持按 vehicleId 过滤。
+
+---
+
+## 5. TripSession
+
+v0.2 新增:
+
+- id: Long PK
+- vehicleId: Long
+- startedAtEpochMillis: Long
+- endedAtEpochMillis: Long?
+- distanceMeters: Double
+- elapsedSeconds: Long
+- averageSpeedMps: Double?
+- maxSpeedMps: Double?
+- startLatitude / startLongitude: Double?
+- endLatitude / endLongitude: Double?
+- startAltitudeMeters: Double?
+- endAltitudeMeters: Double?
+- minAltitudeMeters: Double?
+- maxAltitudeMeters: Double?
+- status: RECORDING / COMPLETED / INTERRUPTED
+
+汇总字段只在行程结束时落盘，原始依据保存在 TripPoint。
+
+---
+
+## 6. TripPoint
+
+- id: Long PK
+- tripId: Long
+- capturedAtEpochMillis: Long
+- latitude: Double
+- longitude: Double
+- altitudeMeters: Double?
+- speedMps: Float?
+- bearingDegrees: Float?
+- horizontalAccuracyMeters: Float?
+- verticalAccuracyMeters: Float?
+- speedAccuracyMps: Float?
+- provider: String?
 
 索引:
 
-- `vehicleId`
-- `chargeTimeEpochMillis`
+- tripId
+- capturedAtEpochMillis
 
-默认查询按 `chargeTimeEpochMillis DESC`。
+删除 TripSession 时应级联或由 Repository 显式删除 TripPoint。
 
----
-
-## 4. v0.1 Statistics
-
-不创建 `CostSummary` 实体。
-
-由 DAO/Repository 动态聚合:
-
-- monthCost = SUM(cost)
-- monthEnergy = SUM(energyKwh)
-- chargingCount = COUNT(*)
-- totalCost = SUM(cost)
-- totalEnergy = SUM(energyKwh)
-- averagePrice = totalCost / totalEnergy
-
-月度边界由应用层计算 `[monthStart, nextMonthStart)` 后传入 DAO。
+GPS 海拔为原始传感/定位数据，爬升量等指标必须经过过滤/平滑后再计算。
 
 ---
 
-## 5. Relationship
+## 7. Relationships
 
 ```text
-Vehicle 1
-   |
-   | N
-ChargingRecord
+VehicleCatalog 0..1 ---- 1 UserVehicle
+
+UserVehicle 1 ---- N ChargingRecord
+UserVehicle 1 ---- N TripSession
+TripSession  1 ---- N TripPoint
 ```
 
-v0.1 可不启用 SQLite 外键级联，删除车辆前必须由业务层处理关联记录；云同步阶段再评估严格外键策略。
+---
+
+## 8. Multi-Vehicle Query Rule
+
+v0.2 起任何 Dashboard / Records / Stats / Trip 查询必须明确数据范围:
+
+- selectedVehicleId
+- 或显式 allVehicles
+
+禁止默认把所有车辆数据混合后冒充当前车辆数据。
+
+当前车辆 ID 建议保存在 DataStore，不作为业务表重复字段。
 
 ---
 
-## 6. Future Entities
+## 9. v0.1 Statistics
 
-以下实体不进入 v0.1 Room 基线:
+保持:
 
-- DrivingRecord
-- BatteryHealth
-- CostSummary persisted table
-- User / Sync metadata
+- monthCost
+- monthEnergy
+- chargingCount
+- totalCost
+- totalEnergy
+- averagePrice
 
-进入对应版本前必须先更新本文件。
-
----
-
-## 7. Migration Rule
-
-数据库版本从 `1` 开始。
-
-任何字段删除、重命名、类型修改必须:
-
-1. 更新 DATABASE.md 版本
-2. 增加 Room Migration
-3. 增加迁移测试
-4. 禁止 Release 使用 destructive migration
-
-开发早期 Debug 可临时重装应用，但不能把 destructive migration 当正式迁移方案。
+`pricePerKwh` 继续作为派生值，不持久化。
 
 ---
 
-## 8. 变更记录
+## 10. Migration Rule
+
+数据库 schema 变化必须:
+
+1. 更新 DATABASE.md
+2. 提升 Room database version
+3. 增加 Migration
+4. 增加迁移测试
+5. Release 禁止 destructive migration
+
+Trip/VehicleCatalog 进入实现时必须先提供对应 Migration，而不是删除用户现有 v0.1 数据。
+
+---
+
+## 11. 变更记录
+
+### v1.3.0
+
+- 增加 VehicleCatalog / UserVehicle 分层
+- 增加多车辆状态字段
+- 增加 ChargingRecord 可选经纬度
+- 定义 TripSession / TripPoint
+- 明确 WGS84 原始坐标和多车辆查询范围
 
 ### v1.2.0
 
-- 将设计落到 v0.1 可实现 Room schema
-- ChargingRecord 增加 vehicleId / chargeTime / chargerType / remark
-- pricePerKwh 改为派生值
-- 明确 v0.1 不持久化 CostSummary
-- 明确统计口径、索引和 Migration 规则
-
-### v1.1.0
-
-- 建立 Vehicle / ChargingRecord / DrivingRecord / BatteryHealth / CostSummary 初始模型
+- 落地 v0.1 Room schema、统计口径和 Migration 规则
