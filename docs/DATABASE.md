@@ -1,31 +1,36 @@
 # EV Charge Book Database Design
 
-Version: v1.4.0
+Version: v1.5.0
 更新时间: 2026-08-26
 
 ## 1. Design Principle
 
 Local First。Room/SQLite 保存用户真实业务数据；统计值优先动态聚合。车型目录属于参考数据，用户车辆属于业务数据，两者分离。
 
+Room numeric `id` 是本地关系键；从 v0.4 起，跨设备同步不得直接把本地自增 id 当成全局身份。
+
 ---
 
 ## 2. UserVehicle / Vehicle
 
-当前 `vehicles` 在 v0.1 已存在:
+当前核心字段:
 
-- id
+- id: Long PK / local relational key
+- catalogVehicleId: String?
 - brand
 - model
 - batteryCapacityKwh
 - rangeKm
+- isDefault
+- isArchived
+- createdAtEpochMillis
 
-v0.2 演进字段:
+v0.4 Sync Phase A 计划新增:
 
-- catalogVehicleId: String? nullable
-- nickname: String?
-- isDefault: Boolean
-- isArchived: Boolean
-- createdAt: Long
+- syncId: String — 跨设备稳定身份，生成后不可因编辑改变
+- updatedAtEpochMillis: Long — 用户/业务字段最后一次本地修改时间
+
+Vehicle archive 是现有业务状态，不等同于云端 delete/tombstone。第一批不为了同步新增“删除车辆”能力。
 
 车型目录更新不得自动覆盖用户车辆参数。
 
@@ -33,11 +38,10 @@ v0.2 演进字段:
 
 ## 3. VehicleCatalog
 
-v0.2 新增本地参考表或 seed repository:
+本地参考数据:
 
 - catalogId: String PK
 - source
-- sourceModelCode?
 - brand
 - series
 - modelName
@@ -46,22 +50,18 @@ v0.2 新增本地参考表或 seed repository:
 - powertrainType
 - batteryCapacityKwh?
 - rangeKm?
-- rangeStandard?
-- batteryChemistry?
-- manufacturer?
-- isActive
 - sourceUpdatedAt?
 
-VehicleCatalog 可重建/更新；UserVehicle 不可因目录刷新丢失。
+VehicleCatalog 可重建/更新；UserVehicle 不可因目录刷新丢失。Catalog 的远端更新协议与用户 Vehicle 同步分离。
 
 ---
 
 ## 4. ChargingRecord
 
-现有核心字段保持:
+核心字段:
 
-- id
-- vehicleId
+- id: Long PK / local relational key
+- vehicleId: Long
 - chargeTimeEpochMillis
 - startSoc / endSoc
 - energyKwh
@@ -69,29 +69,39 @@ VehicleCatalog 可重建/更新；UserVehicle 不可因目录刷新丢失。
 - chargerType?
 - location?
 - remark?
+- odometerKm?
+- latitude?
+- longitude?
+- locationAccuracyMeters?
 
-高价值演进字段:
+v0.4 Sync Phase A 计划新增:
 
-- odometerKm: Double? — 用于两次充电之间真实行驶里程和百公里成本/电量分析
-- latitude: Double?
-- longitude: Double?
-- locationAccuracyMeters: Float?
-- dataSource: String? — MANUAL / OCR / VEHICLE_API 等，在对应功能进入实现时启用
-
-`odometerKm` 不强制进入 v0.1 发布，但应优先于复杂 Analytics 落地。
+- syncId: String — 跨设备稳定身份
+- updatedAtEpochMillis: Long — 最后一次业务修改时间
+- isDeleted: Boolean — 同步 tombstone，本地普通列表/统计必须排除
 
 规则:
 
-- 同一车辆新录入 odometerKm 低于上一条可靠里程时提示检查
-- 不因异常提示直接丢弃用户记录
-- 原始坐标统一保存 WGS84
-- 所有充电查询必须支持按 vehicleId 过滤
+- 用户删除 ChargingRecord 后，未来同步模式下保留 tombstone，避免旧设备重新上传“复活”数据。
+- tombstone 不参与 Dashboard / Records / Stats / CSV 正常分析。
+- 完整 JSON Backup 在进入 sync metadata 版本后应保留 tombstone，以保证跨设备删除语义可恢复。
+- 本地 `vehicleId` 继续作为 Room 关系键；远端协议通过 Vehicle.syncId 关联，不要求本阶段重写所有外键。
+- 同一车辆新录入 odometerKm 低于上一条可靠里程时提示检查，不静默修改。
+- 原始坐标统一保存 WGS84。
 
 ---
 
-## 5. ChargingPlace（后续）
+## 5. ChargingPlace
 
-当地点复用需求稳定后再增加:
+当前不新增独立 Room 表。
+
+已有 location snapshot 文本已经支持：
+
+- common-place aggregation
+- count / energy / cost / average price
+- Top common-place quick reuse
+
+只有真实使用证明文本聚合不够时，才考虑结构化：
 
 - id
 - name
@@ -100,13 +110,13 @@ VehicleCatalog 可重建/更新；UserVehicle 不可因目录刷新丢失。
 - longitude?
 - note?
 
-ChargingRecord 现阶段仍保留 location snapshot，未来即使关联 ChargingPlace 也不得依赖地点表才能展示历史记录。
+历史 ChargingRecord 永远保留 location snapshot，不依赖地点表才能展示。
 
 ---
 
 ## 6. TripSession
 
-v0.2 新增:
+当前字段:
 
 - id: Long PK
 - vehicleId: Long
@@ -114,153 +124,157 @@ v0.2 新增:
 - endedAtEpochMillis: Long?
 - distanceMeters: Double
 - elapsedSeconds: Long
-- movingSeconds: Long?
-- stoppedSeconds: Long?
-- averageSpeedMps: Double?
-- maxSpeedMps: Double?
-- startLatitude / startLongitude: Double?
-- endLatitude / endLongitude: Double?
-- startAltitudeMeters: Double?
-- endAltitudeMeters: Double?
-- minAltitudeMeters: Double?
-- maxAltitudeMeters: Double?
+- movingSeconds / stoppedSeconds
+- averageSpeedMps / maxSpeedMps
+- start/end coordinates
+- start/end/min/max altitude
 - status: RECORDING / COMPLETED / INTERRUPTED
 
-`elapsedSeconds`、`movingSeconds`、`stoppedSeconds` 必须明确口径，避免服务区停车导致平均速度误导。
-
-App 启动时若存在 RECORDING / INTERRUPTED 行程，应进入恢复流程，而不是静默创建新 Trip。
+Trip sync 不进入 v0.4 第一批。先验证 Vehicle + ChargingRecord 的跨设备闭环，再增加 TripSession.syncId/updatedAt。
 
 ---
 
 ## 7. TripPoint
 
-- id: Long PK
-- tripId: Long
-- capturedAtEpochMillis: Long
-- latitude: Double
-- longitude: Double
-- altitudeMeters: Double?
-- speedMps: Float?
-- bearingDegrees: Float?
-- horizontalAccuracyMeters: Float?
-- verticalAccuracyMeters: Float?
-- speedAccuracyMps: Float?
-- provider: String?
+TripPoint 保持当前 append-heavy GPS 数据模型。
 
-索引:
+TripPoint 同步最后接入，因为它数据量最大。未来应采用 stable identity + append/idempotent upsert，不做点级 CRDT 或“智能路线修正”。
 
-- tripId
-- capturedAtEpochMillis
-
-删除 TripSession 时应级联或由 Repository 显式删除 TripPoint。
-
-GPS 海拔为原始定位数据，爬升量等指标必须经过过滤/平滑后再计算。
-
-采样频率不得无限提高；优先 2-5 秒 + 位移阈值 + 静止降频，控制耗电和数据库体积。
+GPS 海拔、坐标、accuracy 都是原始事实；服务端不得为了路线好看静默改写。
 
 ---
 
 ## 8. Charging / Trip Data Link
 
-不强制建立一对一外键。
+不强制 ChargingRecord <-> TripSession 一对一外键。
 
-分析层通过以下数据关联:
+分析通过：
 
 - vehicleId
-- ChargingRecord.odometerKm
+- odometerKm
 - chargeTimeEpochMillis
-- TripSession 时间范围 / distanceMeters
+- Trip 时间范围 / distanceMeters
 
-这样允许“一次充电覆盖多次行程”或“多次补能覆盖一个使用区间”，避免错误的一对一建模。
+这样支持一次充电覆盖多次行程或多次补能覆盖一个使用区间。
 
 ---
 
-## 9. Relationships
+## 9. Sync Identity & Conflict Model
+
+### 9.1 Local id vs syncId
 
 ```text
-VehicleCatalog 0..1 ---- 1 UserVehicle
+Room id
+  = 当前设备内部关系键
 
-UserVehicle 1 ---- N ChargingRecord
-UserVehicle 1 ---- N TripSession
-TripSession  1 ---- N TripPoint
-
-ChargingPlace 0..1 ---- N ChargingRecord (future optional reference)
+syncId
+  = 跨设备/服务端稳定业务身份
 ```
+
+禁止用 Room 自增 id 直接做远端全局主键。
+
+### 9.2 First-version conflict rule
+
+不引入 CRDT：
+
+- 同一 syncId 的显式编辑按 updatedAtEpochMillis 决定最新版本
+- 不做字段级自动拼接
+- 删除用 tombstone 传播
+- odometer / SOC / GPS 等原始事实不自动“纠错”
+- 重复 push/pull 必须幂等
+
+如果未来发现设备时钟偏差会影响冲突判断，再引入 server revision/cursor；第一批不提前增加复杂度。
+
+### 9.3 Write rule
+
+任何会改变同步业务内容的本地写操作都必须更新 `updatedAtEpochMillis`：
+
+- create
+- edit
+- archive/unarchive（Vehicle）
+- delete/tombstone（ChargingRecord）
+
+只切换当前 selected/default vehicle 是否算业务修改，需要在实现时明确；默认不应因为 UI 选择行为制造无意义云端冲突。
 
 ---
 
-## 10. Multi-Vehicle Query Rule
+## 10. Backup & Sync
 
-v0.2 起任何 Dashboard / Records / Stats / Trip 查询必须明确数据范围:
+Local JSON Backup 与 Cloud Sync 是两个独立恢复路径。
+
+进入 sync metadata schema 后，Backup 应保存：
+
+- syncId
+- updatedAtEpochMillis
+- tombstone state
+
+恢复旧备份时必须为缺失 syncId 的实体生成新稳定 ID，而不是拒绝历史备份。
+
+云端失败不得影响本地 Backup / Restore。
+
+---
+
+## 11. Multi-Vehicle Query Rule
+
+任何 Dashboard / Records / Stats / Trip 查询必须明确：
 
 - selectedVehicleId
 - 或显式 allVehicles
 
-禁止默认把所有车辆数据混合后冒充当前车辆数据。
-
-当前车辆 ID 建议保存在 DataStore，不作为业务表重复字段。
+ChargingRecord tombstone 加入后，普通业务查询还必须显式排除 `isDeleted = true`。
 
 ---
 
-## 11. Data Source / Quality
+## 12. Data Source / Quality
 
-详细规则见 `DATA_QUALITY_BACKUP.md`。
+数据库只在真实需要时增加 source / accuracy 字段，不制造统一 confidence 分数。
 
-数据库只在真实有需要时增加 source / accuracy 字段，不为所有字段设计统一 confidence 分数。
-
-优先保留:
+优先保留：
 
 - 原始值
 - 来源
-- 系统提供的 accuracy
+- 系统 accuracy
 - 计算口径
-
----
-
-## 12. v0.1 Statistics
-
-保持:
-
-- monthCost
-- monthEnergy
-- chargingCount
-- totalCost
-- totalEnergy
-- averagePrice
-
-`pricePerKwh` 继续作为派生值，不持久化。
+- 同步变更元数据（仅同步实体）
 
 ---
 
 ## 13. Migration Rule
 
-数据库 schema 变化必须:
+数据库 schema 变化必须：
 
 1. 更新 DATABASE.md
 2. 提升 Room database version
-3. 增加 Migration
-4. 增加迁移测试
-5. Release 禁止 destructive migration
+3. 增加显式 Migration
+4. 验证旧数据保留
+5. 增加迁移/规则测试
+6. Release 禁止 destructive migration
 
-Trip/VehicleCatalog/odometer 进入实现时必须先提供对应 Migration，而不是删除用户现有数据。
+v6 -> v7 的 Sync Phase A 必须保证：
+
+- 旧 Vehicle / ChargingRecord local id 不变
+- 旧关系不变
+- 每个旧实体获得唯一 syncId
+- updatedAt 有确定初始值
+- 旧数据默认不是 tombstone
 
 ---
 
 ## 14. 变更记录
 
+### v1.5.0
+
+- 定义 v0.4 Local First sync identity
+- 明确 Room id 与 syncId 分工
+- Phase A 只覆盖 Vehicle + ChargingRecord
+- 定义 ChargingRecord tombstone 语义
+- 定义 first-version updatedAt conflict rule
+- 明确旧 Backup / migration 兼容要求
+- Trip / TripPoint sync 后置
+
 ### v1.4.0
 
-- ChargingRecord 预留高价值 odometerKm
-- 定义 Charging/Trip 非一对一关联策略
-- Trip 增加 moving/stopped 时间口径和中断恢复
-- 增加 ChargingPlace 演进模型
-- 明确 DataSource/accuracy 设计原则
-- 明确轨迹采样需控制耗电和数据库体积
-
-### v1.3.0
-
-- 增加 VehicleCatalog / UserVehicle 分层
-- 增加多车辆状态字段
-- 增加 ChargingRecord 可选经纬度
-- 定义 TripSession / TripPoint
-- 明确 WGS84 原始坐标和多车辆查询范围
+- odometer / Charging-Trip 非一对一关联
+- Trip moving/stopped 与中断恢复
+- ChargingPlace 演进模型
+- DataSource / accuracy 原则
