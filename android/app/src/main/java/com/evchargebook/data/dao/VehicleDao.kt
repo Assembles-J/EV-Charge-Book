@@ -13,9 +13,18 @@ interface VehicleDao {
     @Query("SELECT * FROM vehicles ORDER BY id LIMIT 1")
     fun observePrimaryVehicle(): Flow<VehicleEntity?>
 
+    @Query("SELECT * FROM vehicles ORDER BY id")
+    suspend fun getAll(): List<VehicleEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(vehicle: VehicleEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(vehicles: List<VehicleEntity>)
+
     @Update
     suspend fun update(vehicle: VehicleEntity)
+
+    @Query("DELETE FROM vehicles")
+    suspend fun deleteAll()
 }
