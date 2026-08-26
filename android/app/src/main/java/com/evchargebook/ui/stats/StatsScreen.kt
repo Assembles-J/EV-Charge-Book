@@ -11,8 +11,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.evchargebook.domain.ChargingIntervalSample
+import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -24,6 +28,9 @@ import java.util.Locale
             item { Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) { StatTile("累计费用", "¥ ${two(state.totalCost)}", Icons.Default.Payments, Modifier.weight(1f)); StatTile("累计补能", "${one(state.totalEnergy)} kWh", Icons.Default.Bolt, Modifier.weight(1f)) } }
             item { StatTile("平均充电单价", "¥ ${two(state.averagePrice)} / kWh", Icons.Default.BarChart, Modifier.fillMaxWidth()) }
             item { IntervalAnalyticsCard(state) }
+            if (state.intervalSamples.isNotEmpty()) {
+                item { IntervalDetailSection(state) }
+            }
             item { OutlinedCard(Modifier.fillMaxWidth()) { Column(Modifier.padding(MaterialTheme.spacing.md)) { Text("数据正在积累", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(MaterialTheme.spacing.xs)); Text("记录更多带里程的充电数据与真实行程后，这里会继续增加月度趋势、地点与行程交叉分析。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) } } }
         }
     }
@@ -70,7 +77,7 @@ import java.util.Locale
                 HorizontalDivider()
                 Text("Trip 辅助证据", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    StatValue("轨迹覆盖", "${percent(state.tripCoverageRatio)}", Modifier.weight(1f))
+                    StatValue("轨迹覆盖", percent(state.tripCoverageRatio), Modifier.weight(1f))
                     StatValue("Trip 距离", "${one(state.tripCoverageDistanceKm)} km", Modifier.weight(1f))
                 }
                 Text("${state.tripCoverageIntervalCount} 个区间有完整 Trip 证据；对应里程表区间 ${one(state.tripCoverageOdometerKm)} km。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -81,6 +88,58 @@ import java.util.Locale
             }
 
             Text("说明：这是按充电账本补入电量/费用与相邻里程计算的区间估算，不等同于车辆 BMS 或表显真实电耗。Trip 只作为辅助证据。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable private fun IntervalDetailSection(state: MainUiState) {
+    val recordsById = state.chargingRecords.associateBy { it.id }
+    val coverageByCurrentRecord = state.tripCoverageIntervals.associateBy { it.currentRecordId }
+    val recent = state.intervalSamples
+        .sortedByDescending { recordsById[it.currentRecordId]?.chargeTimeEpochMillis ?: Long.MIN_VALUE }
+        .take(8)
+
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+        Text("最近区间明细", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        recent.forEach { sample ->
+            IntervalDetailCard(
+                sample = sample,
+                coverage = coverageByCurrentRecord[sample.currentRecordId],
+                previousTime = recordsById[sample.previousRecordId]?.chargeTimeEpochMillis,
+                currentTime = recordsById[sample.currentRecordId]?.chargeTimeEpochMillis
+            )
+        }
+        if (state.intervalSamples.size > recent.size) {
+            Text("当前仅展示最近 ${recent.size} 个区间，共 ${state.intervalSamples.size} 个有效区间。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable private fun IntervalDetailCard(
+    sample: ChargingIntervalSample,
+    coverage: ChargingTripCoverageInterval?,
+    previousTime: Long?,
+    currentTime: Long?
+) {
+    OutlinedCard(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+            Text(
+                if (previousTime != null && currentTime != null) "${shortDate(previousTime)} → ${shortDate(currentTime)}" else "充电区间 #${sample.previousRecordId} → #${sample.currentRecordId}",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text("区间里程 ${one(sample.distanceKm)} km · 本次补入 ${one(sample.replenishedEnergyKwh)} kWh · ¥ ${two(sample.replenishmentCost)}")
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                StatValue("补入电量", "${one(sample.energyPer100Km)} kWh/100km", Modifier.weight(1f))
+                StatValue("费用", "¥ ${two(sample.costPer100Km)}/100km", Modifier.weight(1f))
+            }
+            coverage?.let {
+                HorizontalDivider()
+                Text("Trip 证据：${it.completedTripCount} 条 · ${one(it.completedTripDistanceKm)} km · 覆盖 ${percent(it.coverageRatio)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (kotlin.math.abs(it.distanceDifferenceKm) >= 1.0) {
+                    Text("与里程表相差 ${one(kotlin.math.abs(it.distanceDifferenceKm))} km，仅提示，不修正。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+            }
         }
     }
 }
@@ -99,3 +158,4 @@ import java.util.Locale
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
 private fun two(value: Double) = String.format(Locale.US, "%.2f", value)
 private fun percent(value: Double) = String.format(Locale.US, "%.0f%%", value * 100.0)
+private fun shortDate(epochMillis: Long) = SimpleDateFormat("MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
