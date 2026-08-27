@@ -1,6 +1,6 @@
 # EV Charge Book Location / Map / Trip Tracking Design
 
-版本: v1.3.0
+版本: v1.3.1
 更新时间: 2026-08-27
 状态: Authority Subdocument
 
@@ -133,31 +133,45 @@ Trip 至少区分:
 - GPS / Network provider 切换
 - 长时间 GPS gap 后直接把 gap 两端连接
 
-产品规则：长时间 gap 两端不能继续作为“可信连续距离”直接累计。该规则属于 P0 reliability follow-up；在落地前，平均速度必须被视为基于已记录 GPS 距离的派生值，而不是车辆仪表级事实。
+产品规则：长时间 gap 两端不能继续作为“可信连续距离”直接累计。P0 实现进一步要求 `>=120s` gap 后的新点只建立新基线，不补两端直线距离，也不补 gap 内 moving/stopped 时间。
 
 ### 5.2 当前速度到底来自哪里
 
 当前存在两个完全不同的概念：
 
-1. `Location.speed`：Android Location 提供的定位时刻速度，当前用于 TripPoint `speedMps`，也是最高速度的主要来源。
-2. `point-to-point distance / time`：可作为轨迹区段速度的派生/校验证据，但不应该冒充瞬时速度。
+1. `Location.speed`：Android Location 提供的定位时刻速度，保存为 TripPoint 原始速度事实。
+2. `point-to-point distance / time`：用于证明这段时间是否真的发生了与 reported speed 相匹配的位移，并用于后续分段速度派生。
 
 因此：
 
-- 当前“最高速度”不是简单用两点直线距离除时间得到的。
+- 当前“最高已记录速度”不是简单用两点直线距离除时间得到的。
+- 原始 `Location.speed` 会保留，但不是每个值都自动进入 moving/max 聚合。
 - 当前“全程均速 / 行驶均速”依赖累计 `distanceMeters`，所以会受到 GPS 距离质量影响。
 - 未来“分段速度”不能只用一个单点 `Location.speed`，也不能只用两点直线距离；应结合连续可信点、speed accuracy、provider 与 gap 状态。
 
-短时速度峰值存在漏采可能。例如真实峰值只持续约 4 秒，而采样目标同样是 2-5 秒，则可能在峰值时没有产生有效 Location fix。产品上应区分“最高已记录 GNSS 速度”和“车辆真实最高速度”，不能把未采到的峰值推算出来。
+### 5.3 启动瞬时假速度保护
 
-### 5.3 速度 UI
+真实设备观察到：Trip 刚开始、车辆尚未起步时，系统曾短暂报告约 120 km/h。
+
+不能用“速度超过 120 就删除”这种固定阈值解决，因为车辆真实高速可能接近或超过该范围。首版采用证据式规则：
+
+- 首个 accepted point 只建立位置基线，不参与 moving/max speed 聚合。
+- 长 gap 后首个恢复点同样只重新建立可信基线。
+- location age 超过 15 秒的陈旧 callback 不参与 Trip。
+- reported speed 只有在连续可信区段里，并且相邻 accepted 点产生了与该速度相匹配的真实位移时，才进入 moving/max 聚合。
+- 原地时即使单点 `Location.speed` 错误报告高速，只要位移证据不足，就不会污染 Trip 的最高速度。
+- 真正的短时高速峰值只要采样点落在峰值窗口且位移与速度相符，仍可以被保留。
+
+例如约 109 km/h ≈ 30.3 m/s，持续 4 秒理论位移约 121m；若对应采样段存在明显的可信高速位移，则不会因为“高速”本身被过滤。
+
+### 5.4 速度 UI
 
 必须区分：
 
 1. 全程平均速度：total recorded distance / elapsed time
 2. 行驶平均速度：total recorded distance / moving time
 3. 分段平均速度：可信 segment 内的综合速度
-4. 最高已记录速度：经异常过滤后的 Location.speed 峰值
+4. 最高已记录速度：经连续性与异常证据过滤后的 Location.speed 峰值
 
 PR #36 已把详情页原先模糊的“平均速度”拆成全程均速 / 行驶均速 / 最高速度 / 移动时间。
 
@@ -249,14 +263,14 @@ App 启动时发现未正常结束的 Trip:
 
 当前允许 GPS + Network provider fallback。
 
-后续原则：
+首版可信策略：
 
-- GPS 高质量点优先作为主轨迹事实
-- Network point 作为 fallback / continuity evidence
-- 不默认将 GPS 与 Network 视为同等质量
-- provider switch 必须可观察
-- 时间非常接近的 GPS / Network point 需要去重/择优，避免重复计距离
-- network 漂移点不能制造假距离或假速度
+- GPS 高质量点优先作为主轨迹事实。
+- Network point 作为 fallback / continuity evidence。
+- GPS 点后 8 秒内到来的 Network point 默认视为重复 fallback，不再写入轨迹主序列。
+- Network 点后 8 秒内恢复 GPS 时，接受 GPS 作为新的高质量基线，但 provider 切换这一小段不补距离/时间。
+- provider switch 必须可观察。
+- network 漂移点不能制造假距离或假速度。
 
 GPS 海拔:
 
@@ -303,7 +317,7 @@ PR #36 已按 `>=120s` gap 将路线几何拆成多个可信 segment；预览只
 
 无 basemap 阶段即可做断开表达；MapLibre 后续只负责更好的 renderer，不负责补造缺失事实。
 
-下一步必须让距离聚合与可视化语义一致：长 gap 两端不能继续直接累计直线距离。
+P0 距离聚合必须与可视化语义一致：长 gap 两端不再直接累计直线距离。
 
 ---
 
@@ -367,44 +381,46 @@ Core 已完成：
 
 P0 reliability follow-up：
 
-- [x] 运行时 GPS health / accepted point heartbeat
-- [x] GPS LOST / LONG_GAP ongoing notification
-- [x] long gap 路线断开，不画可信实线
-- [ ] 长 gap 两端不参与可信距离累计
-- [ ] GPS/Network 去重与择优
-- [ ] longest gap / provider counters / rejected reason 持久摘要
+- [x] GPS health / ongoing notification runtime visibility
+- [x] GPS gap route geometry disconnect
+- [ ] 锁屏后长行程持续记录可诊断真机验收
+- [x] 长 gap 两端不补可信距离/移动时间（实现待 CI）
+- [x] 启动假高速不直接污染 max/moving（实现待 CI）
+- [x] GPS/Network 短窗口去重/基线切换（实现待 CI）
+- [ ] accepted / rejected point persistent counters
 - [ ] service restart / re-delivery evidence
-- [ ] 锁屏长行程真机复验
+- [ ] GPS/Network provider persistent diagnostics
 
 P1 speed visualization：
 
 - [x] 全程平均 / 行驶平均明确区分
 - [ ] TripSpeedSegment 派生模型
 - [ ] 连续速度颜色映射
-- [ ] 短时峰值与 segment speed 分开展示
-
-P3 optional vehicle data：
-
-- [ ] OBD-II Vehicle Speed 最小 PoC
-- [ ] GNSS vs OBD 对照验证
-- [ ] 证明稳定价值后再评估更多车辆数据
 
 Optional：
 
 - [ ] MapLibre 显示真实 basemap 路线
+- [ ] OBD-II Vehicle Speed PoC（P3）
 
 ---
 
 ## 15. 变更记录
 
+### v1.3.1
+
+- 记录真实设备“未起步但瞬时显示约 120 km/h”的启动假速度问题
+- 首点 / 长 gap 恢复点只建立统计基线，不直接污染 moving/max speed
+- 陈旧 Location callback 增加 15 秒 freshness 限制
+- reported speed 需要可信位移证据后才能参与聚合
+- `>=120s` gap 不再补两端距离或 gap 内 moving/stopped 时间
+- 增加 GPS -> Network 短窗口去重与 Network -> GPS 基线切换规则
+
 ### v1.3.0
 
-- 明确 Location.speed 是当前瞬时/最高速度主要来源，不等同于点间直线速度
-- 明确平均速度仍受 GPS 累计距离质量影响
-- 将短时速度峰值漏采作为真实采样限制记录
-- 固定 GNSS / Derived / OBD 三类速度来源语义
-- OBD-II 放入 P3 可选增强，只先验证标准 Vehicle Speed，不进入私有 CAN/BMS 逆向
-- 同步 PR #36 GPS health、通知、gap 断线及速度 UI 已实现范围
+- 明确 `Location.speed`、派生 segment speed 与 future OBD speed 的来源边界
+- 明确总里程/平均速度仍继承 GPS 距离质量限制
+- 记录短时速度峰值可能因采样窗口漏采
+- OBD-II 作为 P3 optional data source，不进入当前产品依赖
 
 ### v1.2.0
 
@@ -414,17 +430,3 @@ Optional：
 - 增加全程平均 / 行驶平均 / 分段平均速度三种口径
 - 增加连续速度颜色方案及交通语义边界
 - 明确 GPS gap 不得以实线伪造
-
-### v1.1.0
-
-- 增加 elapsed/moving/stopped 时间口径
-- 增加中断行程恢复设计
-- 限制采样频率以控制耗电和数据库体积
-- 增加 Privacy Zone 后续设计
-- 明确自动记录演进顺序
-
-### v1.0.0
-
-- 建立定位 / 地图 / 行程追踪权威设计
-- 确定 Android Location + MapLibre 解耦架构
-- 明确手动开始 + foreground service
