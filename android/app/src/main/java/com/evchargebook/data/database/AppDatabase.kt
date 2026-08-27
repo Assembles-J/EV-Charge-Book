@@ -11,14 +11,22 @@ import com.evchargebook.data.dao.TripDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleCatalogDao
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 
 @Database(
-    entities = [VehicleEntity::class, ChargingRecordEntity::class, VehicleCatalogEntity::class, TripSessionEntity::class, TripPointEntity::class],
-    version = 7,
+    entities = [
+        VehicleEntity::class,
+        ChargingRecordEntity::class,
+        VehicleCatalogEntity::class,
+        TripSessionEntity::class,
+        TripPointEntity::class,
+        TripDiagnosticEventEntity::class
+    ],
+    version = 8,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -87,6 +95,15 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS trip_diagnostic_events (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripId INTEGER NOT NULL, occurredAtEpochMillis INTEGER NOT NULL, type TEXT NOT NULL, provider TEXT, detail TEXT, FOREIGN KEY(tripId) REFERENCES trip_sessions(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_tripId ON trip_diagnostic_events(tripId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_occurredAtEpochMillis ON trip_diagnostic_events(occurredAtEpochMillis)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_type ON trip_diagnostic_events(type)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -97,7 +114,15 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "ev-charge-book.db"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
+                    .addMigrations(
+                        MIGRATION_1_2,
+                        MIGRATION_2_3,
+                        MIGRATION_3_4,
+                        MIGRATION_4_5,
+                        MIGRATION_5_6,
+                        MIGRATION_6_7,
+                        MIGRATION_7_8
+                    )
                     .build()
                     .also { instance = it }
             }
