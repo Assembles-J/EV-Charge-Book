@@ -2,6 +2,7 @@ package com.evchargebook.ui.records
 
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -48,6 +49,21 @@ fun RecordEditScreen(
     var odometer by remember { mutableStateOf(record.odometerKm?.toString().orEmpty()) }
     var chargerType by remember { mutableStateOf(record.chargerType ?: "公共慢充") }
     var error by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val isDirty = chargeTime != record.chargeTimeEpochMillis ||
+        location != record.location.orEmpty() || remark != record.remark.orEmpty() ||
+        energy != record.energyKwh.toString() || cost != record.cost.toString() ||
+        startSoc != record.startSoc.toString() || endSoc != record.endSoc.toString() ||
+        odometer != record.odometerKm?.toString().orEmpty() ||
+        chargerType != (record.chargerType ?: "公共慢充")
+
+    fun requestBack() {
+        if (isDirty) showDiscardConfirm = true else onBack()
+    }
+
+    BackHandler(enabled = isDirty) { showDiscardConfirm = true }
+
     val dateText = remember(chargeTime) { SimpleDateFormat("M月d日", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val timeText = remember(chargeTime) { SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(chargeTime) }
     val previousOdometer = remember(records, record.id, record.vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, record.vehicleId, chargeTime, record.id) }
@@ -60,7 +76,7 @@ fun RecordEditScreen(
         batteryCapacityKwh = batteryCapacityKwh
     )
 
-    Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             EditChargeSummary(startSoc, endSoc, energy, cost)
@@ -108,6 +124,16 @@ fun RecordEditScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("保存修改") }
             Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("放弃未保存修改？") },
+            text = { Text("这条充电记录已经被修改，返回后未保存的修改会丢失。") },
+            confirmButton = { TextButton(onClick = { showDiscardConfirm = false; onBack() }) { Text("放弃", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDiscardConfirm = false }) { Text("继续编辑") } }
+        )
     }
 }
 
