@@ -655,11 +655,8 @@ private fun TripPointEntity.toRouteGeoPoint(): TripGeoPoint {
     )
 }
 
-private fun averageSpeed(first: Double?, second: Double?): Double? = when {
-    first != null && second != null -> (first + second) / 2.0
-    first != null -> first
-    else -> second
-}
+private fun averageSpeed(first: Double?, second: Double?): Double? =
+    if (first != null && second != null) (first + second) / 2.0 else null
 
 private fun speedRouteColor(speedMps: Double?, fallback: Color): Color {
     val kmh = speedMps?.times(3.6)?.takeIf { it.isFinite() && it >= 0.0 } ?: return fallback
