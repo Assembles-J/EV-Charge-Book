@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v2.1.0
+版本: v2.2.0
 更新时间: 2026-08-27
 状态: Authority Document / Single Source of Truth
 
@@ -31,6 +31,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - BACKEND.md
 - DATABASE.md
 - CI_CD.md
+- APK_AUTO_UPDATE.md
 - ROADMAP.md
 - DEVELOPMENT.md
 - LOCATION_TRIP.md
@@ -61,6 +62,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - 无网络和云端故障不能阻塞本地记账 / Trip
 - GPS 缺失不得通过假路线或假距离静默补齐
 - 速度必须保留来源语义，不把 GNSS / 派生值 / future OBD 混成无来源真值
+- 正式 APK 版本只在真正执行 Production Release 时生成；普通业务提交不得为了代码变化而升级正式版本
 
 ---
 
@@ -213,7 +215,7 @@ VehicleSpeedSource
 
 ---
 
-## 11. 发布 / CI 基线
+## 11. 发布 / CI / APK 自动升级基线
 
 - JDK 17
 - Android SDK 36
@@ -222,11 +224,21 @@ VehicleSpeedSource
 - Android CI 与 Production Release 分离
 - signed APK
 - Actions Artifact
+- 普通 Android Build 使用 dev 版本，不生成正式版本号
+- 只有手动 Production Release 才生成正式 `versionCode/versionName`
+- Production Release 最后原子发布 `release-meta/latest.json`
+- release App 自动检查更高 `versionCode`
+- DownloadManager 下载 immutable APK
+- 下载后 SHA-256 校验
+- 最终由 Android 系统安装器完成覆盖安装
+
+详细规则见 `CI_CD.md` 与 `APK_AUTO_UPDATE.md`。
 
 近期关键验收：
 
 - Build Run #169：ChargingPlace + CSV 基线 Green
 - Build Run #184：PR #36 Trip GPS health / route gap / speed semantics，Build/Test + Debug APK Green
+- APK auto-update Android CI：当前等待最新 updater cumulative build 完成
 
 ---
 
@@ -267,6 +279,8 @@ Trip P0 reliability
   -> P3 OBD-II Vehicle Speed PoC only when justified
 ```
 
+APK 自动升级属于发布基础设施，不改变当前业务优先级；它随 Production Release 验收独立推进。
+
 ---
 
 ## 14. 开发验收规则
@@ -282,6 +296,11 @@ Trip P0 reliability
 - 不把 CI 通过标成“真机已验收”
 - GPS `COMPLETED` 不等同于 continuity accepted
 
+正式 APK 版本规则：
+
+- 不发布 APK -> 不触发 Android Release -> 不升级正式版本
+- 需要下发 APK -> Android CI Green -> 手动 Android Release -> 自动生成正式版本
+
 ---
 
 ## 15. 当前 Issues
@@ -296,6 +315,16 @@ Trip P0 reliability
 ---
 
 ## 16. 决策记录
+
+### v2.2.0
+
+- `APK_AUTO_UPDATE.md` 纳入权威文档体系
+- 正式 APK 版本改为 Production Release-only generation
+- Android Release 增加 `release_series`
+- release server 新增 per-version JSON + `latest.json`
+- `latest.json` 成为 App 更新发现的最后原子指针
+- release App 增加自动检查、一键下载、SHA-256 校验和系统安装器流程
+- APK 更新基础设施不改变 Trip reliability 当前 P0
 
 ### v2.1.0
 
