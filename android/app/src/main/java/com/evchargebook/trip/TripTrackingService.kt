@@ -29,6 +29,7 @@ import com.evchargebook.domain.TripGpsHealthSnapshot
 import com.evchargebook.domain.TripGpsHealthStatus
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
+import com.evchargebook.domain.TripSpeedTrustRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -215,7 +216,14 @@ class TripTrackingService : Service() {
         val trustedSegmentDistance = if (continuity.countDistance) rawSegmentDistance else 0.0
         val statsDeltaSeconds = if (continuity.countDuration) rawDeltaSeconds ?: 0 else 0
         val rawSpeed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
-        val aggregateSpeed = rawSpeed.takeIf { continuity.speedEligibleForAggregate }
+        val aggregateSpeed = if (
+            TripSpeedTrustRules.eligibleForAggregate(
+                reportedSpeedMps = rawSpeed,
+                deltaSeconds = statsDeltaSeconds,
+                trustedDistanceMeters = trustedSegmentDistance,
+                continuityAllowsSpeed = continuity.speedEligibleForAggregate
+            )
+        ) rawSpeed else null
         val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
         val decision = TripSamplingRules.decide(statsDeltaSeconds, trustedSegmentDistance, aggregateSpeed, accuracy)
         if (!decision.accept) {
