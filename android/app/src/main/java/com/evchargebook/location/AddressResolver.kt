@@ -12,10 +12,14 @@ interface AddressResolver {
 
 class AndroidGeocoderAddressResolver(context: Context) : AddressResolver {
     private val geocoder = Geocoder(context.applicationContext, Locale.SIMPLIFIED_CHINESE)
+    private val cache = GeocodeCache()
 
     override suspend fun reverse(latitude: Double, longitude: Double): String? = withContext(Dispatchers.IO) {
+        cache.get(latitude, longitude)?.let { return@withContext it }
+
         if (!Geocoder.isPresent()) return@withContext null
-        runCatching {
+
+        val result = runCatching {
             @Suppress("DEPRECATION")
             geocoder.getFromLocation(latitude, longitude, 1)
                 ?.firstOrNull()
@@ -30,5 +34,10 @@ class AndroidGeocoderAddressResolver(context: Context) : AddressResolver {
                     }.joinToString("").takeIf { it.isNotBlank() }
                 }
         }.getOrNull()
+
+        if (result != null) {
+            cache.put(latitude, longitude, result)
+        }
+        result
     }
 }
