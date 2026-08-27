@@ -92,7 +92,7 @@ class TripTrackingService : Service() {
             runCatching {
                 AppDatabase.getInstance(applicationContext).openHelper.writableDatabase.execSQL(
                     "INSERT INTO trip_diagnostic_events (tripId, occurredAtEpochMillis, type, provider, detail) VALUES (?, ?, ?, NULL, ?)",
-                    arrayOf(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
+                    arrayOf<Any?>(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
                 )
             }
         }
