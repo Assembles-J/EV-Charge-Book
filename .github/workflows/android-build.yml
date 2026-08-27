@@ -16,7 +16,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: android-ci-${{ github.ref }}
+  # v2 intentionally rotates the group name so new builds are not blocked by
+  # stale zero-job runs that remain stuck in GitHub Actions' old concurrency queue.
+  group: android-ci-v2-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
