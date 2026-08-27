@@ -67,6 +67,8 @@ fun AddRecordScreen(
     vehicleId: Long,
     records: List<ChargingRecordEntity>,
     batteryCapacityKwh: Double? = null,
+    currentSoc: Int? = null,
+    currentMileageKm: Double? = null,
     commonPlaces: List<String> = emptyList(),
     onBack: () -> Unit,
     onSave: (
@@ -81,9 +83,12 @@ fun AddRecordScreen(
     val locationProvider = remember(context) { AndroidLocationProvider(context.applicationContext) }
     val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context.applicationContext) }
     val vehicleRecords = remember(records, vehicleId) { records.filter { it.vehicleId == vehicleId && !it.isDeleted } }
-    val defaults = remember(vehicleRecords) { ChargeDefaultResolver.resolve(currentSoc = null, records = vehicleRecords) }
+    val defaults = remember(vehicleRecords, currentSoc) {
+        ChargeDefaultResolver.resolve(currentSoc = currentSoc, records = vehicleRecords)
+    }
     val calendar = remember { Calendar.getInstance() }
     val initialChargeTime = remember { calendar.timeInMillis }
+    val initialOdometer = remember(currentMileageKm) { currentMileageKm?.toEditableNumber().orEmpty() }
 
     var chargeTime by remember { mutableLongStateOf(initialChargeTime) }
     var location by remember(defaults) { mutableStateOf(defaults.location.orEmpty()) }
@@ -99,7 +104,7 @@ fun AddRecordScreen(
     }
     var cost by remember { mutableStateOf("") }
     var costEditedManually by remember { mutableStateOf(false) }
-    var odometer by remember { mutableStateOf("") }
+    var odometer by remember(initialOdometer) { mutableStateOf(initialOdometer) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var addressMessage by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
@@ -117,7 +122,7 @@ fun AddRecordScreen(
     }
 
     val isDirty = chargeTime != initialChargeTime || remark.isNotBlank() || energy.isNotBlank() ||
-        odometer.isNotBlank() || startSoc != defaults.startSoc?.toString().orEmpty() ||
+        odometer != initialOdometer || startSoc != defaults.startSoc?.toString().orEmpty() ||
         endSoc != defaults.endSoc.toString() || chargerType != defaults.chargerType ||
         location != defaults.location.orEmpty() || locationFix != null || costEditedManually
 
@@ -232,7 +237,7 @@ fun AddRecordScreen(
                 }
             }
 
-            FormSection("SOC 与电量", "ENERGY", "车辆接收电量按电池容量和 SOC 变化自动估算；桩端电量用于计费。") {
+            FormSection("SOC 与电量", "ENERGY", "起始 SOC 和里程优先继承车辆当前状态；车辆接收电量按电池容量和 SOC 变化自动估算。") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     AddNumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
                     AddNumberField(endSoc, { endSoc = it.filter(Char::isDigit) }, "结束 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
@@ -337,7 +342,7 @@ fun AddRecordScreen(
                 addressMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
 
-            FormSection("车辆与备注", "VEHICLE CONTEXT", "里程与备注都是可选项。") {
+            FormSection("车辆与备注", "VEHICLE CONTEXT", "当前里程优先继承车辆状态；里程与备注都可以修改。") {
                 AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
                 previousOdometer?.let { Text("上一条有效里程 ${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor) }
