@@ -15,6 +15,7 @@ import android.location.LocationManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -22,6 +23,7 @@ import com.evchargebook.MainActivity
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.TripGpsHealth
 import com.evchargebook.domain.TripGpsHealthSnapshot
 import com.evchargebook.domain.TripGpsHealthStatus
@@ -178,7 +180,7 @@ class TripTrackingService : Service() {
     }
 
     private suspend fun handleLocation(tripId: Long, location: Location) {
-        if (!isBasicLocationValid(location)) {
+        if (!isBasicLocationValid(location) || !isFreshLocation(location)) {
             rejectedPointCount += 1
             updateNotification()
             return
@@ -193,24 +195,38 @@ class TripTrackingService : Service() {
             return
         }
 
-        val segmentDistance = previous?.let { previousPoint ->
+        val rawDeltaSeconds = previous?.let { ((capturedAt - it.capturedAtEpochMillis) / 1000).coerceAtLeast(0) }
+        val continuity = TripContinuityRules.decide(
+            deltaSeconds = rawDeltaSeconds,
+            previousProvider = previous?.provider,
+            currentProvider = location.provider
+        )
+        if (!continuity.acceptPoint) {
+            rejectedPointCount += 1
+            updateNotification()
+            return
+        }
+
+        val rawSegmentDistance = previous?.let { previousPoint ->
             val result = FloatArray(1)
             Location.distanceBetween(previousPoint.latitude, previousPoint.longitude, location.latitude, location.longitude, result)
             result[0].toDouble().coerceAtLeast(0.0)
         } ?: 0.0
-        val deltaSeconds = previous?.let { ((capturedAt - it.capturedAtEpochMillis) / 1000).coerceAtLeast(0) } ?: 0
-        val speed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
+        val trustedSegmentDistance = if (continuity.countDistance) rawSegmentDistance else 0.0
+        val statsDeltaSeconds = if (continuity.countDuration) rawDeltaSeconds ?: 0 else 0
+        val rawSpeed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
+        val aggregateSpeed = rawSpeed.takeIf { continuity.speedEligibleForAggregate }
         val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
-        val decision = TripSamplingRules.decide(deltaSeconds, segmentDistance, speed, accuracy)
+        val decision = TripSamplingRules.decide(statsDeltaSeconds, trustedSegmentDistance, aggregateSpeed, accuracy)
         if (!decision.accept) {
             rejectedPointCount += 1
             updateNotification()
             return
         }
 
-        val newMovingSeconds = TripSamplingRules.movingSeconds(session.movingSeconds ?: 0, deltaSeconds, decision.moving)
-        val newStoppedSeconds = TripSamplingRules.stoppedSeconds(session.stoppedSeconds ?: 0, deltaSeconds, decision.moving)
-        val newDistance = session.distanceMeters + segmentDistance
+        val newMovingSeconds = TripSamplingRules.movingSeconds(session.movingSeconds ?: 0, statsDeltaSeconds, decision.moving)
+        val newStoppedSeconds = TripSamplingRules.stoppedSeconds(session.stoppedSeconds ?: 0, statsDeltaSeconds, decision.moving)
+        val newDistance = session.distanceMeters + trustedSegmentDistance
         val altitude = location.altitude.takeIf { location.hasAltitude() }
 
         val point = TripPointEntity(
@@ -219,7 +235,7 @@ class TripTrackingService : Service() {
             latitude = location.latitude,
             longitude = location.longitude,
             altitudeMeters = altitude,
-            speedMps = speed,
+            speedMps = rawSpeed,
             bearingDegrees = location.bearing.takeIf { location.hasBearing() }?.toDouble(),
             horizontalAccuracyMeters = accuracy,
             verticalAccuracyMeters = if (Build.VERSION.SDK_INT >= 26 && location.hasVerticalAccuracy()) location.verticalAccuracyMeters.toDouble() else null,
@@ -239,7 +255,7 @@ class TripTrackingService : Service() {
                 movingSeconds = newMovingSeconds,
                 stoppedSeconds = newStoppedSeconds,
                 averageSpeedMps = if (newMovingSeconds > 0) newDistance / newMovingSeconds else null,
-                maxSpeedMps = listOfNotNull(session.maxSpeedMps, speed).maxOrNull(),
+                maxSpeedMps = listOfNotNull(session.maxSpeedMps, aggregateSpeed).maxOrNull(),
                 startLatitude = session.startLatitude ?: location.latitude,
                 startLongitude = session.startLongitude ?: location.longitude,
                 endLatitude = location.latitude,
@@ -291,6 +307,12 @@ class TripTrackingService : Service() {
         if (!location.latitude.isFinite() || !location.longitude.isFinite()) return false
         if (location.latitude !in -90.0..90.0 || location.longitude !in -180.0..180.0) return false
         return true
+    }
+
+    private fun isFreshLocation(location: Location): Boolean {
+        val locationElapsedNanos = location.elapsedRealtimeNanos.takeIf { it > 0L } ?: return true
+        val ageNanos = (SystemClock.elapsedRealtimeNanos() - locationElapsedNanos).coerceAtLeast(0L)
+        return TripContinuityRules.isFreshLocation(ageNanos / 1_000_000L)
     }
 
     private fun currentHealthSnapshot(): TripGpsHealthSnapshot = TripGpsHealth.evaluate(
