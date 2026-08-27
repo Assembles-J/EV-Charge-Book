@@ -19,6 +19,7 @@ import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.domain.MonthlyChargingComparison
 import com.evchargebook.ui.theme.spacing
+import com.evchargebook.ui.theme.warningColor
 import com.evchargebook.viewmodel.MainUiState
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -179,7 +180,7 @@ private fun IntervalAnalyticsCard(state: MainUiState) {
                         StatValue("费用", "¥ ${two(state.intervalCostPer100Km)}/100km", Modifier.weight(1f))
                     }
                     Text("${state.intervalSampleCount} 个有效区间 · ${one(state.intervalDistanceKm)} km 样本", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    if (state.invalidIntervalCount > 0) Text("已排除 ${state.invalidIntervalCount} 个异常区间。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+                    if (state.invalidIntervalCount > 0) Text("已排除 ${state.invalidIntervalCount} 个异常区间。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor)
                 }
                 if (state.tripCoverageIntervalCount > 0 && state.tripCoverageRatio != null) {
                     HorizontalDivider()
@@ -215,7 +216,7 @@ private fun IntervalDetailCard(sample: ChargingIntervalSample, coverage: Chargin
                 StatValue("补入电量", "${one(sample.energyPer100Km)} kWh/100km", Modifier.weight(1f))
                 StatValue("费用", "¥ ${two(sample.costPer100Km)}/100km", Modifier.weight(1f))
             }
-            Text("可信度 ${confidenceText(sample.confidence)} · 结束 SOC 差 ${sample.endSocDeltaPoints} 个百分点", style = MaterialTheme.typography.bodySmall, color = if (sample.confidence == ChargingEstimateConfidence.LOW) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("可信度 ${confidenceText(sample.confidence)} · 结束 SOC 差 ${sample.endSocDeltaPoints} 个百分点", style = MaterialTheme.typography.bodySmall, color = if (sample.confidence == ChargingEstimateConfidence.LOW) MaterialTheme.warningColor else MaterialTheme.colorScheme.onSurfaceVariant)
             coverage?.let { Text("Trip ${it.completedTripCount} 条 · ${one(it.completedTripDistanceKm)} km · 覆盖 ${percent(it.coverageRatio)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
