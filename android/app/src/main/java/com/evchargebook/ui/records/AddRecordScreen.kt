@@ -32,6 +32,7 @@ import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.location.AndroidLocationProvider
 import com.evchargebook.location.LocationFix
 import com.evchargebook.ui.theme.spacing
+import com.evchargebook.ui.theme.warningColor
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -158,13 +159,13 @@ fun AddRecordScreen(
                     AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     AddNumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
                 }
-                anomalyWarnings.forEach { warning -> Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
+                anomalyWarnings.forEach { warning -> Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor) }
             }
 
             FormSection("车辆与备注", "里程有助于后续估算每百公里补能成本。") {
                 AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
                 previousOdometer?.let { Text("上一条有效里程 ${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
+                odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor) }
                 OutlinedTextField(remark, { remark = it }, label = { Text("备注") }, placeholder = { Text("可选") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
             }
 
