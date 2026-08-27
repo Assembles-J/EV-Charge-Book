@@ -1,5 +1,6 @@
 package com.evchargebook.ui.theme
 
+import android.content.Context
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -8,8 +9,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -26,7 +32,13 @@ data class AppSpacing(
     val touch: Dp = 48.dp
 )
 
+data class AppThemeController(
+    val darkTheme: Boolean,
+    val setDarkTheme: (Boolean) -> Unit
+)
+
 val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
+val LocalAppThemeController = staticCompositionLocalOf { AppThemeController(true) {} }
 val MaterialTheme.spacing: AppSpacing
     @Composable get() = LocalAppSpacing.current
 
@@ -105,20 +117,29 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(28.dp)
 )
 
-/**
- * EV Charge Book v0.5 theme.
- *
- * Dark First is the product default. Light mode remains available to callers by
- * explicitly passing darkTheme = false; a persisted in-app theme switch can be
- * wired later without changing screen code.
- */
 @Composable
 fun EvChargeTheme(
-    darkTheme: Boolean = true,
+    darkTheme: Boolean? = null,
     content: @Composable () -> Unit
 ) {
-    val colors = if (darkTheme) BrandDark else BrandLight
-    CompositionLocalProvider(LocalAppSpacing provides AppSpacing()) {
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("ev_charge_ui", Context.MODE_PRIVATE)
+    }
+    var storedDarkTheme by remember {
+        mutableStateOf(preferences.getBoolean("dark_theme", true))
+    }
+    val resolvedDarkTheme = darkTheme ?: storedDarkTheme
+    val controller = AppThemeController(resolvedDarkTheme) { enabled ->
+        storedDarkTheme = enabled
+        preferences.edit().putBoolean("dark_theme", enabled).apply()
+    }
+    val colors = if (resolvedDarkTheme) BrandDark else BrandLight
+
+    CompositionLocalProvider(
+        LocalAppSpacing provides AppSpacing(),
+        LocalAppThemeController provides controller
+    ) {
         MaterialTheme(
             colorScheme = colors,
             typography = AppTypography,
