@@ -269,6 +269,8 @@ fun MainApp(
                     vehicleId = state.vehicle?.id ?: 0L,
                     records = state.chargingRecords,
                     batteryCapacityKwh = state.vehicle?.batteryCapacityKwh,
+                    currentSoc = state.currentSoc,
+                    currentMileageKm = state.currentMileageKm,
                     commonPlaces = state.chargingPlaceSummary.map { it.displayName },
                     onBack = { addRecord = false },
                     onSave = { location, start, end, energy, cost, type, remark, time, odometer, latitude, longitude, accuracy ->
