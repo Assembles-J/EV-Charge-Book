@@ -22,6 +22,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
 import com.evchargebook.data.entity.VehicleStateUpdateSource
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.domain.TripRules
+import com.evchargebook.domain.trip.TripEnergyCalculator
 import com.evchargebook.trip.TripTrackingService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -120,9 +121,19 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long {
         val tripId = database.withTransaction {
-            require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
+            val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == vehicleId }
+                ?: error("当前车辆不可用")
             TripRules.requireCanStart(tripDao.getActive() != null)
-            tripDao.insertSession(TripSessionEntity(vehicleId = vehicleId, startedAtEpochMillis = startedAtEpochMillis, status = TripStatus.RECORDING))
+            val state = vehicleStateDao.get(vehicleId)
+            tripDao.insertSession(
+                TripSessionEntity(
+                    vehicleId = selectedVehicle.id,
+                    startedAtEpochMillis = startedAtEpochMillis,
+                    startSoc = state?.currentSoc,
+                    startMileageKm = state?.currentMileage,
+                    status = TripStatus.RECORDING
+                )
+            )
         }
         startTrackingOrInterrupt(tripId)
         return tripId
@@ -152,10 +163,49 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         }
     }
 
-    suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
+    suspend fun stopActiveTrip(
+        endSoc: Int,
+        endMileageKm: Double? = null,
+        endedAtEpochMillis: Long = System.currentTimeMillis()
+    ) {
+        require(endSoc in 0..100) { "结束 SOC 必须在 0 到 100 之间" }
         database.withTransaction {
             val active = tripDao.getActive() ?: error("当前没有进行中的行程")
-            tripDao.updateSession(active.copy(endedAtEpochMillis = endedAtEpochMillis, elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis), status = TripStatus.COMPLETED))
+            if (active.startSoc != null) require(endSoc <= active.startSoc) { "结束 SOC 不能高于开始 SOC" }
+            require(endMileageKm == null || endMileageKm >= 0.0) { "结束里程不能小于 0" }
+            if (active.startMileageKm != null && endMileageKm != null) {
+                require(endMileageKm >= active.startMileageKm) { "结束里程不能低于开始里程" }
+            }
+
+            val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == active.vehicleId }
+                ?: error("行程车辆不可用")
+            val derivedEndMileage = endMileageKm ?: active.startMileageKm?.plus(active.distanceMeters / 1000.0)
+            val estimate = TripEnergyCalculator.estimate(
+                batteryCapacityKwh = selectedVehicle.batteryCapacityKwh,
+                startSoc = active.startSoc,
+                endSoc = endSoc,
+                distanceMeters = active.distanceMeters
+            )
+            tripDao.updateSession(
+                active.copy(
+                    endedAtEpochMillis = endedAtEpochMillis,
+                    elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis),
+                    endSoc = endSoc,
+                    endMileageKm = derivedEndMileage,
+                    consumedEnergyKwh = estimate.consumedEnergyKwh,
+                    averageConsumptionKwhPer100Km = estimate.averageConsumptionKwhPer100Km,
+                    status = TripStatus.COMPLETED
+                )
+            )
+            vehicleStateDao.upsert(
+                VehicleStateEntity(
+                    vehicleId = active.vehicleId,
+                    currentSoc = endSoc,
+                    currentMileage = derivedEndMileage,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                    updateSource = VehicleStateUpdateSource.TRIP_END.name
+                )
+            )
         }
         TripTrackingService.stop(context)
     }
