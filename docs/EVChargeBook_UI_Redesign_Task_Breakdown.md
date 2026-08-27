@@ -1,79 +1,126 @@
 # EV Charge Book v0.5 UI Redesign Task Breakdown
 
+Issue: UI redesign for v0.5 Dark First experience
+
 ## Goal
 
-Turn the current function-first Compose UI into a polished EV companion experience without adding features outside the v0.5 mainline.
+Replace the current prototype-style card layout with a polished EV consumer app experience.
 
-## Visual direction
+## Phase P0 - Core Visual Upgrade
 
-- Dark First by default
-- Energy green as the primary accent
-- Vehicle-first hierarchy
-- Fewer nested cards
-- Real charts and timelines where data exists
-- No fabricated live SOC, live range, or AI content
+### Design System
 
-## P0 — current slice
-
-### Theme foundation
-- [x] EV design tokens
-- [x] Dark First default theme
-- [x] Light theme mapping retained for later in-app switching
-- [x] Compatibility warning color mapping
+- Create EV Design Tokens
+- Create Dark Theme default
+- Prepare Light Theme switching
+- Standardize typography and spacing
 
 ### Dashboard
-- [x] Replace old overview header with vehicle-first hero
-- [x] Remove fabricated SOC / live range values
-- [x] Add a graphical EV vehicle stage instead of a generic metric-card layout
-- [x] Show stored battery capacity and rated range as real vehicle facts
-- [x] Add branded EV Charge Book header
-- [x] Replace nested energy metric tiles with one Energy Flow surface
-- [x] Add a real six-month charging-energy visualization from monthlyTrend
-- [x] Replace recent charging cards with a timeline layout
-- [x] Make the empty charging state compact and part of the timeline
-- [x] Keep one clear charging action on the dashboard
 
-### Remaining dashboard polish
-- [ ] Replace the temporary drawn vehicle silhouette with an approved reusable vehicle visual asset when available
-- [ ] Replace Material NavigationBar selection treatment with a custom EV bottom bar
-- [ ] Tune typography and spacing after another real-device screenshot pass
-- [ ] Verify small / large Android screen behavior
+Target:
 
-## P0 — next pages after dashboard direction is accepted
+Hero Vehicle Dashboard
 
-### Charging records
-- [ ] Full charging timeline
-- [ ] Charger type differentiation
-- [ ] SOC / energy / fee hierarchy using only recorded fields
-- [ ] Dense empty state and first-record CTA
+Requirements:
+
+- Vehicle visual focus
+- Prefer real manufacturer artwork for supported exact vehicle matches
+- Battery capacity and rated range from stored vehicle facts
+- Monthly cost
+- Recent charging summary
+
+Vehicle artwork policy:
+
+- Official manufacturer media sources are preferred over generic stock images
+- Matching must be strict enough to avoid showing the wrong model
+- Official remote artwork may be cached by the Android image loader
+- Unsupported models fall back to the local EV illustration
+- Do not fabricate live SOC or estimated remaining range when the app has no runtime source
+
+Current supported official artwork mapping:
+
+- BYD / 比亚迪 + base SEAL / 海豹 model -> BYD Media Hub official SEAL artwork
+
+### Charging Records
+
+Target:
+
+Timeline based charging history
+
+Requirements:
+
+- Home charging / fast charging distinction
+- SOC change
+- Energy amount
+- Cost
+- Location
 
 ### Trip
-- [ ] Route/map becomes the page visual anchor
-- [ ] Trip summary metrics use a flat hierarchy instead of nested cards
-- [ ] Speed and energy visuals use existing runtime data only
-- [ ] Recent trips become an activity timeline/list
 
-## P1
+Target:
 
-### Stats / energy
-- [ ] Reuse Energy Flow visual language
-- [ ] Monthly trend chart hierarchy
-- [ ] Charger-type distribution
-- [ ] Charging place analysis
+Main v0.5 differentiating page
 
-### Vehicle
-- [ ] Vehicle identity stage
-- [ ] Vehicle metadata hierarchy
-- [ ] Connection / backup tools visually separated from vehicle identity
-- [ ] In-app Dark / Light mode switch
+Requirements:
 
-## P2
+- Route map card
+- Start and destination
+- Distance
+- Duration
+- Average speed
+- Energy consumption
+- Recent trips list
 
-- [ ] Motion and number transitions
-- [ ] Empty-state illustration polish
-- [ ] Custom bottom navigation interaction
-- [ ] Final visual QA screenshots
+## Phase P1 - Information Enhancement
 
-## Acceptance rule
+### Energy Statistics
 
-A page should not be considered visually complete only because it uses Dark colors. It must have a clear visual anchor, hierarchy, and data visualization appropriate to the business function.
+Upgrade:
+
+- Monthly cost overview
+- Energy trend charts
+- Charging distribution
+- Consumption metrics
+
+### Vehicle Information
+
+Upgrade:
+
+- Vehicle hero card
+- Battery information
+- Range
+- Mileage
+- Charging statistics
+
+### Theme Switching
+
+Add:
+
+- Dark First
+- Light Theme
+- System theme support
+
+## Phase P2 - Polish
+
+- Animation improvements
+- Empty states
+- Loading states
+- Micro interactions
+
+## Development Rules
+
+- Use Jetpack Compose components
+- Keep UI components reusable
+- Avoid business logic changes
+- Follow existing MVVM structure
+- A black background alone does not satisfy the redesign: each key page needs a visual focus, hierarchy and domain-specific visualization
+
+## Acceptance Criteria
+
+- App has a unified visual language
+- Dark theme looks production ready
+- Pages no longer feel like simple card collections
+- Dashboard vehicle hero can render an exact supported model image on a real device
+- Unsupported vehicle models degrade gracefully to a local fallback graphic
+- Trip becomes a first-class feature
+- Theme switching works consistently
