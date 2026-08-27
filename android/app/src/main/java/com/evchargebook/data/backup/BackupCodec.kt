@@ -20,7 +20,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 6
+    const val CURRENT_SCHEMA_VERSION = 7
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -87,6 +87,12 @@ object BackupCodec {
                     putNullable("endAltitudeMeters", trip.endAltitudeMeters)
                     putNullable("minAltitudeMeters", trip.minAltitudeMeters)
                     putNullable("maxAltitudeMeters", trip.maxAltitudeMeters)
+                    putNullable("startSoc", trip.startSoc)
+                    putNullable("endSoc", trip.endSoc)
+                    putNullable("startMileageKm", trip.startMileageKm)
+                    putNullable("endMileageKm", trip.endMileageKm)
+                    putNullable("consumedEnergyKwh", trip.consumedEnergyKwh)
+                    putNullable("averageConsumptionKwhPer100Km", trip.averageConsumptionKwhPer100Km)
                     put("status", trip.status)
                 })
             }
@@ -195,6 +201,12 @@ object BackupCodec {
                         endAltitudeMeters = item.optNullableDouble("endAltitudeMeters"),
                         minAltitudeMeters = item.optNullableDouble("minAltitudeMeters"),
                         maxAltitudeMeters = item.optNullableDouble("maxAltitudeMeters"),
+                        startSoc = item.optNullableInt("startSoc"),
+                        endSoc = item.optNullableInt("endSoc"),
+                        startMileageKm = item.optNullableDouble("startMileageKm"),
+                        endMileageKm = item.optNullableDouble("endMileageKm"),
+                        consumedEnergyKwh = item.optNullableDouble("consumedEnergyKwh"),
+                        averageConsumptionKwhPer100Km = item.optNullableDouble("averageConsumptionKwhPer100Km"),
                         status = item.optString("status", TripStatus.COMPLETED)
                     )
                 )
@@ -236,6 +248,8 @@ object BackupCodec {
         require(sessions.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的行程" }
         require(sessions.all { it.status in setOf(TripStatus.RECORDING, TripStatus.INTERRUPTED, TripStatus.COMPLETED) }) { "备份中存在未知行程状态" }
         require(sessions.all { (it.startLatitude == null) == (it.startLongitude == null) && (it.endLatitude == null) == (it.endLongitude == null) }) { "备份中存在不完整的行程坐标" }
+        require(sessions.all { it.startSoc == null || it.startSoc in 0..100 }) { "备份中存在无效行程开始 SOC" }
+        require(sessions.all { it.endSoc == null || it.endSoc in 0..100 }) { "备份中存在无效行程结束 SOC" }
         require(points.all { it.tripId in tripIds }) { "备份中存在无法关联行程的轨迹点" }
 
         return BackupPayload(
@@ -261,4 +275,7 @@ object BackupCodec {
 
     private fun JSONObject.optNullableLong(name: String): Long? =
         if (!has(name) || isNull(name)) null else getLong(name)
+
+    private fun JSONObject.optNullableInt(name: String): Int? =
+        if (!has(name) || isNull(name)) null else getInt(name)
 }
