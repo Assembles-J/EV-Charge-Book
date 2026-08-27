@@ -154,6 +154,7 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
     val vehicle = vehicles.firstOrNull { it.id == trip.vehicleId }
     val firstPoint = points.firstOrNull()
     val lastPoint = points.lastOrNull()
+    val wholeTripAverageMps = if (trip.elapsedSeconds > 0) trip.distanceMeters / trip.elapsedSeconds else null
     Scaffold(topBar = { TopAppBar(title = { Text("行程详情") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
@@ -167,10 +168,17 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    TripMetric("距离", formatDistance(trip.distanceMeters), Modifier.weight(1f))
-                    TripMetric("总耗时", formatDuration(trip.elapsedSeconds), Modifier.weight(1f))
-                    TripMetric("平均速度", trip.averageSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
+                Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                        TripMetric("距离", formatDistance(trip.distanceMeters), Modifier.weight(1f))
+                        TripMetric("总耗时", formatDuration(trip.elapsedSeconds), Modifier.weight(1f))
+                        TripMetric("全程均速", wholeTripAverageMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
+                    }
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                        TripMetric("行驶均速", trip.averageSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
+                        TripMetric("最高速度", trip.maxSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
+                        TripMetric("移动时间", trip.movingSeconds?.let(::formatDuration) ?: "--", Modifier.weight(1f))
+                    }
                 }
             }
             if (points.size >= 2) item { TripRoutePreview(points) }
@@ -209,7 +217,9 @@ private fun SectionHeading(title: String, subtitle: String) {
 
 @Composable
 private fun TripRoutePreview(points: List<TripPointEntity>) {
-    val geometry = remember(points) { TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude) }) }
+    val geometry = remember(points) {
+        TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) })
+    }
     if (geometry == null || !geometry.isDrawable) return
     val routeColor = MaterialTheme.colorScheme.primary
     val startColor = MaterialTheme.colorScheme.tertiary
@@ -217,14 +227,25 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
 
     Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("轨迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text("${geometry.points.size} 点", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("轨迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("${geometry.points.size} 点 · ${geometry.segments.size} 段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Canvas(Modifier.fillMaxWidth().height(240.dp)) {
                 val p = 16.dp.toPx(); val w = (size.width - p * 2).coerceAtLeast(1f); val h = (size.height - p * 2).coerceAtLeast(1f)
-                val offsets = geometry.points.map { Offset(p + it.x * w, p + it.y * h) }
-                offsets.zipWithNext().forEach { (from, to) -> drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round) }
-                drawCircle(startColor, 6.dp.toPx(), offsets.first()); drawCircle(endColor, 6.dp.toPx(), offsets.last())
+                fun offset(point: com.evchargebook.domain.trip.TripRoutePoint) = Offset(p + point.x * w, p + point.y * h)
+                geometry.segments.forEach { segment ->
+                    segment.map(::offset).zipWithNext().forEach { (from, to) ->
+                        drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+                    }
+                }
+                drawCircle(startColor, 6.dp.toPx(), offset(geometry.points.first()))
+                drawCircle(endColor, 6.dp.toPx(), offset(geometry.points.last()))
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("起点", style = MaterialTheme.typography.labelMedium, color = startColor); Text("终点", style = MaterialTheme.typography.labelMedium, color = endColor) }
+            if (geometry.gapCount > 0) {
+                Text("检测到 ${geometry.gapCount} 处超过 2 分钟的 GPS 缺口，缺失区间不会用实线伪造连接。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
+            }
             Text("基于真实 WGS84 轨迹点绘制，不做道路吸附或虚构路线。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
