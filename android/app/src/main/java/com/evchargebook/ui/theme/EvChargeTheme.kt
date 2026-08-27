@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.evchargebook.update.AppUpdatePrompt
 
 data class AppSpacing(
     val xxs: Dp = 4.dp,
@@ -127,8 +128,10 @@ fun EvChargeTheme(content: @Composable () -> Unit) {
         MaterialTheme(
             colorScheme = colors,
             typography = AppTypography,
-            shapes = AppShapes,
-            content = content
-        )
+            shapes = AppShapes
+        ) {
+            content()
+            AppUpdatePrompt()
+        }
     }
 }
