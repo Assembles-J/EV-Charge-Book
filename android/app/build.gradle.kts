@@ -14,6 +14,8 @@ val hasReleaseSigning = listOf(
     releaseKeyAlias,
     releaseKeyPassword
 ).all { !it.isNullOrBlank() }
+val updateManifestUrl = System.getenv("APP_UPDATE_MANIFEST_URL")
+    ?: "https://groupim.cn/ev-charge-book/release-meta/latest.json"
 
 android {
     namespace = "com.evchargebook"
@@ -25,6 +27,7 @@ android {
         targetSdk = 36
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("APP_VERSION_NAME") ?: "0.1.0-dev"
+        buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
     }
 
     signingConfigs {
