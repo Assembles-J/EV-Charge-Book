@@ -7,34 +7,43 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
+import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
 import java.util.Locale
 
 /**
  * Vehicle-first hero for the v0.5 dashboard.
  *
- * Uses only stored vehicle facts. The central vehicle stage is intentionally
- * graphical so the dashboard does not degrade into nested metric cards.
+ * Uses stored vehicle facts and, when a strict model match exists, official
+ * manufacturer media artwork. Unknown models keep the local EV illustration so
+ * the UI never shows a misleading vehicle.
  */
 @Composable
 fun HeroVehicleCard(vehicle: VehicleEntity?) {
@@ -102,7 +111,7 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
                 )
             }
 
-            VehicleStage()
+            VehicleStage(vehicle)
 
             if (vehicle != null) {
                 Row(
@@ -128,13 +137,63 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
 }
 
 @Composable
-private fun VehicleStage() {
-    val energy = EVDesignTokens.Energy.green
-    Canvas(
+private fun VehicleStage(vehicle: VehicleEntity?) {
+    val officialImage = OfficialVehicleImageCatalog.resolve(vehicle)
+    val stageShape = RoundedCornerShape(18.dp)
+
+    Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(124.dp)
+            .height(176.dp)
+            .clip(stageShape)
+            .background(Color(0xFF07100C))
     ) {
+        VehicleSilhouetteFallback(
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (officialImage != null) {
+            AsyncImage(
+                model = ImageRequest.Builder(LocalContext.current)
+                    .data(officialImage.imageUrl)
+                    .crossfade(350)
+                    .build(),
+                contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 官方车型图",
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.Center
+            )
+
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0x16000000),
+                                Color(0x16000000),
+                                Color(0xC407100C)
+                            )
+                        )
+                    )
+            )
+
+            Text(
+                "官方车型图 · ${officialImage.sourceLabel}",
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White.copy(alpha = 0.62f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VehicleSilhouetteFallback(modifier: Modifier = Modifier) {
+    val energy = EVDesignTokens.Energy.green
+    Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
 
