@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.7.0
+版本: v2.7.1
 更新时间: 2026-08-27
 
 ## 0. 路线原则
@@ -27,9 +27,11 @@
 
 ## v0.2 - Vehicle, Location & Trip Foundation
 
-状态: **Core Accepted / Reliability Hardening**
+状态: Core Accepted
 
-### Trip / Location reliability
+基础 Location / Trip / Bluetooth 能力已进入稳定基线。历史 reliability RC 工作已在 0.4 RC1 收口，不再把 #41 当作当前 blocker。
+
+已完成：
 
 - [x] TripSession / TripPoint + migration
 - [x] manual start/stop
@@ -41,26 +43,24 @@
 - [x] GPS/Network provider fallback
 - [x] runtime GPS health / accepted-point heartbeat
 - [x] GPS LOST / LONG_GAP ongoing notification
-- [x] long GPS gap 在 route preview 中断开，不画假实线
-- [x] 全程均速 / 行驶均速 / 最高速度口径明确区分
-- [ ] 长 gap 两端不参与可信距离累计
-- [ ] GPS / Network 去重与择优
-- [ ] longest gap / provider counters / rejected reason 持久摘要
-- [ ] service lifecycle / restart / re-delivery evidence
-- [ ] 锁屏长行程真机复验
-- [ ] TripSpeedSegment 派生模型
-- [ ] 连续速度颜色映射
-- [ ] 短时峰值与 segment speed 分开展示
+- [x] long GPS gap route break / no fake solid route
+- [x] trusted-distance long-gap correction
+- [x] persistent Trip runtime diagnostics
+- [x] lock-screen long-drive physical verification
+- [x] Bluetooth-assisted Trip start physical verification
 
-PR #36 第一阶段代码已通过 Android Build Run #184：Build/Test + Debug APK Green。
+Release evidence:
 
-详细设计：`docs/TRIP_GPS_RELIABILITY_AND_SPEED_VISUALIZATION.md` 与 `docs/LOCATION_TRIP.md`。
+- Issue #41 completed in 0.4 RC1
+- Release gate #54 closed as released
+
+后续 Location/Trip 工作进入 v0.5 experience improvement issues，不重新打开 RC1。
 
 ---
 
 ## v0.3 - Local Analytics & Reliability
 
-状态: **Feature Complete Candidate / Reliability Follow-up**
+状态: Feature Complete Candidate / incremental follow-up
 
 已实现：
 
@@ -76,64 +76,94 @@ PR #36 第一阶段代码已通过 Android Build Run #184：Build/Test + Debug A
 - selected-vehicle charging CSV analysis export
 - non-blocking anomaly hints
 
-真实 Trip #7 观察到 12-15 分钟级 GPS gap，因此 reliability 优先级高于继续扩统计展示。
-
-下一阶段：
-
-1. long-gap distance aggregation correction
-2. GPS / Network provider fusion / dedupe
-3. Trip completeness summary / persistent diagnostics
-4. lock-screen physical verification
-5. segmented speed + continuous color route
+剩余只做真实使用证明有价值的可靠性增量，不扩重型 chart 或独立数据模型。
 
 ---
 
-## v0.4 - Cloud & Catalog Sync
+## v0.4 - RC1 / Local First Sync Foundation
 
-状态: Foundation started; feature expansion deferred until Trip P0 reliability is observable
+状态: **0.4 RC1 released; sync foundation retained**
 
-已存在 Local First Sync Foundation 不回退：stable identity / tombstone / protocol 文档继续保留。
+0.4 RC1 已完成 Trip reliability release gate（#41 / #54）。
 
-Cloud sync must not become the only recovery path. Existing local JSON backup remains supported。
+同时 Vehicle + ChargingRecord 的 stable identity / tombstone / protocol foundation 保留：
+
+- stable `syncId`
+- `updatedAtEpochMillis`
+- ChargingRecord tombstone
+- Backup compatibility
+- first sync protocol boundary
+
+更完整 cloud sync expansion 继续保持后续阶段，不影响 v0.5 本地体验工作。
 
 ---
 
 ## v0.5 - Dark First Product Experience
 
-状态: **Core UI implementation merged / physical polish and usability hardening pending**
+状态: **Core UI merged / experience hardening active**
 
-PR #71 已合并到 `main`，最新累计分支基线 Android Build Run #294 Green，并产出 Debug APK。
+PR #71 已合并到 `main`。最终 head Android Build Run #294 Green，并产出 Debug APK artifact。
 
-已完成：
+### Core UI completed
 
 - [x] Dark First design tokens / typography / spacing / surfaces
 - [x] persisted explicit Light mode
 - [x] 五个一级入口：总览 / 记录 / 统计 / 行程 / 车辆
 - [x] Dashboard vehicle Hero + energy cockpit + recent charging
-- [x] 本地 drawable 车型图；移除运行时 Base64/网络图片依赖
-- [x] Records 账本 Cockpit + timeline
-- [x] Add/Edit Charge 表单统一
-- [x] Trip READY / LIVE / INTERRUPTED + 历史 / 详情 / GPS gap 视觉语义
-- [x] Stats 月度 / 对比 / mix / place / interval hierarchy
-- [x] Vehicle garage / catalog / editor / Bluetooth / backup / CSV UI 一致化
+- [x] local drawable vehicle artwork; runtime Base64/network artwork removed
+- [x] Records ledger cockpit + timeline
+- [x] Add/Edit Charge hierarchy
+- [x] Trip READY / LIVE / INTERRUPTED + history / detail / GPS gap semantics
+- [x] Stats monthly / comparison / mix / place / interval hierarchy
+- [x] Vehicle garage / catalog / editor / Bluetooth / backup / CSV consistency
 - [x] compact empty states
 - [x] strict vehicle-artwork mapping tests
 
-仍需真实使用收口：
+### Current v0.5 P0 — correctness and state safety
 
-- [ ] 五个一级页面真机视觉复核
-- [ ] Light mode 对比度复核
-- [ ] 320-360dp / fontScale 1.3-1.5
-- [ ] 超长车型 / 地点 / 蓝牙名称
-- [ ] TalkBack / contentDescription / 48dp touch targets
-- [ ] dirty-form 返回保护
-- [ ] active Trip 下 Restore / archive / switch 等数据安全 guard
-- [ ] IME / 长表单可用性
-- [ ] 只根据真机反馈追加必要动画/微交互
+1. **#66 Location fallback**
+   - coordinates remain the source of truth
+   - address resolution must be asynchronous/optional
+   - distinguish waiting GPS / resolving address / unavailable
 
-这些 usability/state-safety 项统一由 #42 跟踪。Location 地址降级与真机验收继续由 #66/#14 跟踪；顶部留白最终复核由 #22 跟踪。
+2. **#42 active-Trip and form safety**
+   - Restore/Archive/Switch must not corrupt active Trip context
+   - dirty Add/Edit forms need Back protection
+   - warning/error must not depend on color only
 
-车型图当前只覆盖少量精确车型，不应扩成 UI 内硬编码图库；规模化目录/车型覆盖仍归 #20。
+3. **#68 invalid Trip handling**
+   - explicit invalid/incomplete classification
+   - user-reviewable cleanup
+   - invalid Trips must not silently pollute statistics
+
+### Current v0.5 P1 — device UX and presentation
+
+4. **#70 + #22 final physical UI pass**
+   - five primary pages
+   - top inset / density
+   - Light mode contrast
+   - only local visual polish after device findings
+
+5. **#42 accessibility / adaptive layout**
+   - fontScale 1.3/1.5
+   - 320-360dp
+   - TalkBack/contentDescription
+   - >=48dp touch targets
+   - long text / IME behavior
+
+6. **#67 route continuity presentation**
+   - improve small temporary gaps without fabricating route data
+   - keep large gaps visually distinct
+
+7. **#26 background/lock-screen recovery UX**
+   - permission/provider/battery-optimization repair paths
+   - notification deep links and interrupted-state visibility
+
+### Current v0.5 P2 — analytics/coverage
+
+8. **#69 altitude/elevation analytics** after location quality semantics are stable
+9. **#20 scalable vehicle catalog/artwork coverage pipeline** instead of UI hardcoding
+10. resume **#27/#28 sync expansion** after v0.5 local experience stabilizes
 
 ---
 
@@ -149,60 +179,47 @@ PR #71 已合并到 `main`，最新累计分支基线 Android Build Run #294 Gre
 - [ ] 读取 OBD Vehicle Speed
 - [ ] 与 GNSS `Location.speed` 对照
 
-明确不进入当前主线：
-
-- 厂商私有 CAN ID 逆向
-- 私有 BMS PID 逆向
-- 单车型复杂协议维护
-- OBD 成为 Trip 必需依赖
-
-只有 Vehicle Speed PoC 证明稳定价值后，才评估 SOC / 电压 / 电流 / 电池温度等更多车辆事实。
+明确不进入当前主线：厂商私有 CAN ID 逆向、私有 BMS PID 逆向、单车型复杂协议维护、OBD 成为 Trip 必需依赖。
 
 ---
 
 ## 当前执行顺序
 
 ```text
-Trip P0 reliability
-  -> long-gap distance correction
-  -> GPS / Network dedupe + quality policy
-  -> Trip completeness summary / diagnostics
-  -> physical lock-screen long-drive verification
-  -> v0.5 physical UI/usability hardening (#42/#66/#14/#22)
-  -> Trip P1 segmented speed + colored route
-  -> v0.3 reliability closeout
-  -> resume v0.4 sync expansion
-  -> P3 OBD-II optional PoC when product value justifies it
+#66 coordinate-first location fallback
+  -> #42 P0 active-Trip guards + dirty-form safety
+  -> #68 invalid Trip classification/cleanup
+  -> #70/#22 five-page physical UI closeout
+  -> #42 accessibility / large-font / small-screen / IME
+  -> #67 route continuity presentation
+  -> #26 background/permission repair UX
+  -> #69 altitude analytics
+  -> #20 catalog/artwork scalable coverage
+  -> resume #27/#28 sync expansion
 ```
 
-说明：v0.5 视觉核心已经合并，不再继续大规模换设计语言；后续只做实机暴露的问题、可用性和状态安全。
-
-MapLibre 继续保持低优先级；没有必要为了彩色速度轨迹先引入地图 SDK。
+原则：先修真实数据/状态安全，再做展示增强，最后才扩分析和云同步。
 
 ---
 
 ## 变更记录
 
+### v2.7.1
+
+- corrected stale roadmap wording after verifying #41 is completed and #54 is released
+- made v0.5 the active product-experience milestone
+- prioritized #66, #42 and #68 ahead of additional visual/analytics work
+- kept #70 open only for physical visual closeout
+- separated #67 presentation, #69 analytics and #20 catalog coverage from core UI implementation
+
 ### v2.7.0
 
-- 记录 PR #71 Dark First v0.5 UI baseline 已合并
-- 记录 Android Build Run #294 Green + Debug APK
-- 将车辆图片事实同步为本地 drawable 精确映射，移除旧 runtime Base64/network 描述
-- 将 v0.5 后续从“继续设计”收束为真机视觉、accessibility、large-font/small-screen、dirty-form 和 active-Trip state-safety hardening
-- 明确 #42 为 usability/state-safety owner，#66/#14 为 Location fallback/physical acceptance owner，#20 为规模化车型目录 owner
+- recorded PR #71 Dark First v0.5 UI baseline merged
+- recorded Android Build Run #294 Green + Debug APK
+- synced vehicle artwork to local drawable exact mapping
+- narrowed post-merge work to physical UX/usability hardening
 
 ### v2.6.0
 
 - PR #36 GPS health / notification / route-gap / speed semantics passed Android Build Run #184
-- clarified current peak speed comes primarily from `Location.speed`, not point-to-point straight-line division
-- recorded that average speed still inherits GPS distance-quality limitations
-- promoted long-gap distance correction and GPS/Network dedupe ahead of colored route work
-- added OBD-II as P3 optional VehicleSpeedSource PoC, explicitly excluding private CAN/BMS reverse engineering from current product scope
-
-### v2.5.0
-
-- based on real Trip #7, promoted 12-15 minute GPS gaps to P0 reliability work
-- added segmented speed / continuous color visualization as P1
-- clarified speed colors describe this vehicle's speed, not real traffic congestion
-- clarified long GPS gaps must not be rendered as trustworthy solid routes
-- deferred v0.4 execution until Trip P0 reliability becomes observable
+- documented speed-source semantics and optional OBD-II boundary
