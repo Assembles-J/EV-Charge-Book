@@ -1,126 +1,141 @@
 # EV Charge Book v0.5 UI Redesign Task Breakdown
 
-Issue: UI redesign for v0.5 Dark First experience
+更新时间: 2026-08-27
+状态: Core redesign merged via PR #71; real-device polish remains
 
 ## Goal
 
-Replace the current prototype-style card layout with a polished EV consumer app experience.
+Replace the prototype-style UI with a consistent EV consumer app experience without introducing unsupported telemetry or unrelated future scope.
 
 ## Phase P0 - Core Visual Upgrade
 
 ### Design System
 
-- Create EV Design Tokens
-- Create Dark Theme default
-- Prepare Light Theme switching
-- Standardize typography and spacing
+- [x] EV Design Tokens
+- [x] Dark Theme default
+- [x] persisted Light Theme switch
+- [x] centralized typography, spacing and shapes
+- [x] compact shared empty states
 
 ### Dashboard
 
-Target:
-
-Hero Vehicle Dashboard
-
-Requirements:
-
-- Vehicle visual focus
-- Prefer real manufacturer artwork for supported exact vehicle matches
-- Battery capacity and rated range from stored vehicle facts
-- Monthly cost
-- Recent charging summary
+- [x] vehicle-focused Hero
+- [x] local bundled vehicle artwork for exact supported matches
+- [x] battery capacity and rated range from stored vehicle facts
+- [x] monthly cost/energy cockpit
+- [x] recent charging timeline
+- [x] no fabricated live SOC or remaining range
 
 Vehicle artwork policy:
 
-- Official manufacturer media sources are preferred over generic stock images
-- Matching must be strict enough to avoid showing the wrong model
-- Official remote artwork may be cached by the Android image loader
-- Unsupported models fall back to the local EV illustration
-- Do not fabricate live SOC or estimated remaining range when the app has no runtime source
+- artwork is compiled into the APK under `res/drawable-nodpi`
+- no runtime Base64 decode path
+- no runtime network/hotlink dependency
+- matching is strict enough to avoid wrong-model rendering
+- unsupported models use the local fallback silhouette
 
-Current supported official artwork mapping:
+Current exact artwork coverage:
 
-- BYD / 比亚迪 + base SEAL / 海豹 model -> BYD Media Hub official SEAL artwork
+- BYD / 比亚迪 base Seal / 海豹 2025
+- Leapmotor / 零跑 C16 2026
+- Xiaomi / 小米 SU7 2024
+- Tesla / 特斯拉 Model 3
 
 ### Charging Records
 
-Target:
-
-Timeline based charging history
-
-Requirements:
-
-- Home charging / fast charging distinction
-- SOC change
-- Energy amount
-- Cost
-- Location
+- [x] timeline history
+- [x] SOC transition
+- [x] energy and cost emphasis
+- [x] location/type/odometer when available
+- [x] create/edit flows aligned to the same visual language
 
 ### Trip
 
-Target:
+- [x] READY / LIVE / INTERRUPTED cockpit states
+- [x] history and detail hierarchy
+- [x] route preview using real Trip geometry
+- [x] GPS gap / diagnostic credibility treatment
+- [x] no fake continuous line across large gaps
 
-Main v0.5 differentiating page
-
-Requirements:
-
-- Route map card
-- Start and destination
-- Distance
-- Duration
-- Average speed
-- Energy consumption
-- Recent trips list
+Trip UI acceptance does not replace the separate long-drive GPS reliability acceptance.
 
 ## Phase P1 - Information Enhancement
 
 ### Energy Statistics
 
-Upgrade:
-
-- Monthly cost overview
-- Energy trend charts
-- Charging distribution
-- Consumption metrics
+- [x] monthly cost/energy cockpit
+- [x] month-over-month comparison
+- [x] charger mix
+- [x] common places
+- [x] lifetime totals
+- [x] interval estimates and Trip coverage evidence
 
 ### Vehicle Information
 
-Upgrade:
-
-- Vehicle hero card
-- Battery information
-- Range
-- Mileage
-- Charging statistics
+- [x] vehicle Hero reuse
+- [x] garage/switching
+- [x] catalog/editor
+- [x] Bluetooth prompt
+- [x] backup / CSV utility rows
 
 ### Theme Switching
 
-Add:
+- [x] Dark First
+- [x] explicit Light Theme
+- [x] preference persistence
 
-- Dark First
-- Light Theme
-- System theme support
+System-theme-following is not required for the accepted v0.5 baseline.
 
 ## Phase P2 - Polish
 
-- Animation improvements
-- Empty states
-- Loading states
-- Micro interactions
+- [ ] selective animation/micro-interaction improvements
+- [x] empty states
+- [ ] five-page real-device visual pass
+- [ ] large-font/small-screen acceptance
+- [ ] Light mode contrast acceptance
+- [ ] long-name/overflow acceptance
+
+## Automated Acceptance
+
+- [x] PR #71 merged into `main`
+- [x] PR head included the then-current `main` baseline
+- [x] Android Build Run #294 Green
+- [x] Debug APK artifact produced
+- [x] vehicle artwork strict-mapping regression tests
+
+## Follow-up Ownership
+
+Do not duplicate existing hardening work:
+
+- Issue #42: accessibility, large font/small screen, dirty forms, active Trip guards, keyboard/IME
+- Issue #22: final page-density/top-inset real-device review
+- Issue #66: coordinate-first location/address fallback behavior
+- Issue #14: physical Location/Geocoder acceptance
+- Issue #26: background/lock-screen/permission notification UX
+- Issue #20: scalable vehicle catalog coverage pipeline
 
 ## Development Rules
 
-- Use Jetpack Compose components
-- Keep UI components reusable
-- Avoid business logic changes
-- Follow existing MVVM structure
-- A black background alone does not satisfy the redesign: each key page needs a visual focus, hierarchy and domain-specific visualization
+- Jetpack Compose
+- reusable components/tokens where practical
+- preserve MVVM/business behavior
+- no business-logic changes purely for styling
+- a black background alone is not sufficient; each page needs clear hierarchy/domain visualization
+- CI Green is not equivalent to physical-device acceptance
 
 ## Acceptance Criteria
 
-- App has a unified visual language
-- Dark theme looks production ready
-- Pages no longer feel like simple card collections
-- Dashboard vehicle hero can render an exact supported model image on a real device
-- Unsupported vehicle models degrade gracefully to a local fallback graphic
-- Trip becomes a first-class feature
-- Theme switching works consistently
+Core implementation is considered merged when:
+
+- [x] app has a unified visual language
+- [x] Dashboard has a vehicle visual focus
+- [x] charging history uses a timeline hierarchy
+- [x] Trip is a first-class surface
+- [x] Dark/Light switching works and persists
+- [x] unsupported artwork degrades safely
+- [x] automated Android build/test baseline is Green
+
+Final closeout of Issue #70 still requires:
+
+- [ ] real-device visual acceptance of Dashboard / Records / Stats / Trip / Vehicle
+- [ ] only small polish fixes found by that pass
