@@ -11,18 +11,12 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-data class LocationFix(
-    val latitude: Double,
-    val longitude: Double,
-    val accuracyMeters: Float
-)
-
 interface LocationProvider {
-    suspend fun currentLocation(): LocationFix
+    suspend fun currentLocation(): LocationSnapshot
 }
 
 class AndroidLocationProvider(private val context: Context) : LocationProvider {
-    override suspend fun currentLocation(): LocationFix = suspendCancellableCoroutine { continuation ->
+    override suspend fun currentLocation(): LocationSnapshot = suspendCancellableCoroutine { continuation ->
         val fineGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
         val coarseGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
         if (!fineGranted && !coarseGranted) {
@@ -50,8 +44,21 @@ class AndroidLocationProvider(private val context: Context) : LocationProvider {
             ContextCompat.getMainExecutor(context)
         ) { location ->
             if (!continuation.isActive) return@getCurrentLocation
-            if (location == null) continuation.resumeWithException(IllegalStateException("暂时无法获取当前位置，请稍后重试"))
-            else continuation.resume(LocationFix(location.latitude, location.longitude, location.accuracy))
+            if (location == null) {
+                continuation.resumeWithException(IllegalStateException("暂时无法获取当前位置，请稍后重试"))
+            } else {
+                continuation.resume(
+                    LocationSnapshot(
+                        latitude = location.latitude,
+                        longitude = location.longitude,
+                        accuracyMeters = location.accuracy,
+                        altitudeMeters = if (location.hasAltitude()) location.altitude else null,
+                        provider = location.provider,
+                        timestampEpochMillis = location.time,
+                        quality = LocationQuality.fromAccuracy(location.accuracy)
+                    )
+                )
+            }
         }
     }
 }
