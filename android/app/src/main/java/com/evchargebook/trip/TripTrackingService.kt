@@ -251,6 +251,12 @@ class TripTrackingService : Service() {
         val trustedSegmentDistance = if (continuity.countDistance) rawSegmentDistance else 0.0
         val statsDeltaSeconds = if (continuity.countDuration) rawDeltaSeconds ?: 0 else 0
         val rawSpeed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
+        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
+        val speedAccuracy = if (Build.VERSION.SDK_INT >= 26 && location.hasSpeedAccuracy()) {
+            location.speedAccuracyMetersPerSecond.toDouble()
+        } else {
+            null
+        }
         val aggregateSpeed = if (
             TripSpeedTrustRules.eligibleForAggregate(
                 reportedSpeedMps = rawSpeed,
@@ -259,7 +265,17 @@ class TripTrackingService : Service() {
                 continuityAllowsSpeed = continuity.speedEligibleForAggregate
             )
         ) rawSpeed else null
-        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
+        val maxSpeedCandidate = if (
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = rawSpeed,
+                deltaSeconds = statsDeltaSeconds,
+                trustedDistanceMeters = trustedSegmentDistance,
+                continuityAllowsSpeed = continuity.speedEligibleForAggregate,
+                provider = location.provider,
+                horizontalAccuracyMeters = accuracy,
+                speedAccuracyMps = speedAccuracy
+            )
+        ) rawSpeed else null
         val decision = TripSamplingRules.decide(statsDeltaSeconds, trustedSegmentDistance, aggregateSpeed, accuracy)
         if (!decision.accept) {
             rejectLocation(tripId, location.provider, "sampling_rejected")
@@ -281,7 +297,7 @@ class TripTrackingService : Service() {
             bearingDegrees = location.bearing.takeIf { location.hasBearing() }?.toDouble(),
             horizontalAccuracyMeters = accuracy,
             verticalAccuracyMeters = if (Build.VERSION.SDK_INT >= 26 && location.hasVerticalAccuracy()) location.verticalAccuracyMeters.toDouble() else null,
-            speedAccuracyMps = if (Build.VERSION.SDK_INT >= 26 && location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond.toDouble() else null,
+            speedAccuracyMps = speedAccuracy,
             provider = location.provider
         )
         val pointId = tripDao.insertPoint(point)
@@ -297,7 +313,7 @@ class TripTrackingService : Service() {
                 movingSeconds = newMovingSeconds,
                 stoppedSeconds = newStoppedSeconds,
                 averageSpeedMps = if (newMovingSeconds > 0) newDistance / newMovingSeconds else null,
-                maxSpeedMps = listOfNotNull(session.maxSpeedMps, aggregateSpeed).maxOrNull(),
+                maxSpeedMps = listOfNotNull(session.maxSpeedMps, maxSpeedCandidate).maxOrNull(),
                 startLatitude = session.startLatitude ?: location.latitude,
                 startLongitude = session.startLongitude ?: location.longitude,
                 endLatitude = location.latitude,
