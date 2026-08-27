@@ -18,6 +18,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.theme.spacing
@@ -43,15 +44,9 @@ fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit, onSelectVehicle:
             ),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
         ) {
-            item {
-                HeroVehicleCard(state.vehicle)
-            }
-            item {
-                EnergyDashboardSummary(state)
-            }
-            item {
-                Text("最近充电", style = MaterialTheme.typography.titleLarge)
-            }
+            item { HeroVehicleCard(state.vehicle) }
+            item { EnergyDashboardSummary(state) }
+            item { Text("最近充电", style = MaterialTheme.typography.titleLarge) }
             if (state.chargingRecords.isEmpty()) {
                 item {
                     EmptyState(
