@@ -1,6 +1,9 @@
 package com.evchargebook.ui.dashboard
 
+import android.graphics.BitmapFactory
+import android.util.Base64
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,19 +20,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
@@ -39,9 +42,9 @@ import java.util.Locale
 /**
  * Vehicle-first hero for the v0.5 dashboard.
  *
- * Uses stored vehicle facts and, when a strict model match exists, official
- * manufacturer media artwork. Unknown models keep the local EV illustration so
- * the UI never shows a misleading vehicle.
+ * Supported vehicle artwork is bundled with the APK. The dashboard never needs
+ * to fetch manufacturer photography at runtime and unsupported models keep the
+ * local EV fallback illustration.
  */
 @Composable
 fun HeroVehicleCard(vehicle: VehicleEntity?) {
@@ -134,30 +137,34 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
     }
 }
 
-/**
- * Vehicle artwork lives inside the hero instead of inside a second visible card.
- * Manufacturer photos are deliberately softened into the dark-green stage with
- * edge fades and a tint so a studio background never appears as a pasted rectangle.
- */
 @Composable
 private fun VehicleStage(vehicle: VehicleEntity?) {
-    val officialImage = OfficialVehicleImageCatalog.resolve(vehicle)
+    val artwork = OfficialVehicleImageCatalog.resolve(vehicle)
+    val context = LocalContext.current
+    val bitmap = remember(artwork?.assetPath) {
+        artwork?.let {
+            runCatching {
+                val encoded = context.assets.open(it.assetPath).bufferedReader().use { reader -> reader.readText() }
+                val bytes = Base64.decode(encoded, Base64.DEFAULT)
+                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(184.dp),
+            .height(188.dp),
         contentAlignment = Alignment.Center
     ) {
-        // Ambient energy glow remains visible behind both remote and fallback art.
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.radialGradient(
                         colors = listOf(
-                            EVDesignTokens.Energy.green.copy(alpha = 0.18f),
-                            EVDesignTokens.Energy.green.copy(alpha = 0.05f),
+                            EVDesignTokens.Energy.green.copy(alpha = 0.20f),
+                            EVDesignTokens.Energy.green.copy(alpha = 0.06f),
                             Color.Transparent
                         ),
                         center = Offset.Unspecified,
@@ -166,72 +173,30 @@ private fun VehicleStage(vehicle: VehicleEntity?) {
                 )
         )
 
-        if (officialImage == null) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap,
+                contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 车型图",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(184.dp),
+                contentScale = ContentScale.Fit,
+                alignment = Alignment.Center
+            )
+        } else {
             VehicleSilhouetteFallback(Modifier.fillMaxSize())
-            return@Box
         }
 
-        AsyncImage(
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(officialImage.imageUrl)
-                .crossfade(300)
-                .build(),
-            contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 官方车型图",
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(172.dp),
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.Center
-        )
-
-        // Turn the source photograph into part of the hero instead of a rectangular photo card.
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color(0x4A07100C))
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0.00f to Color(0xE807100C),
-                            0.17f to Color(0x5207100C),
-                            0.58f to Color(0x1207100C),
-                            0.82f to Color(0x7307100C),
-                            1.00f to Color(0xF207100C)
-                        )
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.horizontalGradient(
-                        colorStops = arrayOf(
-                            0.00f to Color(0xE607100C),
-                            0.14f to Color(0x4807100C),
-                            0.50f to Color.Transparent,
-                            0.86f to Color(0x4807100C),
-                            1.00f to Color(0xE607100C)
-                        )
-                    )
-                )
-        )
-
-        // A subtle ground light visually anchors the car to the EV cockpit.
         Box(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth(0.78f)
+                .fillMaxWidth(0.82f)
                 .height(1.dp)
                 .background(
                     Brush.horizontalGradient(
                         listOf(
                             Color.Transparent,
-                            EVDesignTokens.Energy.green.copy(alpha = 0.58f),
+                            EVDesignTokens.Energy.green.copy(alpha = 0.72f),
                             Color.Transparent
                         )
                     )
