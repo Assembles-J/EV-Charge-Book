@@ -447,7 +447,8 @@ class TripTrackingService : Service() {
         private const val CHANNEL_ID = "trip_tracking"
         private const val NOTIFICATION_ID = 2201
         private const val SAMPLE_INTERVAL_MS = 4_000L
-        private const val SAMPLE_DISTANCE_METERS = 8f
+        // Keep callback liveness time-based; TripSamplingRules owns stationary write throttling.
+        private const val SAMPLE_DISTANCE_METERS = 0f
         private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
         private const val MAX_DETAIL_LENGTH = 160
 
