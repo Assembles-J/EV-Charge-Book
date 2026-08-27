@@ -116,7 +116,7 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
                     )
                     HeroMetric(
                         label = "标称续航",
-                        value = "${one(vehicle.rangeKm)} km",
+                        value = "${vehicle.rangeKm} km",
                         modifier = Modifier.weight(1f)
                     )
                 }
