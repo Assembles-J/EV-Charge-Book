@@ -454,14 +454,25 @@ fun MainApp(
                         if (estimate.consumedEnergyKwh != null) {
                             HorizontalDivider()
                             Text(
-                                "SOC ${active.startSoc}% → ${endSoc}% · 消耗约 ${String.format(Locale.US, "%.1f", estimate.consumedEnergyKwh)} kWh",
+                                "SOC ${active.startSoc}% → ${endSoc}% · 估算消耗 ${String.format(Locale.US, "%.1f", estimate.consumedEnergyKwh)} kWh",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Text(
-                                estimate.averageConsumptionKwhPer100Km?.let { "平均能耗 ${String.format(Locale.US, "%.1f", it)} kWh/100km" }
+                                estimate.averageConsumptionKwhPer100Km?.let { "估算平均能耗 ${String.format(Locale.US, "%.1f", it)} kWh/100km" }
                                     ?: "距离不足，暂不能计算平均能耗",
                                 style = MaterialTheme.typography.titleMedium,
                                 color = MaterialTheme.colorScheme.primary
+                            )
+                        } else if (active.startSoc != null && endSoc != null && endSoc in 0..100) {
+                            HorizontalDivider()
+                            Text(
+                                if (endSoc >= active.startSoc) {
+                                    "SOC 未下降或出现回升；可能来自取整、回收制动或补能，本次不强行计算行驶能耗。"
+                                } else {
+                                    "当前数据不足以形成可靠的 SOC 能耗估算。"
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         tripCompletionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
@@ -473,7 +484,6 @@ fun MainApp(
                         val parsedMileage = tripEndMileageText.toDoubleOrNull()
                         tripCompletionError = when {
                             parsedSoc == null || parsedSoc !in 0..100 -> "请输入 0~100 的结束 SOC"
-                            active.startSoc != null && parsedSoc > active.startSoc -> "结束 SOC 不能高于开始 SOC"
                             tripEndMileageText.isNotBlank() && (parsedMileage == null || parsedMileage < 0.0) -> "请输入有效的结束总里程"
                             active.startMileageKm != null && parsedMileage != null && parsedMileage < active.startMileageKm -> "结束里程不能低于开始里程"
                             else -> null
