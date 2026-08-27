@@ -12,6 +12,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.ui.components.EmptyState
@@ -57,25 +58,13 @@ fun RecordsScreen(
                 contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.xs),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
             ) {
+                item { LedgerCockpit(records) }
                 item {
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer,
-                        shape = MaterialTheme.shapes.medium
-                    ) {
-                        Row(
-                            Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Column {
-                                Text("累计支出", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                Text("¥ ${two(records.sumOf { it.cost })}", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                            Column(horizontalAlignment = Alignment.End) {
-                                Text("记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                                Text("${records.size} 笔", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
-                            }
-                        }
-                    }
+                    Text(
+                        "最近记录",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
                 items(records, key = { it.id }) { record ->
                     RecordItem(record, onEdit = { onEdit(record) }) { pendingDelete = record }
@@ -96,6 +85,78 @@ fun RecordsScreen(
                 }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } }
+        )
+    }
+}
+
+@Composable
+private fun LedgerCockpit(records: List<ChargingRecordEntity>) {
+    val totalCost = records.sumOf { it.cost }
+    val totalEnergy = records.sumOf { it.energyKwh }
+    val averagePrice = if (totalEnergy > 0.0) totalCost / totalEnergy else 0.0
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(
+            Modifier.padding(MaterialTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(8.dp),
+                    color = MaterialTheme.colorScheme.inversePrimary,
+                    shape = MaterialTheme.shapes.extraSmall
+                ) {}
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text(
+                    "CHARGE / LEDGER",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .62f)
+                )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
+                Text(
+                    "累计支出",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .66f)
+                )
+                Text(
+                    "¥ ${two(totalCost)}",
+                    style = MaterialTheme.typography.displaySmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.inverseOnSurface
+                )
+            }
+
+            HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+                CockpitValue("补能", "${one(totalEnergy)} kWh", Modifier.weight(1f))
+                CockpitValue("记录", "${records.size} 笔", Modifier.weight(1f))
+                CockpitValue("均价", "¥ ${two(averagePrice)}", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun CockpitValue(label: String, value: String, modifier: Modifier) {
+    Column(modifier) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .52f)
+        )
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.inverseOnSurface
         )
     }
 }

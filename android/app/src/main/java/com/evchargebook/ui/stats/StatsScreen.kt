@@ -9,8 +9,10 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import com.evchargebook.domain.ChargerCategory
 import com.evchargebook.domain.ChargingEstimateConfidence
 import com.evchargebook.domain.ChargingIntervalSample
@@ -61,14 +63,27 @@ fun StatsScreen(state: MainUiState) {
 
 @Composable
 private fun MonthSummary(state: MainUiState) {
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(Modifier.padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            Text("本月充电支出", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = .72f))
-            Text("¥ ${two(state.monthCost)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onPrimaryContainer)
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface
+    ) {
+        Column(Modifier.padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(8.dp), color = MaterialTheme.colorScheme.inversePrimary, shape = MaterialTheme.shapes.extraSmall) {}
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("ENERGY / MONTH", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .60f))
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
+                Text("本月充电支出", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .62f))
+                Text("¥ ${two(state.monthCost)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
-                StatValue("补能", "${one(state.monthEnergy)} kWh", Modifier.weight(1f), MaterialTheme.colorScheme.onPrimaryContainer)
-                StatValue("次数", "${state.chargingCount} 次", Modifier.weight(1f), MaterialTheme.colorScheme.onPrimaryContainer)
-                StatValue("均价", "¥ ${two(state.averagePrice)}", Modifier.weight(1f), MaterialTheme.colorScheme.onPrimaryContainer)
+                StatValue("补能", "${one(state.monthEnergy)} kWh", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
+                StatValue("次数", "${state.chargingCount} 次", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
+                StatValue("均价", "¥ ${two(state.averagePrice)}", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
             }
         }
     }

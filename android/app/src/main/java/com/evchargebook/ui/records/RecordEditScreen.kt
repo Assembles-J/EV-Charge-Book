@@ -12,9 +12,12 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
@@ -59,6 +62,7 @@ fun RecordEditScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("编辑充电记录") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            EditChargeSummary(startSoc, endSoc, energy, cost)
             EditSection("时间与地点") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
@@ -79,9 +83,7 @@ fun RecordEditScreen(
                     NumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     NumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
                 }
-                anomalyWarnings.forEach { warning ->
-                    Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                }
+                anomalyWarnings.forEach { warning -> Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
             }
             EditSection("车辆与备注") {
                 NumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
@@ -105,6 +107,44 @@ fun RecordEditScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("保存修改") }
             Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
+    }
+}
+
+@Composable
+private fun EditChargeSummary(startSoc: String, endSoc: String, energy: String, cost: String) {
+    val start = startSoc.toIntOrNull()
+    val end = endSoc.toIntOrNull()
+    val energyValue = energy.toDoubleOrNull()
+    val costValue = cost.toDoubleOrNull()
+    val delta = if (start != null && end != null && end >= start) end - start else null
+    val unitPrice = if (energyValue != null && energyValue > 0 && costValue != null) costValue / energyValue else null
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(7.dp), color = MaterialTheme.colorScheme.inversePrimary, shape = MaterialTheme.shapes.extraSmall) {}
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("CHARGE / EDIT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+                EditMetric("SOC", delta?.let { "+$it%" } ?: "--", Modifier.weight(1f))
+                EditMetric("补能", energyValue?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--", Modifier.weight(1f))
+                EditMetric("均价", unitPrice?.let { String.format(Locale.US, "¥ %.2f", it) } ?: "--", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditMetric(label: String, value: String, modifier: Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .48f))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
     }
 }
 

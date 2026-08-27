@@ -18,8 +18,10 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -107,6 +109,8 @@ fun AddRecordScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            ChargeInputCockpit(startSoc, endSoc, energy, cost)
+
             FormSection("时间与地点", "先记录事实，详细备注可以之后再补。") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
@@ -154,9 +158,7 @@ fun AddRecordScreen(
                     AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     AddNumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
                 }
-                anomalyWarnings.forEach { warning ->
-                    Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
-                }
+                anomalyWarnings.forEach { warning -> Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary) }
             }
 
             FormSection("车辆与备注", "里程有助于后续估算每百公里补能成本。") {
@@ -189,6 +191,44 @@ fun AddRecordScreen(
 }
 
 @Composable
+private fun ChargeInputCockpit(startSoc: String, endSoc: String, energy: String, cost: String) {
+    val start = startSoc.toIntOrNull()
+    val end = endSoc.toIntOrNull()
+    val energyValue = energy.toDoubleOrNull()
+    val costValue = cost.toDoubleOrNull()
+    val delta = if (start != null && end != null && end >= start) end - start else null
+    val unitPrice = if (energyValue != null && energyValue > 0 && costValue != null) costValue / energyValue else null
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.inverseSurface,
+        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+        shape = MaterialTheme.shapes.extraLarge
+    ) {
+        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(Modifier.size(7.dp), color = MaterialTheme.colorScheme.inversePrimary, shape = MaterialTheme.shapes.extraSmall) {}
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("CHARGE / NEW", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+                InputMetric("SOC", delta?.let { "+$it%" } ?: "--", Modifier.weight(1f))
+                InputMetric("补能", energyValue?.let { "${formatOne(it)} kWh" } ?: "--", Modifier.weight(1f))
+                InputMetric("均价", unitPrice?.let { "¥ ${formatTwo(it)}" } ?: "--", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun InputMetric(label: String, value: String, modifier: Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .48f))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
+    }
+}
+
+@Composable
 private fun FormSection(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
         Text(title, style = MaterialTheme.typography.titleMedium)
@@ -210,3 +250,5 @@ private fun SingleChoiceSegment(options: List<String>, selected: String, onSelec
 @Composable private fun AddNumberField(value: String, onChange: (String) -> Unit, label: String, suffix: String, modifier: Modifier, keyboardType: KeyboardType) { OutlinedTextField(value, onChange, label = { Text(label) }, suffix = { Text(suffix) }, keyboardOptions = KeyboardOptions(keyboardType = keyboardType), modifier = modifier, singleLine = true) }
 private fun formatKm(value: Double) = if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 private fun formatCoordinate(value: Double) = String.format(Locale.US, "%.6f", value)
+private fun formatOne(value: Double) = String.format(Locale.US, "%.1f", value)
+private fun formatTwo(value: Double) = String.format(Locale.US, "%.2f", value)
