@@ -97,4 +97,28 @@ class TripSpeedTrustRulesTest {
             )
         )
     }
+
+    @Test
+    fun `accurate gps speed is eligible for visualization`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMeasuredSpeed(
+                reportedSpeedMps = 15.0,
+                provider = "gps",
+                horizontalAccuracyMeters = 6.0,
+                speedAccuracyMps = 1.0
+            )
+        )
+    }
+
+    @Test
+    fun `network speed is not eligible for visualization`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForMeasuredSpeed(
+                reportedSpeedMps = 39.6,
+                provider = "network",
+                horizontalAccuracyMeters = 30.0,
+                speedAccuracyMps = null
+            )
+        )
+    }
 }

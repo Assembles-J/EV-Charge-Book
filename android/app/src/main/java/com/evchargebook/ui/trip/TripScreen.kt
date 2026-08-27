@@ -32,6 +32,7 @@ import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.location.AndroidGeocoderAddressResolver
@@ -43,6 +44,12 @@ import java.util.Locale
 private val TripHeroBrush = Brush.linearGradient(
     listOf(Color(0xFF06100B), Color(0xFF0A2116), Color(0xFF07120D))
 )
+private val SpeedDeepRed = Color(0xFF8E1919)
+private val SpeedRed = Color(0xFFE44545)
+private val SpeedYellow = Color(0xFFF2C94C)
+private val SpeedGreen = Color(0xFF35C46A)
+private val SpeedBlue = Color(0xFF3B82F6)
+private val SpeedDeepBlue = Color(0xFF2457C5)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -371,7 +378,7 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
         trip.maxAltitudeMeters
     ).any { it != null }
     val geometry = remember(points) {
-        if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) }) else null
+        if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() }) else null
     }
 
     LaunchedEffect(trip.id, trip.status, firstPoint?.id, lastPoint?.id) {
@@ -544,10 +551,10 @@ private fun SectionHeading(title: String, subtitle: String) {
 @Composable
 private fun TripRoutePreview(points: List<TripPointEntity>) {
     val geometry = remember(points) {
-        TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) })
+        TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() })
     }
     if (geometry == null || !geometry.isDrawable) return
-    val routeColor = MaterialTheme.colorScheme.primary
+    val fallbackRouteColor = MaterialTheme.colorScheme.outline.copy(alpha = .72f)
     val startColor = MaterialTheme.colorScheme.tertiary
     val endColor = MaterialTheme.colorScheme.error
 
@@ -565,15 +572,18 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
                 Modifier
                     .fillMaxWidth()
                     .height(240.dp)
-                    .semantics { contentDescription = "真实行程轨迹；圆形标记为起点，方形标记为终点" }
+                    .semantics { contentDescription = "真实行程轨迹；轨迹颜色表示本车速度，圆形标记为起点，方形标记为终点" }
             ) {
                 val p = 16.dp.toPx()
                 val w = (size.width - p * 2).coerceAtLeast(1f)
                 val h = (size.height - p * 2).coerceAtLeast(1f)
                 fun offset(point: com.evchargebook.domain.trip.TripRoutePoint) = Offset(p + point.x * w, p + point.y * h)
                 geometry.segments.forEach { segment ->
-                    segment.map(::offset).zipWithNext().forEach { (from, to) ->
-                        drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+                    segment.zipWithNext().forEach { (fromPoint, toPoint) ->
+                        val from = offset(fromPoint)
+                        val to = offset(toPoint)
+                        val segmentSpeed = averageSpeed(fromPoint.speedMps, toPoint.speedMps)
+                        drawLine(speedRouteColor(segmentSpeed, fallbackRouteColor), from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
                     }
                 }
                 val start = offset(geometry.points.first())
@@ -585,6 +595,27 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
                     topLeft = Offset(end.x - endSize / 2, end.y - endSize / 2),
                     size = Size(endSize, endSize)
                 )
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
+                Text("车辆速度分布", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(SpeedDeepRed, SpeedRed, SpeedYellow, SpeedGreen, SpeedBlue, SpeedDeepBlue)),
+                            CircleShape
+                        )
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("15", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("30", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("70", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("90+ km/h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text("颜色仅表示本车可信 GPS 速度，不代表道路拥堵或交通状态。灰色线段表示速度数据不足。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
@@ -605,6 +636,49 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
             Text("基于真实 WGS84 轨迹点绘制，不做道路吸附或虚构路线。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+}
+
+private fun TripPointEntity.toRouteGeoPoint(): TripGeoPoint {
+    val trustedSpeed = speedMps.takeIf {
+        TripSpeedTrustRules.eligibleForMeasuredSpeed(
+            reportedSpeedMps = speedMps,
+            provider = provider,
+            horizontalAccuracyMeters = horizontalAccuracyMeters,
+            speedAccuracyMps = speedAccuracyMps
+        )
+    }
+    return TripGeoPoint(
+        latitude = latitude,
+        longitude = longitude,
+        capturedAtEpochMillis = capturedAtEpochMillis,
+        speedMps = trustedSpeed
+    )
+}
+
+private fun averageSpeed(first: Double?, second: Double?): Double? =
+    if (first != null && second != null) (first + second) / 2.0 else null
+
+private fun speedRouteColor(speedMps: Double?, fallback: Color): Color {
+    val kmh = speedMps?.times(3.6)?.takeIf { it.isFinite() && it >= 0.0 } ?: return fallback
+    return when {
+        kmh <= 5.0 -> SpeedDeepRed
+        kmh <= 15.0 -> SpeedRed
+        kmh <= 30.0 -> blendColor(SpeedRed, SpeedYellow, ((kmh - 15.0) / 15.0).toFloat())
+        kmh <= 50.0 -> blendColor(SpeedYellow, SpeedGreen, ((kmh - 30.0) / 20.0).toFloat())
+        kmh <= 70.0 -> SpeedGreen
+        kmh <= 90.0 -> blendColor(SpeedGreen, SpeedBlue, ((kmh - 70.0) / 20.0).toFloat())
+        else -> blendColor(SpeedBlue, SpeedDeepBlue, ((kmh - 90.0) / 40.0).toFloat().coerceIn(0f, 1f))
+    }
+}
+
+private fun blendColor(from: Color, to: Color, fraction: Float): Color {
+    val value = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = from.red + (to.red - from.red) * value,
+        green = from.green + (to.green - from.green) * value,
+        blue = from.blue + (to.blue - from.blue) * value,
+        alpha = from.alpha + (to.alpha - from.alpha) * value
+    )
 }
 
 private fun formatTime(epochMillis: Long) = SimpleDateFormat("M月d日 HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))

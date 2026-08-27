@@ -3,12 +3,14 @@ package com.evchargebook.domain.trip
 data class TripGeoPoint(
     val latitude: Double,
     val longitude: Double,
-    val capturedAtEpochMillis: Long? = null
+    val capturedAtEpochMillis: Long? = null,
+    val speedMps: Double? = null
 )
 
 data class TripRoutePoint(
     val x: Float,
-    val y: Float
+    val y: Float,
+    val speedMps: Double? = null
 )
 
 data class TripRouteGeometry(
@@ -50,7 +52,8 @@ object TripRouteGeometryBuilder {
 
         fun normalize(point: TripGeoPoint) = TripRoutePoint(
             x = ((point.longitude - minLon) / lonSpan).toFloat().coerceIn(0f, 1f),
-            y = (1.0 - (point.latitude - minLat) / latSpan).toFloat().coerceIn(0f, 1f)
+            y = (1.0 - (point.latitude - minLat) / latSpan).toFloat().coerceIn(0f, 1f),
+            speedMps = point.speedMps
         )
 
         val normalizedSegments = sampledSegments.map { segment -> segment.map(::normalize) }
