@@ -29,7 +29,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
         TripDiagnosticEventEntity::class,
         VehicleStateEntity::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -140,6 +140,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN startSoc INTEGER")
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN endSoc INTEGER")
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN startMileageKm REAL")
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN endMileageKm REAL")
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN consumedEnergyKwh REAL")
+                db.execSQL("ALTER TABLE trip_sessions ADD COLUMN averageConsumptionKwhPer100Km REAL")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -158,7 +169,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_5_6,
                         MIGRATION_6_7,
                         MIGRATION_7_8,
-                        MIGRATION_8_9
+                        MIGRATION_8_9,
+                        MIGRATION_9_10
                     )
                     .build()
                     .also { instance = it }

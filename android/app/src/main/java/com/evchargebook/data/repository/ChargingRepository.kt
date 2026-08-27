@@ -22,6 +22,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
 import com.evchargebook.data.entity.VehicleStateUpdateSource
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.domain.TripRules
+import com.evchargebook.domain.trip.TripEnergyCalculator
 import com.evchargebook.trip.TripTrackingService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +35,15 @@ import org.json.JSONArray
 
 private val Context.vehicleSelectionDataStore by preferencesDataStore(name = "vehicle_selection")
 private val selectedVehicleIdKey = longPreferencesKey("selected_vehicle_id")
+
+private data class VehicleStateFact<T>(
+    val value: T,
+    val timestamp: Long,
+    val source: VehicleStateUpdateSource
+)
+
+private fun <T> latestFact(vararg facts: VehicleStateFact<T>?): VehicleStateFact<T>? =
+    facts.filterNotNull().maxByOrNull { it.timestamp }
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ChargingRepository(private val database: AppDatabase, private val context: Context) {
@@ -110,7 +120,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             chargingRecordDao.insertAll(payload.chargingRecords)
             tripDao.insertSessions(payload.tripSessions)
             tripDao.insertPoints(payload.tripPoints)
-            payload.vehicles.forEach { rebuildVehicleStateFromChargingRecords(it.id, VehicleStateUpdateSource.IMPORT) }
+            payload.vehicles.forEach { rebuildVehicleStateFromEvents(it.id) }
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
             require(tripDao.getAllSessions().size == payload.tripSessions.size) { "行程恢复数量校验失败" }
@@ -120,9 +130,19 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long {
         val tripId = database.withTransaction {
-            require(vehicleDao.observeActive().first().any { it.id == vehicleId }) { "当前车辆不可用" }
+            val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == vehicleId }
+                ?: error("当前车辆不可用")
             TripRules.requireCanStart(tripDao.getActive() != null)
-            tripDao.insertSession(TripSessionEntity(vehicleId = vehicleId, startedAtEpochMillis = startedAtEpochMillis, status = TripStatus.RECORDING))
+            val state = vehicleStateDao.get(vehicleId)
+            tripDao.insertSession(
+                TripSessionEntity(
+                    vehicleId = selectedVehicle.id,
+                    startedAtEpochMillis = startedAtEpochMillis,
+                    startSoc = state?.currentSoc,
+                    startMileageKm = state?.currentMileage,
+                    status = TripStatus.RECORDING
+                )
+            )
         }
         startTrackingOrInterrupt(tripId)
         return tripId
@@ -152,17 +172,50 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         }
     }
 
-    suspend fun stopActiveTrip(endedAtEpochMillis: Long = System.currentTimeMillis()) {
+    suspend fun stopActiveTrip(
+        endSoc: Int,
+        endMileageKm: Double? = null,
+        endedAtEpochMillis: Long = System.currentTimeMillis()
+    ) {
+        require(endSoc in 0..100) { "结束 SOC 必须在 0 到 100 之间" }
         database.withTransaction {
             val active = tripDao.getActive() ?: error("当前没有进行中的行程")
-            tripDao.updateSession(active.copy(endedAtEpochMillis = endedAtEpochMillis, elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis), status = TripStatus.COMPLETED))
+            require(endMileageKm == null || endMileageKm >= 0.0) { "结束里程不能小于 0" }
+            if (active.startMileageKm != null && endMileageKm != null) {
+                require(endMileageKm >= active.startMileageKm) { "结束里程不能低于开始里程" }
+            }
+
+            val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == active.vehicleId }
+                ?: error("行程车辆不可用")
+            val derivedEndMileage = endMileageKm ?: active.startMileageKm?.plus(active.distanceMeters / 1000.0)
+            val estimate = TripEnergyCalculator.estimate(
+                batteryCapacityKwh = selectedVehicle.batteryCapacityKwh,
+                startSoc = active.startSoc,
+                endSoc = endSoc,
+                distanceMeters = active.distanceMeters
+            )
+            tripDao.updateSession(
+                active.copy(
+                    endedAtEpochMillis = endedAtEpochMillis,
+                    elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis),
+                    endSoc = endSoc,
+                    endMileageKm = derivedEndMileage,
+                    consumedEnergyKwh = estimate.consumedEnergyKwh,
+                    averageConsumptionKwhPer100Km = estimate.averageConsumptionKwhPer100Km,
+                    status = TripStatus.COMPLETED
+                )
+            )
+            rebuildVehicleStateFromEvents(active.vehicleId)
         }
         TripTrackingService.stop(context)
     }
 
     suspend fun deleteTrip(trip: TripSessionEntity) {
         require(trip.status == TripStatus.COMPLETED) { "进行中的行程不能删除" }
-        tripDao.deleteSession(trip)
+        database.withTransaction {
+            tripDao.deleteSession(trip)
+            rebuildVehicleStateFromEvents(trip.vehicleId)
+        }
     }
 
     suspend fun addChargingRecord(
@@ -200,17 +253,14 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                     locationAccuracyMeters = locationAccuracyMeters
                 )
             )
-            writeChargeState(vehicleId, endSoc, odometerKm)
+            rebuildVehicleStateFromEvents(vehicleId)
         }
     }
 
     suspend fun deleteChargingRecord(record: ChargingRecordEntity) {
         database.withTransaction {
             chargingRecordDao.markDeleted(record.id, System.currentTimeMillis())
-            val state = vehicleStateDao.get(record.vehicleId)
-            if (state?.updateSource == VehicleStateUpdateSource.CHARGE_RECORD.name) {
-                rebuildVehicleStateFromChargingRecords(record.vehicleId, VehicleStateUpdateSource.CHARGE_RECORD)
-            }
+            rebuildVehicleStateFromEvents(record.vehicleId)
         }
     }
 
@@ -225,10 +275,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                     updatedAtEpochMillis = System.currentTimeMillis()
                 )
             )
-            val state = vehicleStateDao.get(record.vehicleId)
-            if (state?.updateSource == VehicleStateUpdateSource.CHARGE_RECORD.name) {
-                rebuildVehicleStateFromChargingRecords(record.vehicleId, VehicleStateUpdateSource.CHARGE_RECORD)
-            }
+            rebuildVehicleStateFromEvents(record.vehicleId)
         }
     }
 
@@ -274,33 +321,60 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     private suspend fun ensureVehicleState(vehicleId: Long) {
         if (vehicleStateDao.get(vehicleId) == null) {
-            vehicleStateDao.upsert(VehicleStateEntity(vehicleId = vehicleId))
+            rebuildVehicleStateFromEvents(vehicleId)
         }
     }
 
-    private suspend fun writeChargeState(vehicleId: Long, endSoc: Int, odometerKm: Double?) {
+    private suspend fun rebuildVehicleStateFromEvents(vehicleId: Long) {
         val existing = vehicleStateDao.get(vehicleId)
-        vehicleStateDao.upsert(
-            VehicleStateEntity(
-                vehicleId = vehicleId,
-                currentSoc = endSoc,
-                currentMileage = odometerKm ?: existing?.currentMileage,
-                updatedAtEpochMillis = System.currentTimeMillis(),
-                updateSource = VehicleStateUpdateSource.CHARGE_RECORD.name
-            )
-        )
-    }
+        val manualState = existing?.takeIf { it.updateSource == VehicleStateUpdateSource.MANUAL_UPDATE.name }
 
-    private suspend fun rebuildVehicleStateFromChargingRecords(vehicleId: Long, source: VehicleStateUpdateSource) {
-        val latest = chargingRecordDao.getLatestForVehicle(vehicleId)
-        val latestWithOdometer = chargingRecordDao.getLatestWithOdometerForVehicle(vehicleId)
+        val latestCharge = chargingRecordDao.getLatestForVehicle(vehicleId)
+        val latestTripSoc = tripDao.getLatestCompletedWithSocForVehicle(vehicleId)
+        val socFact = latestFact(
+            latestCharge?.let {
+                VehicleStateFact(it.endSoc, it.chargeTimeEpochMillis, VehicleStateUpdateSource.CHARGE_RECORD)
+            },
+            latestTripSoc?.let {
+                VehicleStateFact(it.endSoc!!, it.endedAtEpochMillis!!, VehicleStateUpdateSource.TRIP_END)
+            },
+            manualState?.currentSoc?.let {
+                VehicleStateFact(it, manualState.updatedAtEpochMillis, VehicleStateUpdateSource.MANUAL_UPDATE)
+            }
+        )
+
+        val latestChargeMileage = chargingRecordDao.getLatestWithOdometerForVehicle(vehicleId)
+        val latestTripMileage = tripDao.getLatestCompletedWithMileageForVehicle(vehicleId)
+        val mileageFact = latestFact(
+            latestChargeMileage?.odometerKm?.let {
+                VehicleStateFact(it, latestChargeMileage.chargeTimeEpochMillis, VehicleStateUpdateSource.CHARGE_RECORD)
+            },
+            latestTripMileage?.endMileageKm?.let {
+                VehicleStateFact(it, latestTripMileage.endedAtEpochMillis!!, VehicleStateUpdateSource.TRIP_END)
+            },
+            manualState?.currentMileage?.let {
+                VehicleStateFact(it, manualState.updatedAtEpochMillis, VehicleStateUpdateSource.MANUAL_UPDATE)
+            }
+        )
+
+        val updatedAt = maxOf(socFact?.timestamp ?: 0L, mileageFact?.timestamp ?: 0L)
+            .takeIf { it > 0L }
+            ?: System.currentTimeMillis()
+        val source = when {
+            socFact == null && mileageFact == null -> VehicleStateUpdateSource.UNKNOWN
+            socFact == null -> mileageFact!!.source
+            mileageFact == null -> socFact.source
+            mileageFact.timestamp > socFact.timestamp -> mileageFact.source
+            else -> socFact.source
+        }
+
         vehicleStateDao.upsert(
             VehicleStateEntity(
                 vehicleId = vehicleId,
-                currentSoc = latest?.endSoc,
-                currentMileage = latestWithOdometer?.odometerKm,
-                updatedAtEpochMillis = System.currentTimeMillis(),
-                updateSource = if (latest == null && latestWithOdometer == null) VehicleStateUpdateSource.UNKNOWN.name else source.name
+                currentSoc = socFact?.value,
+                currentMileage = mileageFact?.value,
+                updatedAtEpochMillis = updatedAt,
+                updateSource = source.name
             )
         )
     }

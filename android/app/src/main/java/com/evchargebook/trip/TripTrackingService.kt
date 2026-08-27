@@ -75,7 +75,8 @@ class TripTrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> stopFromNotification()
+            // Legacy/stale notification PendingIntents must never bypass the end-SOC completion flow.
+            ACTION_STOP -> Unit
             ACTION_START -> {
                 val tripId = intent.getLongExtra(EXTRA_TRIP_ID, 0L)
                 if (tripId > 0L) beginTracking(tripId, flags and START_FLAG_REDELIVERY != 0) else stopSelf()
@@ -421,9 +422,14 @@ class TripTrackingService : Service() {
         .setOnlyAlertOnce(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         .addAction(
-            android.R.drawable.ic_media_pause,
-            "结束行程",
-            PendingIntent.getService(this, 1, Intent(this, TripTrackingService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            android.R.drawable.ic_menu_view,
+            "打开行程",
+            PendingIntent.getActivity(
+                this,
+                1,
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         )
         .build()
 

@@ -159,7 +159,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
 
     fun startTrip() { val vehicleId = _uiState.value.vehicle?.id ?: return; viewModelScope.launch { runCatching { repository.startTrip(vehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已开始") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法开始行程") } } }
     fun resumeTrip(tripId: Long) { viewModelScope.launch { runCatching { repository.resumeTrip(tripId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程记录已恢复") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法恢复行程") } } }
-    fun stopTrip() { viewModelScope.launch { runCatching { repository.stopActiveTrip() }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已结束") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法结束行程") } } }
+    fun stopTrip(endSoc: Int, endMileageKm: Double?) { viewModelScope.launch { runCatching { repository.stopActiveTrip(endSoc, endMileageKm) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已结束，车辆状态已更新") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法结束行程") } } }
     fun openTripDetail(tripId: Long) { selectedTripId.value = tripId }
     fun closeTripDetail() { selectedTripId.value = null; _uiState.value = _uiState.value.copy(selectedTripId = null, selectedTripPoints = emptyList()) }
     fun deleteTrip(trip: TripSessionEntity) { viewModelScope.launch { runCatching { repository.deleteTrip(trip) }.onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") } } }
