@@ -15,15 +15,22 @@ object OfficialVehicleImageCatalog {
         "BYD Seal bundled hero artwork"
     )
 
+    private val leapmotorC16 = OfficialVehicleImage(
+        R.drawable.leapmotor_c16_2026,
+        "Leapmotor C16 bundled hero artwork"
+    )
+
     fun resolve(vehicle: VehicleEntity?): OfficialVehicleImage? {
         vehicle ?: return null
 
-        if (vehicle.catalogVehicleId?.trim()?.lowercase() == "byd-seal-2025-650") {
-            return bydSeal
+        when (vehicle.catalogVehicleId?.trim()?.lowercase()) {
+            "byd-seal-2025-650" -> return bydSeal
+            "leap-c16-2026-reev-67" -> return leapmotorC16
         }
 
         val brand = vehicle.brand.trim().lowercase()
         val model = vehicle.model.trim().lowercase()
+
         val isByd = brand.contains("比亚迪") || brand.contains("byd")
         val isBaseSeal = (
             model == "海豹" ||
@@ -37,6 +44,13 @@ object OfficialVehicleImageCatalog {
             !model.contains("5 dm") &&
             !model.contains("6 dm")
 
-        return if (isByd && isBaseSeal) bydSeal else null
+        val isLeapmotor = brand.contains("零跑") || brand.contains("leapmotor") || brand == "leap"
+        val isC16 = model == "c16" || model.startsWith("c16 ") || model.startsWith("c16 20")
+
+        return when {
+            isByd && isBaseSeal -> bydSeal
+            isLeapmotor && isC16 -> leapmotorC16
+            else -> null
+        }
     }
 }
