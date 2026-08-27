@@ -19,6 +19,8 @@ class TripRouteGeometryTest {
         assertNotNull(geometry)
         geometry!!
         assertEquals(3, geometry.points.size)
+        assertEquals(1, geometry.segments.size)
+        assertEquals(0, geometry.gapCount)
         assertTrue(geometry.isDrawable)
         assertEquals(0f, geometry.points.first().x, 0.0001f)
         assertEquals(1f, geometry.points.first().y, 0.0001f)
@@ -47,5 +49,36 @@ class TripRouteGeometryTest {
 
         assertEquals(1, geometry.points.size)
         assertTrue(!geometry.isDrawable)
+    }
+
+    @Test
+    fun `long GPS gap creates disconnected route segments`() {
+        val geometry = TripRouteGeometryBuilder.build(
+            listOf(
+                TripGeoPoint(31.2000, 121.4000, 0L),
+                TripGeoPoint(31.2010, 121.4010, 4_000L),
+                TripGeoPoint(31.2500, 121.4500, 180_000L),
+                TripGeoPoint(31.2510, 121.4510, 184_000L)
+            )
+        )!!
+
+        assertEquals(2, geometry.segments.size)
+        assertEquals(1, geometry.gapCount)
+        assertEquals(2, geometry.segments[0].size)
+        assertEquals(2, geometry.segments[1].size)
+        assertTrue(geometry.isDrawable)
+    }
+
+    @Test
+    fun `gap below threshold stays continuous`() {
+        val geometry = TripRouteGeometryBuilder.build(
+            listOf(
+                TripGeoPoint(31.2000, 121.4000, 0L),
+                TripGeoPoint(31.2010, 121.4010, 119_999L)
+            )
+        )!!
+
+        assertEquals(1, geometry.segments.size)
+        assertEquals(0, geometry.gapCount)
     }
 }
