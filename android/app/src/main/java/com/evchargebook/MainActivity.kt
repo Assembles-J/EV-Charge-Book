@@ -29,6 +29,7 @@ import androidx.core.content.ContextCompat
 import com.evchargebook.bluetooth.BluetoothConnectionStateChecker
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.export.ChargingCsvExporter
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.trip.TripEnergyCalculator
@@ -38,6 +39,7 @@ import com.evchargebook.ui.records.RecordEditScreen
 import com.evchargebook.ui.records.RecordsScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
+import com.evchargebook.ui.trip.TripReadyScreen
 import com.evchargebook.ui.trip.TripScreen
 import com.evchargebook.ui.vehicle.BluetoothPromptScreen
 import com.evchargebook.ui.vehicle.VehicleCatalogScreen
@@ -333,20 +335,33 @@ fun MainApp(
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
-                    3 -> TripScreen(
-                        vehicle = state.vehicle,
-                        vehicles = state.vehicles,
-                        trips = state.trips,
-                        activeTrip = state.activeTrip,
-                        selectedTripId = state.selectedTripId,
-                        selectedTripPoints = state.selectedTripPoints,
-                        onStart = ::startTripWithPermission,
-                        onResume = ::resumeTripWithPermission,
-                        onStop = ::requestTripCompletion,
-                        onOpenDetail = viewModel::openTripDetail,
-                        onCloseDetail = viewModel::closeTripDetail,
-                        onDelete = viewModel::deleteTrip
-                    )
+                    3 -> {
+                        if (state.activeTrip == null && state.selectedTripId == null) {
+                            TripReadyScreen(
+                                vehicle = state.vehicle,
+                                currentSoc = state.currentSoc,
+                                currentMileageKm = state.currentMileageKm,
+                                recentTrips = state.trips.filter { it.status == TripStatus.COMPLETED },
+                                onStart = ::startTripWithPermission,
+                                onOpenDetail = viewModel::openTripDetail
+                            )
+                        } else {
+                            TripScreen(
+                                vehicle = state.vehicle,
+                                vehicles = state.vehicles,
+                                trips = state.trips,
+                                activeTrip = state.activeTrip,
+                                selectedTripId = state.selectedTripId,
+                                selectedTripPoints = state.selectedTripPoints,
+                                onStart = ::startTripWithPermission,
+                                onResume = ::resumeTripWithPermission,
+                                onStop = ::requestTripCompletion,
+                                onOpenDetail = viewModel::openTripDetail,
+                                onCloseDetail = viewModel::closeTripDetail,
+                                onDelete = viewModel::deleteTrip
+                            )
+                        }
+                    }
                     4 -> VehicleScreen(
                         vehicle = state.vehicle,
                         vehicles = state.vehicles,
