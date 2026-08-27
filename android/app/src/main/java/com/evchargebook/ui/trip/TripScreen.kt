@@ -251,9 +251,15 @@ private fun ActiveTripPanel(
             ResponsiveCockpitMetrics(
                 listOf(
                     CockpitMetricData("耗时", formatDuration(activeTrip.elapsedSeconds)),
+                    CockpitMetricData("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--"),
                     CockpitMetricData("行驶均速", activeTrip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
                     CockpitMetricData("最高速度", activeTrip.maxSpeedMps?.let(::formatSpeed) ?: "--")
                 )
+            )
+            Text(
+                "行程进行中没有实时车辆 SOC 数据，因此这里只显示出发时快照，不推算当前 SOC 或实时能耗。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (interrupted) {
@@ -338,6 +344,9 @@ private fun TripHistoryRow(trip: TripSessionEntity, onClick: () -> Unit, onDelet
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                formatTripEnergyLine(trip)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text(statusText(trip.status), style = MaterialTheme.typography.labelMedium, color = if (trip.status == TripStatus.INTERRUPTED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
         }
@@ -376,6 +385,14 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
         trip.endAltitudeMeters,
         trip.minAltitudeMeters,
         trip.maxAltitudeMeters
+    ).any { it != null }
+    val hasVehicleStateData = listOf(
+        trip.startSoc,
+        trip.endSoc,
+        trip.startMileageKm,
+        trip.endMileageKm,
+        trip.consumedEnergyKwh,
+        trip.averageConsumptionKwhPer100Km
     ).any { it != null }
     val geometry = remember(points) {
         if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() }) else null
@@ -436,6 +453,29 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
                                 CockpitMetricData("移动时间", trip.movingSeconds?.let(::formatDuration) ?: "--"),
                                 CockpitMetricData("GPS 点", points.size.toString())
                             )
+                        )
+                    }
+                }
+            }
+
+            if (hasVehicleStateData) {
+                item {
+                    SectionHeading("能耗与车辆状态", "SOC 能耗基于配置电池容量和整数 SOC 变化估算，不冒充 BMS 实测值")
+                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                    ResponsiveCockpitMetrics(
+                        listOf(
+                            CockpitMetricData("SOC", formatSocRange(trip.startSoc, trip.endSoc)),
+                            CockpitMetricData("估算消耗", formatEnergyKwh(trip.consumedEnergyKwh)),
+                            CockpitMetricData("估算能耗", formatConsumption(trip.averageConsumptionKwhPer100Km)),
+                            CockpitMetricData("总里程", formatMileageRange(trip.startMileageKm, trip.endMileageKm))
+                        )
+                    )
+                    if (trip.startSoc != null && trip.endSoc != null && trip.endSoc >= trip.startSoc && trip.consumedEnergyKwh == null) {
+                        Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                        Text(
+                            "SOC 未下降或出现回升，本次不强行推算行驶能耗；可能来自整数取整、能量回收或中途补能。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -680,6 +720,38 @@ private fun blendColor(from: Color, to: Color, fraction: Float): Color {
         alpha = from.alpha + (to.alpha - from.alpha) * value
     )
 }
+
+private fun formatTripEnergyLine(trip: TripSessionEntity): String? {
+    val parts = mutableListOf<String>()
+    if (trip.startSoc != null || trip.endSoc != null) {
+        parts += "SOC ${formatSocRange(trip.startSoc, trip.endSoc)}"
+    }
+    when {
+        trip.averageConsumptionKwhPer100Km != null -> parts += "估算 ${formatConsumption(trip.averageConsumptionKwhPer100Km)}"
+        trip.consumedEnergyKwh != null -> parts += "估算 ${formatEnergyKwh(trip.consumedEnergyKwh)}"
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+private fun formatSocRange(start: Int?, end: Int?): String =
+    "${start?.let { "$it%" } ?: "--"} → ${end?.let { "$it%" } ?: "--"}"
+
+private fun formatEnergyKwh(value: Double?): String =
+    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--"
+
+private fun formatConsumption(value: Double?): String =
+    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh/100km", it) } ?: "--"
+
+private fun formatMileageRange(start: Double?, end: Double?): String =
+    when {
+        start != null && end != null -> "${formatMileage(start)} → ${formatMileage(end)} km"
+        start != null -> "${formatMileage(start)} → -- km"
+        end != null -> "-- → ${formatMileage(end)} km"
+        else -> "--"
+    }
+
+private fun formatMileage(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 
 private fun formatTime(epochMillis: Long) = SimpleDateFormat("M月d日 HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
 private fun formatDuration(seconds: Long): String {
