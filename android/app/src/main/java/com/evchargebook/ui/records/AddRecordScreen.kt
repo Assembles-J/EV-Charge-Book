@@ -4,6 +4,7 @@ import android.Manifest
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.horizontalScroll
@@ -57,7 +58,8 @@ fun AddRecordScreen(
     val locationProvider = remember(context) { AndroidLocationProvider(context.applicationContext) }
     val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context.applicationContext) }
     val calendar = remember { Calendar.getInstance() }
-    var chargeTime by remember { mutableLongStateOf(calendar.timeInMillis) }
+    val initialChargeTime = remember { calendar.timeInMillis }
+    var chargeTime by remember { mutableLongStateOf(initialChargeTime) }
     var location by remember { mutableStateOf("") }
     var locationFix by remember { mutableStateOf<LocationFix?>(null) }
     var locating by remember { mutableStateOf(false) }
@@ -70,6 +72,18 @@ fun AddRecordScreen(
     var chargerType by remember { mutableStateOf("公共慢充") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var addressMessage by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
+
+    val isDirty = chargeTime != initialChargeTime ||
+        location.isNotBlank() || locationFix != null || remark.isNotBlank() ||
+        startSoc.isNotBlank() || endSoc.isNotBlank() || energy.isNotBlank() ||
+        cost.isNotBlank() || odometer.isNotBlank() || chargerType != "公共慢充"
+
+    fun requestBack() {
+        if (isDirty) showDiscardConfirm = true else onBack()
+    }
+
+    BackHandler(enabled = isDirty) { showDiscardConfirm = true }
 
     fun requestCurrentLocation() {
         locating = true
@@ -107,7 +121,7 @@ fun AddRecordScreen(
         batteryCapacityKwh = batteryCapacityKwh
     )
 
-    Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+    Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             ChargeInputCockpit(startSoc, endSoc, energy, cost)
@@ -188,6 +202,16 @@ fun AddRecordScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text("保存充电记录") }
             Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("放弃未保存修改？") },
+            text = { Text("当前填写的充电记录还没有保存，返回后这些内容会丢失。") },
+            confirmButton = { TextButton(onClick = { showDiscardConfirm = false; onBack() }) { Text("放弃", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDiscardConfirm = false }) { Text("继续填写") } }
+        )
     }
 }
 
