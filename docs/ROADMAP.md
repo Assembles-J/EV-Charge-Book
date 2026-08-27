@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.6.0
+版本: v2.6.1
 更新时间: 2026-08-27
 
 ## 0. 路线原则
@@ -11,148 +11,95 @@
 
 ---
 
-## v0.1 - Local Charging Book
+## 当前阶段重点
 
-状态: Released / Accepted
+Trip #15 核心功能已经验收关闭；真实长行程暴露出的后续可靠性统一由 #41 跟踪。
 
-- [x] Room / DAO / Repository / ViewModel
-- [x] 车辆创建 / 编辑持久化
-- [x] 充电记录新增 / 编辑 / 删除
-- [x] Dashboard / Records / Stats
-- [x] Android CI / Debug APK
-- [x] 真机核心 CRUD 验收
-- [x] signed production APK / atomic server release
+当前实现基线：
 
----
+- PR #36：GPS health / notification / gap route segmentation，Build Run #184 Green。
+- PR #38：速度来源、GPS reliability、OBD P3 文档收口。
+- #41 第一批 P0：trusted distance / provider dedupe / startup false-speed guard 已实现到分支，等待 CI。
 
-## v0.2 - Vehicle, Location & Trip Foundation
+### P0 — Trip trusted facts
 
-状态: **Core Accepted / Reliability Hardening**
+- [x] GPS health runtime visibility
+- [x] `>=120s` gap 路线预览断开
+- [x] `>=120s` gap 两端不补可信距离（实现待 CI）
+- [x] gap 内 moving/stopped 时间不补造（实现待 CI）
+- [x] 首点/恢复点不直接进入 max speed 聚合（实现待 CI）
+- [x] 陈旧 Location callback freshness guard（实现待 CI）
+- [x] reported speed 与可信位移交叉验证（实现待 CI）
+- [x] GPS -> Network 8 秒窗口去重（实现待 CI）
+- [x] Network -> GPS 切换重新建立距离基线（实现待 CI）
+- [ ] Trip completeness / persistent diagnostics
+- [ ] service lifecycle / re-delivery evidence
+- [ ] long-drive lock-screen physical verification
 
-### Trip / Location reliability
+### P1 — Segmented speed
 
-- [x] TripSession / TripPoint + migration
-- [x] manual start/stop
-- [x] foreground location service + persistent notification
-- [x] WGS84 / accuracy / speed / bearing / altitude
-- [x] distance / elapsed / moving / stopped / average / max speed
-- [x] interrupted resume same TripSession
-- [x] GPS quality / jump filtering + stationary throttling
-- [x] GPS/Network provider fallback
-- [x] runtime GPS health / accepted-point heartbeat
-- [x] GPS LOST / LONG_GAP ongoing notification
-- [x] long GPS gap 在 route preview 中断开，不画假实线
-- [x] 全程均速 / 行驶均速 / 最高速度口径明确区分
-- [ ] 长 gap 两端不参与可信距离累计
-- [ ] GPS / Network 去重与择优
-- [ ] longest gap / provider counters / rejected reason 持久摘要
-- [ ] service lifecycle / restart / re-delivery evidence
-- [ ] 锁屏长行程真机复验
-- [ ] TripSpeedSegment 派生模型
-- [ ] 连续速度颜色映射
-- [ ] 短时峰值与 segment speed 分开展示
+- [x] 全程均速 / 行驶均速 / 最高已记录速度语义拆分
+- [ ] `TripSpeedSegment`
+- [ ] 连续深红 -> 红 -> 黄 -> 绿 -> 蓝速度轨迹
+- [ ] 最快/最慢区段等派生统计仅在数据可信后加入
 
-PR #36 第一阶段代码已通过 Android Build Run #184：Build/Test + Debug APK Green。
+### P2 — Map
 
-详细设计：`docs/TRIP_GPS_RELIABILITY_AND_SPEED_VISUALIZATION.md` 与 `docs/LOCATION_TRIP.md`。
+- [ ] MapLibre / basemap，继续低优先级
 
----
+### P3 — Optional OBD-II
 
-## v0.3 - Local Analytics & Reliability
+- [ ] 外接 Bluetooth/BLE/Wi-Fi OBD-II adapter PoC
+- [ ] 查询标准 Vehicle Speed
+- [ ] OBD speed 与 GNSS speed 对照
 
-状态: **Feature Complete Candidate / Reliability Follow-up**
-
-已实现：
-
-- charging interval odometer distance
-- cost/100km estimate
-- charged kWh/100km estimate
-- Trip + odometer coverage evidence
-- SOC confidence hints
-- six-month cost / energy trend
-- month-over-month comparison
-- charger type mix
-- ChargingPlace aggregation + common-place reuse
-- selected-vehicle charging CSV analysis export
-- non-blocking anomaly hints
-
-真实 Trip #7 观察到 12-15 分钟级 GPS gap，因此 reliability 优先级高于继续扩统计展示。
-
-下一阶段：
-
-1. long-gap distance aggregation correction
-2. GPS / Network provider fusion / dedupe
-3. Trip completeness summary / persistent diagnostics
-4. lock-screen physical verification
-5. segmented speed + continuous color route
+不做私有 CAN/BMS 逆向，不让 OBD 成为 Trip 必需依赖。
 
 ---
 
-## v0.4 - Cloud & Catalog Sync
+## v0.4 - Local First Sync
 
-状态: Foundation started; feature expansion deferred until Trip P0 reliability is observable
+Vehicle + ChargingRecord stable identity foundation 已存在；同步主线 #27/#28 暂时排在 #41 本地 Trip 可靠性之后。
 
-已存在 Local First Sync Foundation 不回退：stable identity / tombstone / protocol 文档继续保留。
+恢复顺序：
 
-Cloud sync must not become the only recovery path. Existing local JSON backup remains supported。
+1. 当前 Trip P0 累计 CI Green
+2. Trip completeness / persistent diagnostics
+3. 长行程锁屏真机复验
+4. P1 segmented speed + colored route
+5. 回到 Vehicle / ChargingRecord sync DTO + conflict/apply rules
+6. 最小 HTTPS sync client/server
 
----
-
-## P3 - Optional Vehicle Data Source / OBD-II
-
-状态: Future Exploration / Not Product Blocker
-
-首个最小 PoC：
-
-- [ ] 定义轻量 `VehicleSpeedSource` 边界
-- [ ] 外接 OBD-II Bluetooth/BLE/Wi-Fi adapter
-- [ ] 查询标准 Vehicle Speed 支持能力
-- [ ] 读取 OBD Vehicle Speed
-- [ ] 与 GNSS `Location.speed` 对照
-
-明确不进入当前主线：
-
-- 厂商私有 CAN ID 逆向
-- 私有 BMS PID 逆向
-- 单车型复杂协议维护
-- OBD 成为 Trip 必需依赖
-
-只有 Vehicle Speed PoC 证明稳定价值后，才评估 SOC / 电压 / 电流 / 电池温度等更多车辆事实。
+旧 Run #177 属于 GitHub Actions stale queued 状态，不再作为同步主线 blocker。
 
 ---
 
 ## 当前执行顺序
 
 ```text
-Trip P0 reliability
-  -> long-gap distance correction
-  -> GPS / Network dedupe + quality policy
-  -> Trip completeness summary / diagnostics
-  -> physical lock-screen long-drive verification
-  -> Trip P1 segmented speed + colored route
-  -> v0.3 reliability closeout
-  -> resume v0.4 sync expansion
-  -> P3 OBD-II optional PoC when product value justifies it
+#41 trusted distance + startup speed guard
+  -> cumulative Android CI
+  -> Trip completeness / persistent diagnostics
+  -> long-drive physical verification
+  -> TripSpeedSegment + colored route
+  -> resume #27/#28 v0.4 sync
+  -> optional OBD-II PoC only when justified
 ```
-
-MapLibre 继续保持低优先级；没有必要为了彩色速度轨迹先引入地图 SDK。
 
 ---
 
 ## 变更记录
 
+### v2.6.1
+
+- 增加未起步时约 120 km/h 的真实设备异常案例
+- 第一批 #41 P0 增加首点速度保护、location freshness、速度/位移交叉验证
+- `>=120s` gap 实现可信距离/时间断开，避免假距离
+- 增加 GPS/Network 短窗口去重和 provider 切换基线规则
+- 保持 P1 彩色速度、P3 OBD 的优先级不前移
+
 ### v2.6.0
 
-- PR #36 GPS health / notification / route-gap / speed semantics passed Android Build Run #184
-- clarified current peak speed comes primarily from `Location.speed`, not point-to-point straight-line division
-- recorded that average speed still inherits GPS distance-quality limitations
-- promoted long-gap distance correction and GPS/Network dedupe ahead of colored route work
-- added OBD-II as P3 optional VehicleSpeedSource PoC, explicitly excluding private CAN/BMS reverse engineering from current product scope
-
-### v2.5.0
-
-- based on real Trip #7, promoted 12-15 minute GPS gaps to P0 reliability work
-- added segmented speed / continuous color visualization as P1
-- clarified speed colors describe this vehicle's speed, not real traffic congestion
-- clarified long GPS gaps must not be rendered as trustworthy solid routes
-- deferred v0.4 execution until Trip P0 reliability becomes observable
+- Trip reliability 优先于继续 sync expansion
+- 明确 GNSS / derived / future OBD speed 数据来源
+- OBD-II 定为 P3 optional exploration
