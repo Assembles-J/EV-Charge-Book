@@ -22,12 +22,18 @@ import com.evchargebook.MainActivity
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripGpsHealth
+import com.evchargebook.domain.TripGpsHealthSnapshot
+import com.evchargebook.domain.TripGpsHealthStatus
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -41,10 +47,20 @@ class TripTrackingService : Service() {
     private val tripDao by lazy { AppDatabase.getInstance(applicationContext).tripDao() }
     private var currentTripId: Long? = null
     private var lastPoint: TripPointEntity? = null
+    private var healthMonitorJob: Job? = null
+
+    @Volatile private var trackingStartedAtEpochMillis: Long = 0L
+    @Volatile private var lastCallbackAtEpochMillis: Long? = null
+    @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
+    @Volatile private var lastAcceptedProvider: String? = null
+    @Volatile private var rejectedPointCount: Int = 0
 
     private val locationListener = LocationListener { location ->
         val tripId = currentTripId ?: return@LocationListener
-        serviceScope.launch { pointMutex.withLock { handleLocation(tripId, location) } }
+        lastCallbackAtEpochMillis = System.currentTimeMillis()
+        serviceScope.launch {
+            pointMutex.withLock { handleLocation(tripId, location) }
+        }
     }
 
     override fun onCreate() {
@@ -68,6 +84,7 @@ class TripTrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        healthMonitorJob?.cancel()
         runCatching { locationManager.removeUpdates(locationListener) }
         serviceScope.cancel()
         super.onDestroy()
@@ -76,12 +93,17 @@ class TripTrackingService : Service() {
     private fun beginTracking(tripId: Long) {
         if (currentTripId == tripId) return
         currentTripId = tripId
+        trackingStartedAtEpochMillis = System.currentTimeMillis()
+        lastCallbackAtEpochMillis = null
+        lastAcceptedPointAtEpochMillis = null
+        lastAcceptedProvider = null
+        rejectedPointCount = 0
 
         val foregroundStarted = runCatching {
             ServiceCompat.startForeground(
                 this,
                 NOTIFICATION_ID,
-                buildNotification(),
+                buildNotification(currentHealthSnapshot()),
                 if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else 0
             )
         }.isSuccess
@@ -101,7 +123,12 @@ class TripTrackingService : Service() {
                 return@launch
             }
             lastPoint = tripDao.getPoints(tripId).lastOrNull()
+            lastPoint?.let {
+                lastAcceptedPointAtEpochMillis = it.capturedAtEpochMillis
+                lastAcceptedProvider = it.provider
+            }
             requestLocationUpdatesOrInterrupt(tripId)
+            startHealthMonitor()
         }
     }
 
@@ -140,14 +167,31 @@ class TripTrackingService : Service() {
         }
     }
 
+    private fun startHealthMonitor() {
+        healthMonitorJob?.cancel()
+        healthMonitorJob = serviceScope.launch {
+            while (isActive && currentTripId != null) {
+                updateNotification()
+                delay(HEALTH_REFRESH_INTERVAL_MS)
+            }
+        }
+    }
+
     private suspend fun handleLocation(tripId: Long, location: Location) {
-        if (!isBasicLocationValid(location)) return
+        if (!isBasicLocationValid(location)) {
+            rejectedPointCount += 1
+            updateNotification()
+            return
+        }
         val session = tripDao.getSession(tripId) ?: return
         if (session.status != TripStatus.RECORDING) return
 
         val capturedAt = location.time.takeIf { it > 0 } ?: System.currentTimeMillis()
         val previous = lastPoint
-        if (previous != null && capturedAt <= previous.capturedAtEpochMillis) return
+        if (previous != null && capturedAt <= previous.capturedAtEpochMillis) {
+            rejectedPointCount += 1
+            return
+        }
 
         val segmentDistance = previous?.let { previousPoint ->
             val result = FloatArray(1)
@@ -158,7 +202,11 @@ class TripTrackingService : Service() {
         val speed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
         val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
         val decision = TripSamplingRules.decide(deltaSeconds, segmentDistance, speed, accuracy)
-        if (!decision.accept) return
+        if (!decision.accept) {
+            rejectedPointCount += 1
+            updateNotification()
+            return
+        }
 
         val newMovingSeconds = TripSamplingRules.movingSeconds(session.movingSeconds ?: 0, deltaSeconds, decision.moving)
         val newStoppedSeconds = TripSamplingRules.stoppedSeconds(session.stoppedSeconds ?: 0, deltaSeconds, decision.moving)
@@ -180,6 +228,8 @@ class TripTrackingService : Service() {
         )
         val pointId = tripDao.insertPoint(point)
         lastPoint = point.copy(id = pointId)
+        lastAcceptedPointAtEpochMillis = System.currentTimeMillis()
+        lastAcceptedProvider = location.provider
 
         val elapsed = ((capturedAt - session.startedAtEpochMillis) / 1000).coerceAtLeast(0)
         tripDao.updateSession(
@@ -200,6 +250,7 @@ class TripTrackingService : Service() {
                 maxAltitudeMeters = mergeMax(session.maxAltitudeMeters, altitude)
             )
         )
+        updateNotification()
     }
 
     private fun stopFromNotification() {
@@ -228,6 +279,8 @@ class TripTrackingService : Service() {
     }
 
     private fun stopTrackingAndSelf() {
+        healthMonitorJob?.cancel()
+        healthMonitorJob = null
         runCatching { locationManager.removeUpdates(locationListener) }
         currentTripId = null
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -240,10 +293,25 @@ class TripTrackingService : Service() {
         return true
     }
 
-    private fun buildNotification() = NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun currentHealthSnapshot(): TripGpsHealthSnapshot = TripGpsHealth.evaluate(
+        nowEpochMillis = System.currentTimeMillis(),
+        trackingStartedAtEpochMillis = trackingStartedAtEpochMillis.takeIf { it > 0L } ?: System.currentTimeMillis(),
+        lastCallbackAtEpochMillis = lastCallbackAtEpochMillis,
+        lastAcceptedPointAtEpochMillis = lastAcceptedPointAtEpochMillis
+    )
+
+    private fun updateNotification() {
+        if (currentTripId == null) return
+        val snapshot = currentHealthSnapshot()
+        runCatching {
+            getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, buildNotification(snapshot))
+        }
+    }
+
+    private fun buildNotification(snapshot: TripGpsHealthSnapshot) = NotificationCompat.Builder(this, CHANNEL_ID)
         .setSmallIcon(android.R.drawable.ic_menu_mylocation)
-        .setContentTitle("EV Charge Book 正在记录行程")
-        .setContentText("定位仅用于本次主动开始的行程")
+        .setContentTitle(notificationTitle(snapshot.status))
+        .setContentText(notificationText(snapshot))
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
@@ -254,9 +322,32 @@ class TripTrackingService : Service() {
         )
         .build()
 
+    private fun notificationTitle(status: TripGpsHealthStatus): String = when (status) {
+        TripGpsHealthStatus.WAITING, TripGpsHealthStatus.GOOD -> "EV Charge Book 正在记录行程"
+        TripGpsHealthStatus.DEGRADED -> "EV Charge Book · GPS 更新变慢"
+        TripGpsHealthStatus.LOST -> "EV Charge Book · GPS 暂时中断"
+        TripGpsHealthStatus.LONG_GAP -> "EV Charge Book · GPS 长时间中断"
+    }
+
+    private fun notificationText(snapshot: TripGpsHealthSnapshot): String {
+        val ageText = snapshot.secondsSinceLastAcceptedPoint?.let { "最近有效定位 ${formatAge(it)}前" } ?: snapshot.message
+        val providerText = when (lastAcceptedProvider) {
+            LocationManager.GPS_PROVIDER -> "GPS"
+            LocationManager.NETWORK_PROVIDER -> "网络定位"
+            null -> null
+            else -> lastAcceptedProvider
+        }
+        return listOfNotNull(ageText, providerText, rejectedPointCount.takeIf { it > 0 }?.let { "已过滤 $it 点" }).joinToString(" · ")
+    }
+
+    private fun formatAge(seconds: Long): String = when {
+        seconds < 60 -> "${seconds}秒"
+        else -> "${seconds / 60}分${seconds % 60}秒"
+    }
+
     private fun createNotificationChannel() {
         val manager = getSystemService(NotificationManager::class.java)
-        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "行程记录", NotificationManager.IMPORTANCE_LOW).apply { description = "用户主动开启行程后显示持续定位状态" })
+        manager.createNotificationChannel(NotificationChannel(CHANNEL_ID, "行程记录", NotificationManager.IMPORTANCE_LOW).apply { description = "用户主动开启行程后显示持续定位与 GPS 健康状态" })
     }
 
     companion object {
@@ -267,6 +358,7 @@ class TripTrackingService : Service() {
         private const val NOTIFICATION_ID = 2201
         private const val SAMPLE_INTERVAL_MS = 4_000L
         private const val SAMPLE_DISTANCE_METERS = 8f
+        private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
 
         fun start(context: Context, tripId: Long) {
             val intent = Intent(context, TripTrackingService::class.java).setAction(ACTION_START).putExtra(EXTRA_TRIP_ID, tripId)
