@@ -1,7 +1,7 @@
 # EV Charge Book Roadmap
 
-版本: v2.4.0
-更新时间: 2026-08-26
+版本: v2.5.0
+更新时间: 2026-08-27
 
 ## 0. 路线原则
 
@@ -88,7 +88,7 @@ Optional, non-blocking:
 
 ### Trip (#15)
 
-状态: Accepted / Issue Closed
+状态: Core Accepted; Reliability Follow-up Required
 
 - [x] TripSession / TripPoint + migration
 - [x] manual start/stop
@@ -102,11 +102,24 @@ Optional, non-blocking:
 - [x] provider failure -> INTERRUPTED instead of crash
 - [x] latest physical functional verification accepted
 
+真实长行程 follow-up：
+
+- [ ] P0 GPS callback / accepted point heartbeat
+- [ ] P0 longest GPS gap / provider switch / rejected point diagnostics
+- [ ] P0 service lifecycle / restart / re-delivery evidence
+- [ ] P0 GPS LOST / LONG_GAP notification state
+- [ ] P1 全程平均 / 行驶平均速度明确区分
+- [ ] P1 TripSpeedSegment 派生模型
+- [ ] P1 连续速度颜色映射
+- [ ] P1 GPS gap 虚线/断开渲染
+
+详细设计：`docs/TRIP_GPS_RELIABILITY_AND_SPEED_VISUALIZATION.md`
+
 ---
 
 ## v0.3 - Local Analytics & Reliability
 
-状态: **Feature Complete Candidate / CI finalizing**
+状态: **Feature Complete Candidate / Reliability Follow-up**
 
 ### Analytics
 
@@ -142,15 +155,21 @@ Optional, non-blocking:
 
 ### Data anomaly hints
 
-Implemented; cumulative CI pending:
-
 - [x] extreme unit price warning
 - [x] energy > 135% battery capacity warning
 - [x] nearly-flat SOC with meaningful energy warning
 - [x] Add/Edit live warnings
 - [x] warnings never block save or mutate raw facts
 - [x] JVM rules tests
-- [ ] latest cumulative Android CI Green
+
+### Reliability priority change after real Trip data
+
+真实 Trip #7 观察到 12-15 分钟级 GPS gap。该问题优先级高于 MapLibre 和更丰富的统计展示。
+
+- [ ] P0 GPS health / continuity diagnostics
+- [ ] P0 lock-screen/background reliability evidence
+- [ ] P0 notification shows GPS health and last valid fix
+- [ ] P1 segmented speed analysis and colored route preview
 
 ### Non-blocking follow-up
 
@@ -165,7 +184,7 @@ No heavy charting framework and no new ChargingPlace Room table until real usage
 
 ## v0.4 - Cloud & Catalog Sync
 
-状态: Next Major Phase / Not Started
+状态: Next Major Phase / Deferred until Trip P0 reliability is observable
 
 Candidate scope:
 
@@ -183,16 +202,29 @@ Cloud sync must not become the only recovery path. Existing local JSON backup re
 ## 当前执行顺序
 
 ```text
-anomaly-warning cumulative CI
+Trip P0 GPS reliability diagnostics
+  -> notification GPS health / last valid fix
+  -> provider / service lifecycle evidence
+  -> Trip P1 segmented speed + colored route preview
   -> v0.3 code/document closeout
   -> Privacy Zone only when route export/share starts
   -> v0.4 sync/catalog design
-  -> implement smallest useful cloud sync slice
 ```
+
+MapLibre 继续保持低优先级；没有必要为了彩色速度轨迹先引入地图 SDK。
 
 ---
 
 ## 变更记录
+
+### v2.5.0
+
+- based on real Trip #7, promoted 12-15 minute GPS gaps to P0 reliability work
+- added GPS callback / provider / service lifecycle diagnostics before more feature expansion
+- added segmented speed / continuous color visualization as P1
+- clarified speed colors describe this vehicle's speed, not real traffic congestion
+- clarified long GPS gaps must not be rendered as trustworthy solid routes
+- deferred v0.4 execution until Trip P0 reliability becomes observable
 
 ### v2.4.0
 
