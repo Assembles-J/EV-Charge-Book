@@ -226,18 +226,40 @@ fun MainApp(
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = MaterialTheme.colorScheme.background,
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = MaterialTheme.colorScheme.inverseSurface,
+                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                    actionColor = MaterialTheme.colorScheme.inversePrimary
+                )
+            }
+        },
         bottomBar = {
             if (!hasOverlayPage) {
-                NavigationBar {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
                     titles.forEachIndexed { index, title ->
-                        NavigationBarItem(selected = tab == index, onClick = { tab = index }, icon = { Icon(icons[index], title) }, label = { Text(title) })
+                        NavigationBarItem(
+                            selected = tab == index,
+                            onClick = { tab = index },
+                            icon = { Icon(icons[index], title) },
+                            label = { Text(title) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
+                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
                     }
                 }
             }
         }
     ) { padding ->
-        Surface(Modifier.padding(padding)) {
+        Surface(Modifier.padding(padding), color = MaterialTheme.colorScheme.background) {
             when {
                 addRecord -> AddRecordScreen(
                     vehicleId = state.vehicle?.id ?: 0L,
