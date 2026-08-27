@@ -1,6 +1,5 @@
 package com.evchargebook.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -49,13 +48,19 @@ private val BrandLight = lightColorScheme(
 private val BrandDark = darkColorScheme(
     primary = EVDesignTokens.Energy.green,
     onPrimary = Color(0xFF041007),
+    primaryContainer = Color(0xFF123321),
+    onPrimaryContainer = EVDesignTokens.Dark.primaryText,
     background = EVDesignTokens.Dark.background,
     onBackground = EVDesignTokens.Dark.primaryText,
     surface = EVDesignTokens.Dark.surface,
     onSurface = EVDesignTokens.Dark.primaryText,
     surfaceVariant = EVDesignTokens.Dark.surfaceElevated,
     onSurfaceVariant = EVDesignTokens.Dark.secondaryText,
-    outline = EVDesignTokens.Dark.outline
+    outline = EVDesignTokens.Dark.outline,
+    outlineVariant = Color(0xFF1B2521),
+    inverseSurface = Color(0xFFEAF3EE),
+    inverseOnSurface = Color(0xFF0A0E0C),
+    inversePrimary = Color(0xFF168C4A)
 )
 
 private val AppTypography = Typography(
@@ -75,9 +80,19 @@ private val AppShapes = Shapes(
     large = RoundedCornerShape(EVDesignTokens.Radius.large.dp)
 )
 
+/**
+ * EV Charge Book v0.5 theme.
+ *
+ * Dark First is the product default. Light mode remains available to callers by
+ * explicitly passing darkTheme = false; a persisted in-app theme switch can be
+ * wired later without changing screen code.
+ */
 @Composable
-fun EvChargeTheme(content: @Composable () -> Unit) {
-    val colors = if (isSystemInDarkTheme()) BrandDark else BrandLight
+fun EvChargeTheme(
+    darkTheme: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    val colors = if (darkTheme) BrandDark else BrandLight
     CompositionLocalProvider(
         LocalAppSpacing provides AppSpacing()
     ) {
