@@ -1,5 +1,6 @@
 package com.evchargebook.ui.vehicle
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,8 +32,17 @@ fun VehicleEditScreen(
     var battery by remember { mutableStateOf(initialBatteryCapacity) }
     var range by remember { mutableStateOf(initialRange) }
     var error by remember { mutableStateOf<String?>(null) }
+    var showDiscardConfirm by remember { mutableStateOf(false) }
 
-    Scaffold(topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+    val isDirty = brand != initialBrand || model != initialModel || battery != initialBatteryCapacity || range != initialRange
+
+    fun requestBack() {
+        if (isDirty) showDiscardConfirm = true else onBack()
+    }
+
+    BackHandler(enabled = isDirty) { showDiscardConfirm = true }
+
+    Scaffold(topBar = { TopAppBar(title = { Text(title) }, navigationIcon = { IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             VehiclePreviewCockpit(brand, model, battery, range, title == "添加车辆")
@@ -64,6 +74,16 @@ fun VehicleEditScreen(
             }, modifier = Modifier.fillMaxWidth()) { Text(if (title == "添加车辆") "添加车辆" else "保存车辆") }
             Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
+    }
+
+    if (showDiscardConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDiscardConfirm = false },
+            title = { Text("放弃未保存修改？") },
+            text = { Text(if (title == "添加车辆") "当前车辆信息还没有保存，返回后这些内容会丢失。" else "车辆信息已经被修改，返回后未保存的修改会丢失。") },
+            confirmButton = { TextButton(onClick = { showDiscardConfirm = false; onBack() }) { Text("放弃", color = MaterialTheme.colorScheme.error) } },
+            dismissButton = { TextButton(onClick = { showDiscardConfirm = false }) { Text("继续编辑") } }
+        )
     }
 }
 
