@@ -30,6 +30,12 @@ val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
 val MaterialTheme.spacing: AppSpacing
     @Composable get() = LocalAppSpacing.current
 
+private val WarningLight = Color(0xFF8A4B08)
+private val WarningDark = Color(0xFFFFC56B)
+private val LocalWarningColor = staticCompositionLocalOf { WarningLight }
+val MaterialTheme.warningColor: Color
+    @Composable get() = LocalWarningColor.current
+
 private val Ink = Color(0xFF171A1F)
 private val MutedInk = Color(0xFF686E78)
 private val Canvas = Color(0xFFF7F8FA)
@@ -111,8 +117,13 @@ private val AppShapes = Shapes(
 
 @Composable
 fun EvChargeTheme(content: @Composable () -> Unit) {
-    val colors = if (isSystemInDarkTheme()) BrandDark else BrandLight
-    CompositionLocalProvider(LocalAppSpacing provides AppSpacing()) {
+    val dark = isSystemInDarkTheme()
+    val colors = if (dark) BrandDark else BrandLight
+    val warning = if (dark) WarningDark else WarningLight
+    CompositionLocalProvider(
+        LocalAppSpacing provides AppSpacing(),
+        LocalWarningColor provides warning
+    ) {
         MaterialTheme(
             colorScheme = colors,
             typography = AppTypography,
