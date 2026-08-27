@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.dashboard.HeroVehicleCard
+import com.evchargebook.ui.theme.LocalAppThemeController
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 
@@ -33,6 +34,7 @@ fun VehicleScreen(
     onImportBackup: () -> Unit
 ) {
     var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
+    val themeController = LocalAppThemeController.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -44,9 +46,7 @@ fun VehicleScreen(
                         Text("MY EV GARAGE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
-                actions = {
-                    IconButton(onClick = onAdd) { Icon(Icons.Default.Add, "添加车辆") }
-                },
+                actions = { IconButton(onClick = onAdd) { Icon(Icons.Default.Add, "添加车辆") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -72,13 +72,12 @@ fun VehicleScreen(
             if (vehicles.size > 1) {
                 item { SettingsSectionTitle("其他车辆", "VEHICLE SWITCHER") }
                 items(vehicles.filter { it.id != vehicle?.id }, key = { it.id }) { item ->
-                    VehicleRow(
-                        vehicle = item,
-                        onSelect = { onSelect(item.id) },
-                        onArchive = { archiveCandidate = item }
-                    )
+                    VehicleRow(item, { onSelect(item.id) }) { archiveCandidate = item }
                 }
             }
+
+            item { SettingsSectionTitle("外观", "APPEARANCE") }
+            item { ThemeSettingsRow(themeController.darkTheme, themeController.setDarkTheme) }
 
             item { SettingsSectionTitle("连接与数据", "CONNECTION & DATA") }
             item { SettingsRow(Icons.Default.Bluetooth, "车载蓝牙", "连接指定设备时提醒开始行程", onBluetoothPrompt) }
@@ -94,26 +93,43 @@ fun VehicleScreen(
             onDismissRequest = { archiveCandidate = null },
             title = { Text("归档 ${candidate.brand} ${candidate.model}？") },
             text = { Text("车辆将不再出现在切换列表中，但历史充电记录仍会保留。") },
-            confirmButton = {
-                TextButton(onClick = { onArchive(candidate); archiveCandidate = null }) { Text("归档") }
-            },
+            confirmButton = { TextButton(onClick = { onArchive(candidate); archiveCandidate = null }) { Text("归档") } },
             dismissButton = { TextButton(onClick = { archiveCandidate = null }) { Text("取消") } }
         )
     }
 }
 
 @Composable
-private fun EmptyGarage(onAdd: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+private fun ThemeSettingsRow(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
     ) {
+        Surface(Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    if (darkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(MaterialTheme.spacing.sm))
+        Column(Modifier.weight(1f)) {
+            Text(if (darkTheme) "深色模式" else "浅色模式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text("Dark First · 选择会自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
+    }
+}
+
+@Composable
+private fun EmptyGarage(onAdd: () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(7.dp), contentAlignment = Alignment.Center) {
-                    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.primary, shape = CircleShape) {}
-                }
+                Surface(Modifier.size(7.dp), color = MaterialTheme.colorScheme.primary, shape = CircleShape) {}
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
                 Text("VEHICLE / EMPTY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
