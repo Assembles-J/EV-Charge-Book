@@ -18,6 +18,8 @@ import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.VehicleStateEntity
+import com.evchargebook.data.entity.VehicleStateUpdateSource
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.domain.TripRules
 import com.evchargebook.trip.TripTrackingService
@@ -39,6 +41,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val vehicleCatalogDao = database.vehicleCatalogDao()
     private val chargingRecordDao = database.chargingRecordDao()
     private val tripDao = database.tripDao()
+    private val vehicleStateDao = database.vehicleStateDao()
     private val bluetoothPreferences = BluetoothPromptPreferences(context)
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
@@ -47,6 +50,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val selectedVehicleId: Flow<Long?> = context.vehicleSelectionDataStore.data.map { it[selectedVehicleIdKey] }
     val vehicle: Flow<VehicleEntity?> = combine(vehicles, selectedVehicleId) { vehicles, selectedId ->
         vehicles.firstOrNull { it.id == selectedId } ?: vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
+    }
+    val vehicleState: Flow<VehicleStateEntity?> = vehicle.flatMapLatest { selected ->
+        selected?.let { vehicleStateDao.observe(it.id) } ?: flowOf(null)
     }
     val chargingRecords: Flow<List<ChargingRecordEntity>> = vehicle.flatMapLatest { selected ->
         selected?.let { chargingRecordDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
@@ -63,11 +69,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val activeVehicles = vehicles.first()
         if (activeVehicles.isEmpty()) {
             val id = vehicleDao.insert(VehicleEntity(brand = "零跑", model = "C16 2026款", batteryCapacityKwh = 67.7, rangeKm = 520, isDefault = true))
+            ensureVehicleState(id)
             selectVehicle(id)
         } else {
             val defaultVehicle = activeVehicles.firstOrNull { it.isDefault } ?: activeVehicles.first()
             if (!defaultVehicle.isDefault) vehicleDao.setDefault(defaultVehicle.id)
             if (selectedVehicleId.first() !in activeVehicles.map { it.id }) selectVehicle(defaultVehicle.id)
+            activeVehicles.forEach { ensureVehicleState(it.id) }
         }
     }
 
@@ -96,11 +104,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             require(tripDao.getActive() == null) { "请先结束当前行程，再恢复备份" }
             tripDao.deleteAllSessions()
             chargingRecordDao.deleteAll()
+            vehicleStateDao.deleteAll()
             vehicleDao.deleteAll()
             vehicleDao.insertAll(payload.vehicles)
             chargingRecordDao.insertAll(payload.chargingRecords)
             tripDao.insertSessions(payload.tripSessions)
             tripDao.insertPoints(payload.tripPoints)
+            payload.vehicles.forEach { rebuildVehicleStateFromChargingRecords(it.id, VehicleStateUpdateSource.IMPORT) }
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
             require(tripDao.getAllSessions().size == payload.tripSessions.size) { "行程恢复数量校验失败" }
@@ -172,39 +182,54 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     ) {
         ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost, odometerKm)
         require((latitude == null) == (longitude == null)) { "定位坐标不完整" }
-        chargingRecordDao.insert(
-            ChargingRecordEntity(
-                vehicleId = vehicleId,
-                chargeTimeEpochMillis = chargeTimeEpochMillis,
-                startSoc = startSoc,
-                endSoc = endSoc,
-                energyKwh = energyKwh,
-                cost = cost,
-                location = location?.trim()?.takeIf { it.isNotEmpty() },
-                chargerType = chargerType,
-                remark = remark?.trim()?.takeIf { it.isNotEmpty() },
-                odometerKm = odometerKm,
-                latitude = latitude,
-                longitude = longitude,
-                locationAccuracyMeters = locationAccuracyMeters
+        database.withTransaction {
+            chargingRecordDao.insert(
+                ChargingRecordEntity(
+                    vehicleId = vehicleId,
+                    chargeTimeEpochMillis = chargeTimeEpochMillis,
+                    startSoc = startSoc,
+                    endSoc = endSoc,
+                    energyKwh = energyKwh,
+                    cost = cost,
+                    location = location?.trim()?.takeIf { it.isNotEmpty() },
+                    chargerType = chargerType,
+                    remark = remark?.trim()?.takeIf { it.isNotEmpty() },
+                    odometerKm = odometerKm,
+                    latitude = latitude,
+                    longitude = longitude,
+                    locationAccuracyMeters = locationAccuracyMeters
+                )
             )
-        )
+            writeChargeState(vehicleId, endSoc, odometerKm)
+        }
     }
 
     suspend fun deleteChargingRecord(record: ChargingRecordEntity) {
-        chargingRecordDao.markDeleted(record.id, System.currentTimeMillis())
+        database.withTransaction {
+            chargingRecordDao.markDeleted(record.id, System.currentTimeMillis())
+            val state = vehicleStateDao.get(record.vehicleId)
+            if (state?.updateSource == VehicleStateUpdateSource.CHARGE_RECORD.name) {
+                rebuildVehicleStateFromChargingRecords(record.vehicleId, VehicleStateUpdateSource.CHARGE_RECORD)
+            }
+        }
     }
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
         ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
         require((record.latitude == null) == (record.longitude == null)) { "定位坐标不完整" }
-        chargingRecordDao.update(
-            record.copy(
-                location = record.location?.trim()?.takeIf { it.isNotEmpty() },
-                remark = record.remark?.trim()?.takeIf { it.isNotEmpty() },
-                updatedAtEpochMillis = System.currentTimeMillis()
+        database.withTransaction {
+            chargingRecordDao.update(
+                record.copy(
+                    location = record.location?.trim()?.takeIf { it.isNotEmpty() },
+                    remark = record.remark?.trim()?.takeIf { it.isNotEmpty() },
+                    updatedAtEpochMillis = System.currentTimeMillis()
+                )
             )
-        )
+            val state = vehicleStateDao.get(record.vehicleId)
+            if (state?.updateSource == VehicleStateUpdateSource.CHARGE_RECORD.name) {
+                rebuildVehicleStateFromChargingRecords(record.vehicleId, VehicleStateUpdateSource.CHARGE_RECORD)
+            }
+        }
     }
 
     suspend fun saveVehicle(vehicle: VehicleEntity) {
@@ -217,6 +242,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val vehicle = VehicleEntity(catalogVehicleId = catalogVehicleId, brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)
         validateVehicle(vehicle)
         val id = vehicleDao.insert(vehicle)
+        ensureVehicleState(id)
         selectVehicle(id)
     }
 
@@ -245,6 +271,39 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }.getOrDefault(emptyList())
 
     suspend fun saveBluetoothPrompt(enabled: Boolean, deviceAddress: String?, deviceName: String?) = bluetoothPreferences.save(enabled, deviceAddress, deviceName)
+
+    private suspend fun ensureVehicleState(vehicleId: Long) {
+        if (vehicleStateDao.get(vehicleId) == null) {
+            vehicleStateDao.upsert(VehicleStateEntity(vehicleId = vehicleId))
+        }
+    }
+
+    private suspend fun writeChargeState(vehicleId: Long, endSoc: Int, odometerKm: Double?) {
+        val existing = vehicleStateDao.get(vehicleId)
+        vehicleStateDao.upsert(
+            VehicleStateEntity(
+                vehicleId = vehicleId,
+                currentSoc = endSoc,
+                currentMileage = odometerKm ?: existing?.currentMileage,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+                updateSource = VehicleStateUpdateSource.CHARGE_RECORD.name
+            )
+        )
+    }
+
+    private suspend fun rebuildVehicleStateFromChargingRecords(vehicleId: Long, source: VehicleStateUpdateSource) {
+        val latest = chargingRecordDao.getLatestForVehicle(vehicleId)
+        val latestWithOdometer = chargingRecordDao.getLatestWithOdometerForVehicle(vehicleId)
+        vehicleStateDao.upsert(
+            VehicleStateEntity(
+                vehicleId = vehicleId,
+                currentSoc = latest?.endSoc,
+                currentMileage = latestWithOdometer?.odometerKm,
+                updatedAtEpochMillis = System.currentTimeMillis(),
+                updateSource = if (latest == null && latestWithOdometer == null) VehicleStateUpdateSource.UNKNOWN.name else source.name
+            )
+        )
+    }
 
     private fun validateVehicle(vehicle: VehicleEntity) {
         require(vehicle.brand.isNotBlank()) { "品牌不能为空" }
