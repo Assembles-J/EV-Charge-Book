@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.6.0
+版本: v2.7.0
 更新时间: 2026-08-27
 
 ## 0. 路线原则
@@ -98,6 +98,45 @@ Cloud sync must not become the only recovery path. Existing local JSON backup re
 
 ---
 
+## v0.5 - Dark First Product Experience
+
+状态: **Core UI implementation merged / physical polish and usability hardening pending**
+
+PR #71 已合并到 `main`，最新累计分支基线 Android Build Run #294 Green，并产出 Debug APK。
+
+已完成：
+
+- [x] Dark First design tokens / typography / spacing / surfaces
+- [x] persisted explicit Light mode
+- [x] 五个一级入口：总览 / 记录 / 统计 / 行程 / 车辆
+- [x] Dashboard vehicle Hero + energy cockpit + recent charging
+- [x] 本地 drawable 车型图；移除运行时 Base64/网络图片依赖
+- [x] Records 账本 Cockpit + timeline
+- [x] Add/Edit Charge 表单统一
+- [x] Trip READY / LIVE / INTERRUPTED + 历史 / 详情 / GPS gap 视觉语义
+- [x] Stats 月度 / 对比 / mix / place / interval hierarchy
+- [x] Vehicle garage / catalog / editor / Bluetooth / backup / CSV UI 一致化
+- [x] compact empty states
+- [x] strict vehicle-artwork mapping tests
+
+仍需真实使用收口：
+
+- [ ] 五个一级页面真机视觉复核
+- [ ] Light mode 对比度复核
+- [ ] 320-360dp / fontScale 1.3-1.5
+- [ ] 超长车型 / 地点 / 蓝牙名称
+- [ ] TalkBack / contentDescription / 48dp touch targets
+- [ ] dirty-form 返回保护
+- [ ] active Trip 下 Restore / archive / switch 等数据安全 guard
+- [ ] IME / 长表单可用性
+- [ ] 只根据真机反馈追加必要动画/微交互
+
+这些 usability/state-safety 项统一由 #42 跟踪。Location 地址降级与真机验收继续由 #66/#14 跟踪；顶部留白最终复核由 #22 跟踪。
+
+车型图当前只覆盖少量精确车型，不应扩成 UI 内硬编码图库；规模化目录/车型覆盖仍归 #20。
+
+---
+
 ## P3 - Optional Vehicle Data Source / OBD-II
 
 状态: Future Exploration / Not Product Blocker
@@ -129,17 +168,28 @@ Trip P0 reliability
   -> GPS / Network dedupe + quality policy
   -> Trip completeness summary / diagnostics
   -> physical lock-screen long-drive verification
+  -> v0.5 physical UI/usability hardening (#42/#66/#14/#22)
   -> Trip P1 segmented speed + colored route
   -> v0.3 reliability closeout
   -> resume v0.4 sync expansion
   -> P3 OBD-II optional PoC when product value justifies it
 ```
 
+说明：v0.5 视觉核心已经合并，不再继续大规模换设计语言；后续只做实机暴露的问题、可用性和状态安全。
+
 MapLibre 继续保持低优先级；没有必要为了彩色速度轨迹先引入地图 SDK。
 
 ---
 
 ## 变更记录
+
+### v2.7.0
+
+- 记录 PR #71 Dark First v0.5 UI baseline 已合并
+- 记录 Android Build Run #294 Green + Debug APK
+- 将车辆图片事实同步为本地 drawable 精确映射，移除旧 runtime Base64/network 描述
+- 将 v0.5 后续从“继续设计”收束为真机视觉、accessibility、large-font/small-screen、dirty-form 和 active-Trip state-safety hardening
+- 明确 #42 为 usability/state-safety owner，#66/#14 为 Location fallback/physical acceptance owner，#20 为规模化车型目录 owner
 
 ### v2.6.0
 
