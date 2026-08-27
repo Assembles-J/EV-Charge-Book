@@ -24,6 +24,12 @@ interface TripDao {
     @Query("SELECT * FROM trip_sessions WHERE id = :tripId LIMIT 1")
     suspend fun getSession(tripId: Long): TripSessionEntity?
 
+    @Query("SELECT * FROM trip_sessions WHERE vehicleId = :vehicleId AND status = 'COMPLETED' AND endedAtEpochMillis IS NOT NULL AND endSoc IS NOT NULL ORDER BY endedAtEpochMillis DESC, id DESC LIMIT 1")
+    suspend fun getLatestCompletedWithSocForVehicle(vehicleId: Long): TripSessionEntity?
+
+    @Query("SELECT * FROM trip_sessions WHERE vehicleId = :vehicleId AND status = 'COMPLETED' AND endedAtEpochMillis IS NOT NULL AND endMileageKm IS NOT NULL ORDER BY endedAtEpochMillis DESC, id DESC LIMIT 1")
+    suspend fun getLatestCompletedWithMileageForVehicle(vehicleId: Long): TripSessionEntity?
+
     @Query("SELECT * FROM trip_sessions ORDER BY startedAtEpochMillis")
     suspend fun getAllSessions(): List<TripSessionEntity>
 
