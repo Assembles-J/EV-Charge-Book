@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
+import com.evchargebook.ui.theme.LocalCockpitColors
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
 import java.util.Locale
@@ -41,6 +42,7 @@ private const val VEHICLE_ARTWORK_TAG = "VehicleArtwork"
 
 @Composable
 fun HeroVehicleCard(vehicle: VehicleEntity?) {
+    val cockpit = LocalCockpitColors.current
     val background = Brush.linearGradient(listOf(Color(0xFF07100C), Color(0xFF0B2417), Color(0xFF07100C)))
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = Color.Transparent) {
         Column(modifier = Modifier.background(background).padding(horizontal = MaterialTheme.spacing.lg, vertical = MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
@@ -48,15 +50,15 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
                     Spacer(Modifier.size(MaterialTheme.spacing.xs))
-                    Text("MY EV", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("MY EV", style = MaterialTheme.typography.labelLarge, color = cockpit.secondaryText)
                 }
                 Surface(color = EVDesignTokens.Energy.green.copy(alpha = 0.12f), shape = CircleShape) {
                     Text("ACTIVE", modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = EVDesignTokens.Energy.green)
                 }
             }
             Column {
-                Text(vehicle?.brand ?: "EV Charge Book", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(vehicle?.model ?: "添加你的第一辆车", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                Text(vehicle?.brand ?: "EV Charge Book", style = MaterialTheme.typography.bodyMedium, color = cockpit.secondaryText)
+                Text(vehicle?.model ?: "添加你的第一辆车", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = cockpit.primaryText)
             }
             VehicleStage(vehicle)
             if (vehicle != null) {
@@ -68,7 +70,7 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
                     InlineMetric("状态", "可记录")
                 }
             } else {
-                Text("完成车辆资料后，这里会作为你的车辆主视觉。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("完成车辆资料后，这里会作为你的车辆主视觉。", style = MaterialTheme.typography.bodyMedium, color = cockpit.secondaryText)
             }
         }
     }
@@ -96,15 +98,42 @@ private fun VehicleStage(vehicle: VehicleEntity?) {
 private fun VehicleSilhouetteFallback(modifier: Modifier = Modifier) {
     val energy = EVDesignTokens.Energy.green
     Canvas(modifier) {
-        val w = size.width; val h = size.height
+        val w = size.width
+        val h = size.height
         drawCircle(brush = Brush.radialGradient(listOf(energy.copy(alpha = 0.20f), Color.Transparent), center = Offset(w * 0.58f, h * 0.60f), radius = w * 0.46f), radius = w * 0.46f, center = Offset(w * 0.58f, h * 0.60f))
-        val body = Path().apply { moveTo(w*.10f,h*.68f); cubicTo(w*.16f,h*.61f,w*.23f,h*.57f,w*.30f,h*.55f); cubicTo(w*.36f,h*.39f,w*.43f,h*.31f,w*.54f,h*.30f); lineTo(w*.66f,h*.30f); cubicTo(w*.73f,h*.33f,w*.79f,h*.43f,w*.84f,h*.53f); cubicTo(w*.91f,h*.55f,w*.95f,h*.60f,w*.96f,h*.68f); lineTo(w*.91f,h*.72f); lineTo(w*.14f,h*.72f); close() }
+        val body = Path().apply {
+            moveTo(w * .10f, h * .68f)
+            cubicTo(w * .16f, h * .61f, w * .23f, h * .57f, w * .30f, h * .55f)
+            cubicTo(w * .36f, h * .39f, w * .43f, h * .31f, w * .54f, h * .30f)
+            lineTo(w * .66f, h * .30f)
+            cubicTo(w * .73f, h * .33f, w * .79f, h * .43f, w * .84f, h * .53f)
+            cubicTo(w * .91f, h * .55f, w * .95f, h * .60f, w * .96f, h * .68f)
+            lineTo(w * .91f, h * .72f)
+            lineTo(w * .14f, h * .72f)
+            close()
+        }
         drawPath(body, brush = Brush.horizontalGradient(listOf(Color(0xFF0D1713), Color(0xFF173728), Color(0xFF0B1511))))
-        drawPath(body, color = energy.copy(alpha=.78f), style=Stroke(width=1.5.dp.toPx()))
-        listOf(w*.27f,w*.78f).forEach { x -> drawCircle(Color(0xFF050807),16.dp.toPx(),Offset(x,h*.70f)); drawCircle(energy.copy(alpha=.60f),10.dp.toPx(),Offset(x,h*.70f),style=Stroke(1.5.dp.toPx())) }
+        drawPath(body, color = energy.copy(alpha = .78f), style = Stroke(width = 1.5.dp.toPx()))
+        listOf(w * .27f, w * .78f).forEach { x ->
+            drawCircle(Color(0xFF050807), 16.dp.toPx(), Offset(x, h * .70f))
+            drawCircle(energy.copy(alpha = .60f), 10.dp.toPx(), Offset(x, h * .70f), style = Stroke(1.5.dp.toPx()))
+        }
     }
 }
 
-@Composable private fun InlineMetric(label:String,value:String){ Column { Text(label,style=MaterialTheme.typography.labelMedium,color=MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.height(2.dp)); Text(value,style=MaterialTheme.typography.titleMedium,fontWeight=FontWeight.SemiBold,color=MaterialTheme.colorScheme.onSurface) } }
-@Composable private fun MetricDivider(){ Box(Modifier.size(width=1.dp,height=28.dp).background(MaterialTheme.colorScheme.outline.copy(alpha=.45f))) }
-private fun one(value:Double)=String.format(Locale.US,"%.1f",value)
+@Composable
+private fun InlineMetric(label: String, value: String) {
+    val cockpit = LocalCockpitColors.current
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+        Spacer(Modifier.height(2.dp))
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = cockpit.primaryText)
+    }
+}
+
+@Composable
+private fun MetricDivider() {
+    Box(Modifier.size(width = 1.dp, height = 28.dp).background(LocalCockpitColors.current.secondaryText.copy(alpha = .28f)))
+}
+
+private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
