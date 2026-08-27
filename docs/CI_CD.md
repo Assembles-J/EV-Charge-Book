@@ -1,6 +1,6 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v1.4.0
+版本: v1.4.1
 更新时间: 2026-08-27
 状态: Authority Subdocument
 
@@ -35,6 +35,8 @@ versionName = 0.1.0-dev
 
 这些值不是正式发布版本，不应随业务 commit 修改。
 
+Debug build 使用独立 application ID suffix，可与 release APK 并存安装，避免签名/包名冲突。
+
 ---
 
 ## 3. CI 流程
@@ -52,16 +54,39 @@ push / pull request Android change
 
 Android Build 只验证代码，不产生正式版本号，不更新线上 `latest.json`。
 
+文档-only PR 可以通过 workflow path 规则不触发 Android Build；不能为了“所有 PR 都有绿勾”而浪费 Android 构建资源。
+
 ---
 
-## 4. Production Release
+## 4. Main Branch Merge Guard
+
+当前仓库实际状态：`main` 尚未启用 branch protection，也没有 required status checks。
+
+这意味着当前流程仍依赖维护者主动等待 CI 后再合并；技术上 GitHub 不会阻止未验证代码进入 `main`。
+
+Issue #75 跟踪最小修复：
+
+- protect `main`
+- 普通代码变更通过 PR 进入
+- Android 代码 PR 在 workflow 适用时必须要求当前 head Android Build 通过
+- checked head 应包含最新 `main`，避免旧基线绿 CI 被合并
+- docs-only PR 保持轻量，不强制无关 Android CI
+- 不引入强制多人 review、复杂 merge queue 或 CODEOWNERS bureaucracy
+
+在 #75 完成前，人工合并规则：
+
+> Code PR 只在最新 head 已包含当前 main 且对应 Android Build Green 后合并。
+
+---
+
+## 5. Production Release
 
 Production Release 继续保持 `workflow_dispatch` 手动门禁。
 
 输入：
 
 - `ref`: 要发布的 commit / branch / tag
-- `release_series`: 产品阶段版本，例如 `0.4`
+- `release_series`: 产品阶段版本，例如 `0.4` / `0.5`
 
 Release workflow 内部才生成：
 
@@ -99,7 +124,7 @@ APK_FILE = ev-charge-book-<VERSION_NAME>.apk
 
 ---
 
-## 5. APK 自动升级发现
+## 6. APK 自动升级发现
 
 生产 App 默认读取：
 
@@ -123,7 +148,7 @@ latest.versionCode > BuildConfig.VERSION_CODE
 
 ---
 
-## 6. 版本规则
+## 7. 版本规则
 
 1. 普通 commit 不修改正式 `versionName/versionCode`。
 2. Android Build 不发布正式版本。
@@ -135,7 +160,7 @@ latest.versionCode > BuildConfig.VERSION_CODE
 
 ---
 
-## 7. Secrets
+## 8. Secrets
 
 Production Environment / organization secrets：
 
@@ -151,7 +176,7 @@ Production Environment / organization secrets：
 
 ---
 
-## 8. 发布门禁
+## 9. 发布门禁
 
 Production Release 前至少满足：
 
@@ -171,15 +196,25 @@ Production Release 前至少满足：
 - 下载后校验成功才进入安装器
 - 签名一致，可完成覆盖安装
 
+v0.5 正式下发前还需要产品 owning issues 的真实设备验收，不因为 Debug CI Green 自动触发 Production Release。
+
 ---
 
-## 9. 历史故障
+## 10. 历史故障
 
 2026-08-26 Android Build Run #41 曾因 workflow 请求不存在的 `platforms;android-37` 在 SDK 安装阶段失败。现已统一到 SDK 36；该故障与业务代码无关。
 
 ---
 
-## 10. 变更记录
+## 11. 变更记录
+
+### v1.4.1
+
+- recorded current `main` branch protection / required-check gap
+- added Issue #75 as the minimal repository-safety owner
+- documented the manual pre-merge rule until GitHub protection is enabled
+- clarified docs-only PRs may intentionally skip Android CI
+- recorded debug/release package coexistence baseline
 
 ### v1.4.0
 
