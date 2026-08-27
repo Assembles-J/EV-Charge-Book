@@ -1,7 +1,7 @@
 # EV Charge Book Roadmap
 
-版本: v2.4.0
-更新时间: 2026-08-26
+版本: v2.6.0
+更新时间: 2026-08-27
 
 ## 0. 路线原则
 
@@ -27,7 +27,7 @@
 
 ## v0.2 - Vehicle, Location & Trip Foundation
 
-状态: **Core Accepted**
+状态: **Core Accepted / Reliability Hardening**
 
 ### Odometer & charging data loop (#18)
 
@@ -88,7 +88,7 @@ Optional, non-blocking:
 
 ### Trip (#15)
 
-状态: Accepted / Issue Closed
+状态: Core Accepted; Reliability Follow-up Active
 
 - [x] TripSession / TripPoint + migration
 - [x] manual start/stop
@@ -102,11 +102,30 @@ Optional, non-blocking:
 - [x] provider failure -> INTERRUPTED instead of crash
 - [x] latest physical functional verification accepted
 
+真实长行程 follow-up：
+
+- [x] P0 runtime GPS health / accepted-point heartbeat
+- [x] P0 GPS LOST / LONG_GAP ongoing notification state
+- [x] P0 long GPS gap 在 route preview 中断开，不画假实线
+- [x] P1 全程均速 / 行驶均速 / 最高速度口径明确区分
+- [ ] P0 长 gap 两端不参与可信距离累计
+- [ ] P0 GPS / Network 去重与择优
+- [ ] P0 longest gap / provider counters / rejected reason 持久摘要
+- [ ] P0 service lifecycle / restart / re-delivery evidence
+- [ ] P0 锁屏长行程真机复验
+- [ ] P1 TripSpeedSegment 派生模型
+- [ ] P1 连续速度颜色映射
+- [ ] P1 短时峰值与 segment speed 分开展示
+
+PR #36 第一阶段代码已通过 Android Build Run #184：Build/Test + Debug APK Green。
+
+详细设计：`docs/TRIP_GPS_RELIABILITY_AND_SPEED_VISUALIZATION.md` 与 `docs/LOCATION_TRIP.md`。
+
 ---
 
 ## v0.3 - Local Analytics & Reliability
 
-状态: **Feature Complete Candidate / CI finalizing**
+状态: **Feature Complete Candidate / Reliability Follow-up**
 
 ### Analytics
 
@@ -142,15 +161,30 @@ Optional, non-blocking:
 
 ### Data anomaly hints
 
-Implemented; cumulative CI pending:
-
 - [x] extreme unit price warning
 - [x] energy > 135% battery capacity warning
 - [x] nearly-flat SOC with meaningful energy warning
 - [x] Add/Edit live warnings
 - [x] warnings never block save or mutate raw facts
 - [x] JVM rules tests
-- [ ] latest cumulative Android CI Green
+
+### Reliability priority change after real Trip data
+
+真实 Trip #7 观察到 12-15 分钟级 GPS gap。该问题优先级高于 MapLibre 和更丰富的统计展示。
+
+已完成第一阶段：
+
+- [x] runtime GPS health
+- [x] lock-screen ongoing notification 显示 GPS 状态与最近有效 fix
+- [x] long gap route discontinuity
+- [x] speed UI 口径修正
+
+下一阶段先修数据可信度，再做彩色速度：
+
+- [ ] long gap distance aggregation 修正
+- [ ] GPS / Network provider fusion / dedupe
+- [ ] Trip data completeness summary
+- [ ] segmented speed + continuous color route
 
 ### Non-blocking follow-up
 
@@ -165,7 +199,9 @@ No heavy charting framework and no new ChargingPlace Room table until real usage
 
 ## v0.4 - Cloud & Catalog Sync
 
-状态: Next Major Phase / Not Started
+状态: Foundation started; feature expansion deferred until Trip P0 reliability is observable
+
+已存在的 Local First Sync Foundation 不回退：stable identity / tombstone / protocol 文档继续保留。
 
 Candidate scope:
 
@@ -176,23 +212,71 @@ Candidate scope:
 - [ ] catalog update pipeline (#20)
 - [ ] conflict / offline-first sync rules
 
-Cloud sync must not become the only recovery path. Existing local JSON backup remains supported.
+Cloud sync must not become the only recovery path. Existing local JSON backup remains supported。
+
+---
+
+## P3 - Optional Vehicle Data Source / OBD-II
+
+状态: Future Exploration / Not Product Blocker
+
+目标不是做 CAN 逆向平台，而是验证“车本身的数据是否能补强 GPS Trip”。
+
+首个最小 PoC：
+
+- [ ] 定义轻量 `VehicleSpeedSource` 边界
+- [ ] 外接 OBD-II Bluetooth/BLE/Wi-Fi adapter
+- [ ] 查询标准 Vehicle Speed 支持能力
+- [ ] 读取 OBD Vehicle Speed
+- [ ] 与 GNSS `Location.speed` 对照
+
+明确不进入当前主线：
+
+- 厂商私有 CAN ID 逆向
+- 私有 BMS PID 逆向
+- 单车型复杂协议维护
+- OBD 成为 Trip 必需依赖
+
+只有 Vehicle Speed PoC 证明稳定价值后，才评估 SOC / 电压 / 电流 / 电池温度等更多车辆事实。
 
 ---
 
 ## 当前执行顺序
 
 ```text
-anomaly-warning cumulative CI
-  -> v0.3 code/document closeout
-  -> Privacy Zone only when route export/share starts
-  -> v0.4 sync/catalog design
-  -> implement smallest useful cloud sync slice
+Trip P0 reliability
+  -> long-gap distance correction
+  -> GPS / Network dedupe + quality policy
+  -> Trip completeness summary / diagnostics
+  -> physical lock-screen long-drive verification
+  -> Trip P1 segmented speed + colored route
+  -> v0.3 reliability closeout
+  -> resume v0.4 sync expansion
+  -> P3 OBD-II optional PoC when product value justifies it
 ```
+
+MapLibre 继续保持低优先级；没有必要为了彩色速度轨迹先引入地图 SDK。
 
 ---
 
 ## 变更记录
+
+### v2.6.0
+
+- PR #36 GPS health / notification / route-gap / speed semantics passed Android Build Run #184
+- clarified current peak speed comes primarily from `Location.speed`, not point-to-point straight-line division
+- recorded that average speed still inherits GPS distance-quality limitations
+- promoted long-gap distance correction and GPS/Network dedupe ahead of colored route work
+- added OBD-II as P3 optional VehicleSpeedSource PoC, explicitly excluding private CAN/BMS reverse engineering from current product scope
+
+### v2.5.0
+
+- based on real Trip #7, promoted 12-15 minute GPS gaps to P0 reliability work
+- added GPS callback / provider / service lifecycle diagnostics before more feature expansion
+- added segmented speed / continuous color visualization as P1
+- clarified speed colors describe this vehicle's speed, not real traffic congestion
+- clarified long GPS gaps must not be rendered as trustworthy solid routes
+- deferred v0.4 execution until Trip P0 reliability becomes observable
 
 ### v2.4.0
 
@@ -203,9 +287,3 @@ anomaly-warning cumulative CI
 - added non-blocking charging anomaly warnings
 - v0.3 moved to Feature Complete Candidate pending final cumulative CI
 - next major phase identified as v0.4 Cloud & Catalog Sync
-
-### v2.3.0
-
-- cumulative Android Build Run #142 Green
-- month-over-month and charger-type analytics completed
-- next active work moved to ChargingPlace derived aggregation
