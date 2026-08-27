@@ -13,14 +13,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -136,57 +134,109 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
     }
 }
 
+/**
+ * Vehicle artwork lives inside the hero instead of inside a second visible card.
+ * Manufacturer photos are deliberately softened into the dark-green stage with
+ * edge fades and a tint so a studio background never appears as a pasted rectangle.
+ */
 @Composable
 private fun VehicleStage(vehicle: VehicleEntity?) {
     val officialImage = OfficialVehicleImageCatalog.resolve(vehicle)
-    val stageShape = RoundedCornerShape(18.dp)
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(176.dp)
-            .clip(stageShape)
-            .background(Color(0xFF07100C))
+            .height(184.dp),
+        contentAlignment = Alignment.Center
     ) {
-        VehicleSilhouetteFallback(
-            modifier = Modifier.fillMaxSize()
+        // Ambient energy glow remains visible behind both remote and fallback art.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.radialGradient(
+                        colors = listOf(
+                            EVDesignTokens.Energy.green.copy(alpha = 0.18f),
+                            EVDesignTokens.Energy.green.copy(alpha = 0.05f),
+                            Color.Transparent
+                        ),
+                        center = Offset.Unspecified,
+                        radius = 520f
+                    )
+                )
         )
 
-        if (officialImage != null) {
-            AsyncImage(
-                model = ImageRequest.Builder(LocalContext.current)
-                    .data(officialImage.imageUrl)
-                    .crossfade(350)
-                    .build(),
-                contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 官方车型图",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.Center
-            )
+        if (officialImage == null) {
+            VehicleSilhouetteFallback(Modifier.fillMaxSize())
+            return@Box
+        }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0x16000000),
-                                Color(0x16000000),
-                                Color(0xC407100C)
-                            )
+        AsyncImage(
+            model = ImageRequest.Builder(LocalContext.current)
+                .data(officialImage.imageUrl)
+                .crossfade(300)
+                .build(),
+            contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 官方车型图",
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(172.dp),
+            contentScale = ContentScale.Crop,
+            alignment = Alignment.Center
+        )
+
+        // Turn the source photograph into part of the hero instead of a rectangular photo card.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0x4A07100C))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0.00f to Color(0xE807100C),
+                            0.17f to Color(0x5207100C),
+                            0.58f to Color(0x1207100C),
+                            0.82f to Color(0x7307100C),
+                            1.00f to Color(0xF207100C)
                         )
                     )
-            )
+                )
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        colorStops = arrayOf(
+                            0.00f to Color(0xE607100C),
+                            0.14f to Color(0x4807100C),
+                            0.50f to Color.Transparent,
+                            0.86f to Color(0x4807100C),
+                            1.00f to Color(0xE607100C)
+                        )
+                    )
+                )
+        )
 
-            Text(
-                "官方车型图 · ${officialImage.sourceLabel}",
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(10.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.62f)
-            )
-        }
+        // A subtle ground light visually anchors the car to the EV cockpit.
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth(0.78f)
+                .height(1.dp)
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.Transparent,
+                            EVDesignTokens.Energy.green.copy(alpha = 0.58f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
     }
 }
 
