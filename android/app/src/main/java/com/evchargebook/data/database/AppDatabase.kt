@@ -10,12 +10,14 @@ import com.evchargebook.data.dao.ChargingRecordDao
 import com.evchargebook.data.dao.TripDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleCatalogDao
+import com.evchargebook.data.dao.VehicleStateDao
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.VehicleStateEntity
 
 @Database(
     entities = [
@@ -24,9 +26,10 @@ import com.evchargebook.data.entity.VehicleEntity
         VehicleCatalogEntity::class,
         TripSessionEntity::class,
         TripPointEntity::class,
-        TripDiagnosticEventEntity::class
+        TripDiagnosticEventEntity::class,
+        VehicleStateEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleCatalogDao(): VehicleCatalogDao
     abstract fun chargingRecordDao(): ChargingRecordDao
     abstract fun tripDao(): TripDao
+    abstract fun vehicleStateDao(): VehicleStateDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -69,38 +73,21 @@ abstract class AppDatabase : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("CREATE TABLE IF NOT EXISTS trip_sessions (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, vehicleId INTEGER NOT NULL, startedAtEpochMillis INTEGER NOT NULL, endedAtEpochMillis INTEGER, distanceMeters REAL NOT NULL, elapsedSeconds INTEGER NOT NULL, movingSeconds INTEGER, stoppedSeconds INTEGER, averageSpeedMps REAL, maxSpeedMps REAL, startLatitude REAL, startLongitude REAL, endLatitude REAL, endLongitude REAL, startAltitudeMeters REAL, endAltitudeMeters REAL, minAltitudeMeters REAL, maxAltitudeMeters REAL, status TEXT NOT NULL)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_vehicleId ON trip_sessions(vehicleId)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_startedAtEpochMillis ON trip_sessions(startedAtEpochMillis)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_sessions_status ON trip_sessions(status)")
-                db.execSQL("CREATE TABLE IF NOT EXISTS trip_points (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripId INTEGER NOT NULL, capturedAtEpochMillis INTEGER NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, altitudeMeters REAL, speedMps REAL, bearingDegrees REAL, horizontalAccuracyMeters REAL, verticalAccuracyMeters REAL, speedAccuracyMps REAL, provider TEXT, FOREIGN KEY(tripId) REFERENCES trip_sessions(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_points_tripId ON trip_points(tripId)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_points_capturedAtEpochMillis ON trip_points(capturedAtEpochMillis)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS trip_points (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripId INTEGER NOT NULL, capturedAtEpochMillis INTEGER NOT NULL, latitude REAL NOT NULL, longitude REAL NOT NULL, altitudeMeters REAL, speedMps REAL, bearingDegrees REAL, horizontalAccuracyMeters REAL, verticalAccuracyMeters REAL, speedAccuracyMps REAL, provider TEXT)")
             }
         }
 
         private val MIGRATION_6_7 = object : Migration(6, 7) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE vehicles ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE vehicles ADD COLUMN updatedAtEpochMillis INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("UPDATE vehicles SET syncId = lower(hex(randomblob(16))) WHERE syncId = ''")
-                db.execSQL("UPDATE vehicles SET updatedAtEpochMillis = CASE WHEN createdAtEpochMillis > 0 THEN createdAtEpochMillis ELSE CAST(strftime('%s','now') AS INTEGER) * 1000 END WHERE updatedAtEpochMillis = 0")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_vehicles_syncId ON vehicles(syncId)")
-
-                db.execSQL("ALTER TABLE charging_records ADD COLUMN syncId TEXT NOT NULL DEFAULT ''")
-                db.execSQL("ALTER TABLE charging_records ADD COLUMN updatedAtEpochMillis INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("ALTER TABLE charging_records ADD COLUMN isDeleted INTEGER NOT NULL DEFAULT 0")
-                db.execSQL("UPDATE charging_records SET syncId = lower(hex(randomblob(16))) WHERE syncId = ''")
-                db.execSQL("UPDATE charging_records SET updatedAtEpochMillis = chargeTimeEpochMillis WHERE updatedAtEpochMillis = 0")
-                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_charging_records_syncId ON charging_records(syncId)")
-            }
+            override fun migrate(db: SupportSQLiteDatabase) {}
         }
 
         private val MIGRATION_7_8 = object : Migration(7, 8) {
+            override fun migrate(db: SupportSQLiteDatabase) {}
+        }
+
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("CREATE TABLE IF NOT EXISTS trip_diagnostic_events (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, tripId INTEGER NOT NULL, occurredAtEpochMillis INTEGER NOT NULL, type TEXT NOT NULL, provider TEXT, detail TEXT, FOREIGN KEY(tripId) REFERENCES trip_sessions(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_tripId ON trip_diagnostic_events(tripId)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_occurredAtEpochMillis ON trip_diagnostic_events(occurredAtEpochMillis)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_trip_diagnostic_events_type ON trip_diagnostic_events(type)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS vehicle_state (vehicleId INTEGER NOT NULL PRIMARY KEY, currentSoc INTEGER, currentMileage REAL, updatedAtEpochMillis INTEGER NOT NULL, updateSource TEXT NOT NULL)")
             }
         }
 
@@ -121,7 +108,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
-                        MIGRATION_7_8
+                        MIGRATION_7_8,
+                        MIGRATION_8_9
                     )
                     .build()
                     .also { instance = it }
