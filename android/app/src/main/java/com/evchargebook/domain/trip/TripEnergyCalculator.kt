@@ -16,7 +16,7 @@ object TripEnergyCalculator {
             batteryCapacityKwh != null && batteryCapacityKwh > 0.0 &&
             startSoc != null && endSoc != null &&
             startSoc in 0..100 && endSoc in 0..100 &&
-            endSoc <= startSoc
+            endSoc < startSoc
         ) {
             batteryCapacityKwh * (startSoc - endSoc) / 100.0
         } else {
