@@ -1,6 +1,7 @@
 package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,16 +19,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
@@ -40,150 +38,215 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Composable
-fun DashboardScreen(state: MainUiState, onAddClick: () -> Unit, onSelectVehicle: (Long) -> Unit) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = onAddClick,
-                containerColor = EVDesignTokens.Energy.green,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "记录充电")
-            }
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(
-                horizontal = MaterialTheme.spacing.md,
-                vertical = MaterialTheme.spacing.md
-            ),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-        ) {
-            item { HeroVehicleCard(state.vehicle) }
-            item { EnergyCockpitCard(state) }
-            item {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text("最近充电", style = MaterialTheme.typography.titleLarge)
-                        Text(
-                            "RECENT CHARGING",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    if (state.chargingRecords.isNotEmpty()) {
-                        Text(
-                            "${state.chargingRecords.size} 笔",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = EVDesignTokens.Energy.green
-                        )
-                    }
-                }
-            }
+fun DashboardScreen(
+    state: MainUiState,
+    onAddClick: () -> Unit,
+    onSelectVehicle: (Long) -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        contentPadding = PaddingValues(
+            horizontal = MaterialTheme.spacing.md,
+            vertical = MaterialTheme.spacing.md
+        ),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+    ) {
+        item { DashboardBrandHeader() }
+        item { HeroVehicleCard(state.vehicle) }
+        item { EnergyCockpitCard(state) }
+        item { RecentChargingHeader(onAddClick) }
 
-            if (state.chargingRecords.isEmpty()) {
-                item { CompactChargingEmptyState(onAddClick) }
-            } else {
-                items(state.chargingRecords.take(3), key = { it.id }) { record ->
-                    DashboardChargeItem(record)
-                }
+        if (state.chargingRecords.isEmpty()) {
+            item { EmptyChargingTimeline(onAddClick) }
+        } else {
+            items(state.chargingRecords.take(3), key = { it.id }) { record ->
+                ChargingTimelineRow(record)
             }
-            item { Spacer(Modifier.height(56.dp)) }
         }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
 @Composable
-private fun CompactChargingEmptyState(onAddClick: () -> Unit) {
-    Surface(
+private fun DashboardBrandHeader() {
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(MaterialTheme.spacing.lg),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(Icons.Default.Bolt, null, tint = EVDesignTokens.Energy.green)
-            }
-            Spacer(Modifier.size(MaterialTheme.spacing.md))
-            Column(modifier = Modifier.weight(1f)) {
-                Text("暂无充电记录", style = MaterialTheme.typography.titleMedium)
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "记录第一次充电后，这里会显示最近活动。",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    "EV Charge Book",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                Spacer(Modifier.size(MaterialTheme.spacing.xs))
+                Text(
+                    "v0.5",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = EVDesignTokens.Energy.green
                 )
             }
-            TextButton(onClick = onAddClick) { Text("新增") }
+            Text(
+                "DRIVE · CHARGE · REVIEW",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .background(EVDesignTokens.Energy.green.copy(alpha = 0.10f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Bolt,
+                contentDescription = null,
+                tint = EVDesignTokens.Energy.green,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun DashboardChargeItem(record: ChargingRecordEntity) {
-    Surface(
+private fun RecentChargingHeader(onAddClick: () -> Unit) {
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier.padding(MaterialTheme.spacing.md),
-            verticalAlignment = Alignment.CenterVertically
+        Column {
+            Text("最近充电", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "RECENT CHARGING",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Box(
+            modifier = Modifier
+                .size(42.dp)
+                .clip(CircleShape)
+                .background(EVDesignTokens.Energy.green)
+                .clickable(onClick = onAddClick),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(40.dp)
-                    .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
+            Icon(
+                Icons.Default.Add,
+                contentDescription = "记录充电",
+                tint = MaterialTheme.colorScheme.onPrimary
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyChargingTimeline(onAddClick: () -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onAddClick)
+            .padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.Top
+    ) {
+        TimelineRail(isLast = true)
+        Spacer(Modifier.size(MaterialTheme.spacing.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                "等待第一笔充电",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(MaterialTheme.spacing.xxs))
+            Text(
+                "记录后会在这里形成连续的充电时间轴。",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(MaterialTheme.spacing.xs))
+            Text(
+                "记录第一次充电  →",
+                style = MaterialTheme.typography.bodyMedium,
+                color = EVDesignTokens.Energy.green
+            )
+        }
+    }
+}
+
+@Composable
+private fun ChargingTimelineRow(record: ChargingRecordEntity) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.Top
+    ) {
+        TimelineRail(isLast = false)
+        Spacer(Modifier.size(MaterialTheme.spacing.md))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Default.Bolt,
-                    contentDescription = null,
-                    tint = EVDesignTokens.Energy.green,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            Spacer(Modifier.size(MaterialTheme.spacing.md))
-            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     record.location ?: "未命名充电地点",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
-                Spacer(Modifier.height(MaterialTheme.spacing.xxs))
-                Text(
-                    "${formatTime(record.chargeTimeEpochMillis)} · ${record.chargerType ?: "未标记方式"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Column(horizontalAlignment = Alignment.End) {
                 Text(
                     "¥ ${two(record.cost)}",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold
                 )
+            }
+            Spacer(Modifier.height(MaterialTheme.spacing.xxs))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
                 Text(
-                    "${one(record.energyKwh)} kWh",
+                    "${formatTime(record.chargeTimeEpochMillis)} · ${record.chargerType ?: "未标记方式"}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "+ ${one(record.energyKwh)} kWh",
                     style = MaterialTheme.typography.bodyMedium,
                     color = EVDesignTokens.Energy.green
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun TimelineRail(isLast: Boolean) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                Icons.Default.Bolt,
+                contentDescription = null,
+                tint = EVDesignTokens.Energy.green,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+        if (!isLast) {
+            Box(
+                modifier = Modifier
+                    .size(width = 1.dp, height = 36.dp)
+                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
+            )
         }
     }
 }
