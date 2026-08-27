@@ -10,12 +10,14 @@ import com.evchargebook.data.dao.ChargingRecordDao
 import com.evchargebook.data.dao.TripDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleCatalogDao
+import com.evchargebook.data.dao.VehicleStateDao
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.entity.VehicleStateEntity
 
 @Database(
     entities = [
@@ -24,9 +26,10 @@ import com.evchargebook.data.entity.VehicleEntity
         VehicleCatalogEntity::class,
         TripSessionEntity::class,
         TripPointEntity::class,
-        TripDiagnosticEventEntity::class
+        TripDiagnosticEventEntity::class,
+        VehicleStateEntity::class
     ],
-    version = 8,
+    version = 9,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -34,6 +37,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleCatalogDao(): VehicleCatalogDao
     abstract fun chargingRecordDao(): ChargingRecordDao
     abstract fun tripDao(): TripDao
+    abstract fun vehicleStateDao(): VehicleStateDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -104,6 +108,38 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS vehicle_state (vehicleId INTEGER NOT NULL, currentSoc INTEGER, currentMileage REAL, updatedAtEpochMillis INTEGER NOT NULL, updateSource TEXT NOT NULL, PRIMARY KEY(vehicleId))")
+                db.execSQL(
+                    """
+                    INSERT OR REPLACE INTO vehicle_state (vehicleId, currentSoc, currentMileage, updatedAtEpochMillis, updateSource)
+                    SELECT
+                        vehicles.id,
+                        (
+                            SELECT charging_records.endSoc
+                            FROM charging_records
+                            WHERE charging_records.vehicleId = vehicles.id AND charging_records.isDeleted = 0
+                            ORDER BY charging_records.chargeTimeEpochMillis DESC, charging_records.id DESC
+                            LIMIT 1
+                        ),
+                        (
+                            SELECT charging_records.odometerKm
+                            FROM charging_records
+                            WHERE charging_records.vehicleId = vehicles.id
+                              AND charging_records.isDeleted = 0
+                              AND charging_records.odometerKm IS NOT NULL
+                            ORDER BY charging_records.chargeTimeEpochMillis DESC, charging_records.id DESC
+                            LIMIT 1
+                        ),
+                        CAST(strftime('%s','now') AS INTEGER) * 1000,
+                        'MIGRATION'
+                    FROM vehicles
+                    """.trimIndent()
+                )
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -121,7 +157,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_4_5,
                         MIGRATION_5_6,
                         MIGRATION_6_7,
-                        MIGRATION_7_8
+                        MIGRATION_7_8,
+                        MIGRATION_8_9
                     )
                     .build()
                     .also { instance = it }
