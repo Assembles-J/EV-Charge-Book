@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.ui.components.EmptyState
+import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import java.time.Instant
 import java.time.ZoneId
@@ -94,6 +95,11 @@ private fun LedgerCockpit(records: List<ChargingRecordEntity>) {
     val totalCost = records.sumOf { it.cost }
     val totalEnergy = records.sumOf { it.energyKwh }
     val averagePrice = if (totalEnergy > 0.0) totalCost / totalEnergy else 0.0
+    val metrics = listOf(
+        "补能" to "${one(totalEnergy)} kWh",
+        "记录" to "${records.size} 笔",
+        "均价" to "¥ ${two(averagePrice)}"
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -135,10 +141,9 @@ private fun LedgerCockpit(records: List<ChargingRecordEntity>) {
 
             HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                CockpitValue("补能", "${one(totalEnergy)} kWh", Modifier.weight(1f))
-                CockpitValue("记录", "${records.size} 笔", Modifier.weight(1f))
-                CockpitValue("均价", "¥ ${two(averagePrice)}", Modifier.weight(1f))
+            ResponsiveMetricGrid(metrics.size) { index, modifier ->
+                val (label, value) = metrics[index]
+                CockpitValue(label, value, modifier)
             }
         }
     }

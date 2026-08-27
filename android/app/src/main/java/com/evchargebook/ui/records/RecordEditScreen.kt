@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.theme.warningColor
 import java.text.SimpleDateFormat
@@ -176,6 +177,11 @@ private fun EditChargeSummary(startSoc: String, endSoc: String, energy: String, 
     val costValue = cost.toDoubleOrNull()
     val delta = if (start != null && end != null && end >= start) end - start else null
     val unitPrice = if (energyValue != null && energyValue > 0 && costValue != null) costValue / energyValue else null
+    val metrics = listOf(
+        "SOC" to (delta?.let { "+$it%" } ?: "--"),
+        "补能" to (energyValue?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--"),
+        "均价" to (unitPrice?.let { String.format(Locale.US, "¥ %.2f", it) } ?: "--")
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -189,10 +195,9 @@ private fun EditChargeSummary(startSoc: String, endSoc: String, energy: String, 
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
                 Text("CHARGE / EDIT", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                EditMetric("SOC", delta?.let { "+$it%" } ?: "--", Modifier.weight(1f))
-                EditMetric("补能", energyValue?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--", Modifier.weight(1f))
-                EditMetric("均价", unitPrice?.let { String.format(Locale.US, "¥ %.2f", it) } ?: "--", Modifier.weight(1f))
+            ResponsiveMetricGrid(metrics.size) { index, modifier ->
+                val (label, value) = metrics[index]
+                EditMetric(label, value, modifier)
             }
         }
     }

@@ -18,6 +18,7 @@ import com.evchargebook.domain.ChargingEstimateConfidence
 import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.domain.MonthlyChargingComparison
+import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.theme.warningColor
 import com.evchargebook.viewmodel.MainUiState
@@ -64,6 +65,12 @@ fun StatsScreen(state: MainUiState) {
 
 @Composable
 private fun MonthSummary(state: MainUiState) {
+    val metrics = listOf(
+        "补能" to "${one(state.monthEnergy)} kWh",
+        "次数" to "${state.chargingCount} 次",
+        "均价" to "¥ ${two(state.averagePrice)}"
+    )
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.extraLarge,
@@ -81,10 +88,9 @@ private fun MonthSummary(state: MainUiState) {
                 Text("¥ ${two(state.monthCost)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
-                StatValue("补能", "${one(state.monthEnergy)} kWh", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
-                StatValue("次数", "${state.chargingCount} 次", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
-                StatValue("均价", "¥ ${two(state.averagePrice)}", Modifier.weight(1f), MaterialTheme.colorScheme.inverseOnSurface)
+            ResponsiveMetricGrid(metrics.size) { index, modifier ->
+                val (label, value) = metrics[index]
+                StatValue(label, value, modifier, MaterialTheme.colorScheme.inverseOnSurface)
             }
         }
     }
