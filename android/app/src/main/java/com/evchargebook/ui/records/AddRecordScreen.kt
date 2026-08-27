@@ -7,9 +7,11 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +25,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
@@ -43,6 +47,10 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+
+private val ChargeEntryHeroBrush = Brush.linearGradient(
+    listOf(Color(0xFF06100B), Color(0xFF0B2117), Color(0xFF07120D))
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -103,7 +111,9 @@ fun AddRecordScreen(
                     if (!resolved.isNullOrBlank()) {
                         if (location.isBlank()) location = resolved
                         addressMessage = "已解析地址：$resolved"
-                    } else addressMessage = "已保存经纬度；系统地址服务暂时不可用，可手动填写地点"
+                    } else {
+                        addressMessage = "已保存经纬度；系统地址服务暂时不可用，可手动填写地点"
+                    }
                 }
                 .onFailure { errorMessage = it.message ?: "获取当前位置失败" }
             locating = false
@@ -127,23 +137,38 @@ fun AddRecordScreen(
         batteryCapacityKwh = batteryCapacityKwh
     )
 
-    Scaffold(topBar = { TopAppBar(title = { Text("记录充电") }, navigationIcon = { IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") } }) }) { padding ->
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("记录充电", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("NEW CHARGE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
+                navigationIcon = { IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") } },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+            )
+        }
+    ) { padding ->
         Column(
-            Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .imePadding()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = MaterialTheme.spacing.md),
+            Modifier.fillMaxSize().padding(padding).imePadding().verticalScroll(rememberScrollState()).padding(horizontal = MaterialTheme.spacing.md),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
             ChargeInputCockpit(startSoc, endSoc, energy, cost)
 
-            FormSection("时间与地点", "先记录事实，详细备注可以之后再补。") {
+            FormSection("时间与地点", "WHEN & WHERE", "先记录事实，详细备注可以之后再补。") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    OutlinedButton(onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
-                    OutlinedButton(onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
+                    OutlinedButton(
+                        onClick = { DatePickerDialog(context, { _, y, m, d -> calendar.set(y, m, d); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.YEAR), calendar.get(Calendar.MONTH), calendar.get(Calendar.DAY_OF_MONTH)).show() },
+                        modifier = Modifier.weight(1f)
+                    ) { Icon(Icons.Default.CalendarMonth, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(dateText) }
+                    OutlinedButton(
+                        onClick = { TimePickerDialog(context, { _, h, minute -> calendar.set(Calendar.HOUR_OF_DAY, h); calendar.set(Calendar.MINUTE, minute); chargeTime = calendar.timeInMillis }, calendar.get(Calendar.HOUR_OF_DAY), calendar.get(Calendar.MINUTE), true).show() },
+                        modifier = Modifier.weight(1f)
+                    ) { Icon(Icons.Default.Schedule, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(timeText) }
                 }
                 OutlinedTextField(
                     value = location,
@@ -176,17 +201,25 @@ fun AddRecordScreen(
                         }
                     }
                 }
-                TextButton(onClick = {
-                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) requestCurrentLocation()
-                    else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
-                }, enabled = !locating, contentPadding = PaddingValues(0.dp)) {
-                    Icon(Icons.Default.LocationOn, null); Spacer(Modifier.width(MaterialTheme.spacing.xs)); Text(if (locating) "正在获取位置…" else "使用当前位置")
+                TextButton(
+                    onClick = {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) requestCurrentLocation()
+                        else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                    },
+                    enabled = !locating,
+                    contentPadding = PaddingValues(0.dp)
+                ) {
+                    Icon(Icons.Default.LocationOn, null)
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text(if (locating) "正在获取位置…" else "使用当前位置")
                 }
-                locationFix?.let { fix -> Text("${formatCoordinate(fix.latitude)}, ${formatCoordinate(fix.longitude)} · 精度约 ${fix.accuracyMeters.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                locationFix?.let { fix ->
+                    Text("${formatCoordinate(fix.latitude)}, ${formatCoordinate(fix.longitude)} · 精度约 ${fix.accuracyMeters.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 addressMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             }
 
-            FormSection("充电数据", "SOC、电量与费用是统计的核心字段。") {
+            FormSection("充电数据", "ENERGY INPUT", "SOC、电量与费用是统计的核心字段。") {
                 SingleChoiceSegment(listOf("家充", "公共慢充", "公共快充"), chargerType) { chargerType = it }
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     AddNumberField(startSoc, { startSoc = it.filter(Char::isDigit) }, "起始 SOC", "%", Modifier.weight(1f), KeyboardType.Number)
@@ -196,10 +229,12 @@ fun AddRecordScreen(
                     AddNumberField(energy, { energy = it }, "充电量", "kWh", Modifier.weight(1f), KeyboardType.Decimal)
                     AddNumberField(cost, { cost = it }, "费用", "元", Modifier.weight(1f), KeyboardType.Decimal)
                 }
-                anomalyWarnings.forEach { warning -> Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor) }
+                anomalyWarnings.forEach { warning ->
+                    Text(warning.message, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor)
+                }
             }
 
-            FormSection("车辆与备注", "里程有助于后续估算每百公里补能成本。") {
+            FormSection("车辆与备注", "VEHICLE CONTEXT", "里程有助于后续估算每百公里补能成本。") {
                 AddNumberField(odometer, { odometer = it }, "当前总里程", "km", Modifier.fillMaxWidth(), KeyboardType.Decimal)
                 previousOdometer?.let { Text("上一条有效里程 ${formatKm(it)} km", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 odometerWarning?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor) }
@@ -216,23 +251,34 @@ fun AddRecordScreen(
             }
 
             errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
-            Button(onClick = {
-                focusManager.clearFocus()
-                val start = startSoc.toIntOrNull(); val end = endSoc.toIntOrNull(); val energyValue = energy.toDoubleOrNull(); val costValue = cost.toDoubleOrNull(); val odometerKm = odometer.toDoubleOrNull()
-                errorMessage = when {
-                    start == null || start !in 0..100 -> "请输入 0~100 的起始 SOC"
-                    end == null || end !in 0..100 -> "请输入 0~100 的结束 SOC"
-                    end < start -> "结束 SOC 不能低于起始 SOC"
-                    energyValue == null || energyValue <= 0 -> "充电量必须大于 0"
-                    costValue == null || costValue < 0 -> "费用不能小于 0"
-                    odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
-                    else -> null
-                }
-                if (errorMessage == null) {
-                    val fix = locationFix
-                    onSave(location.trim().takeIf { it.isNotEmpty() }, start!!, end!!, energyValue!!, costValue!!, chargerType, remark.trim().takeIf { it.isNotEmpty() }, chargeTime, odometerKm, fix?.latitude, fix?.longitude, fix?.accuracyMeters?.toDouble())
-                }
-            }, modifier = Modifier.fillMaxWidth()) { Text("保存充电记录") }
+            Button(
+                onClick = {
+                    focusManager.clearFocus()
+                    val start = startSoc.toIntOrNull()
+                    val end = endSoc.toIntOrNull()
+                    val energyValue = energy.toDoubleOrNull()
+                    val costValue = cost.toDoubleOrNull()
+                    val odometerKm = odometer.toDoubleOrNull()
+                    errorMessage = when {
+                        start == null || start !in 0..100 -> "请输入 0~100 的起始 SOC"
+                        end == null || end !in 0..100 -> "请输入 0~100 的结束 SOC"
+                        end < start -> "结束 SOC 不能低于起始 SOC"
+                        energyValue == null || energyValue <= 0 -> "充电量必须大于 0"
+                        costValue == null || costValue < 0 -> "费用不能小于 0"
+                        odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
+                        else -> null
+                    }
+                    if (errorMessage == null) {
+                        val fix = locationFix
+                        onSave(
+                            location.trim().takeIf { it.isNotEmpty() }, start!!, end!!, energyValue!!, costValue!!,
+                            chargerType, remark.trim().takeIf { it.isNotEmpty() }, chargeTime, odometerKm,
+                            fix?.latitude, fix?.longitude, fix?.accuracyMeters?.toDouble()
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("保存充电记录") }
             Spacer(Modifier.height(MaterialTheme.spacing.lg))
         }
     }
@@ -262,17 +308,15 @@ private fun ChargeInputCockpit(startSoc: String, endSoc: String, energy: String,
         "均价" to (unitPrice?.let { "¥ ${formatTwo(it)}" } ?: "--")
     )
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shape = MaterialTheme.shapes.extraLarge
-    ) {
-        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = Color.Transparent, shape = MaterialTheme.shapes.extraLarge) {
+        Column(
+            Modifier.background(ChargeEntryHeroBrush).padding(MaterialTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(Modifier.size(7.dp), color = MaterialTheme.colorScheme.inversePrimary, shape = MaterialTheme.shapes.extraSmall) {}
+                Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("CHARGE / NEW", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
+                Text("CHARGE / NEW", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             ResponsiveMetricGrid(metrics.size) { index, modifier ->
                 val (label, value) = metrics[index]
@@ -285,15 +329,16 @@ private fun ChargeInputCockpit(startSoc: String, endSoc: String, energy: String,
 @Composable
 private fun InputMetric(label: String, value: String, modifier: Modifier) {
     Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .48f))
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
-private fun FormSection(title: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
+private fun FormSection(title: String, eyebrow: String, subtitle: String, content: @Composable ColumnScope.() -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text(eyebrow, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         content()
     }
@@ -304,7 +349,11 @@ private fun FormSection(title: String, subtitle: String, content: @Composable Co
 private fun SingleChoiceSegment(options: List<String>, selected: String, onSelect: (String) -> Unit) {
     SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
         options.forEachIndexed { index, option ->
-            SegmentedButton(selected = selected == option, onClick = { onSelect(option) }, shape = SegmentedButtonDefaults.itemShape(index, options.size)) { Text(option) }
+            SegmentedButton(
+                selected = selected == option,
+                onClick = { onSelect(option) },
+                shape = SegmentedButtonDefaults.itemShape(index, options.size)
+            ) { Text(option) }
         }
     }
 }
