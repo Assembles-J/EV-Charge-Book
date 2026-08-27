@@ -36,6 +36,7 @@ import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.location.AndroidLocationProvider
 import com.evchargebook.location.LocationFix
+import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.theme.warningColor
 import kotlinx.coroutines.launch
@@ -255,6 +256,11 @@ private fun ChargeInputCockpit(startSoc: String, endSoc: String, energy: String,
     val costValue = cost.toDoubleOrNull()
     val delta = if (start != null && end != null && end >= start) end - start else null
     val unitPrice = if (energyValue != null && energyValue > 0 && costValue != null) costValue / energyValue else null
+    val metrics = listOf(
+        "SOC" to (delta?.let { "+$it%" } ?: "--"),
+        "补能" to (energyValue?.let { "${formatOne(it)} kWh" } ?: "--"),
+        "均价" to (unitPrice?.let { "¥ ${formatTwo(it)}" } ?: "--")
+    )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -268,10 +274,9 @@ private fun ChargeInputCockpit(startSoc: String, endSoc: String, energy: String,
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
                 Text("CHARGE / NEW", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                InputMetric("SOC", delta?.let { "+$it%" } ?: "--", Modifier.weight(1f))
-                InputMetric("补能", energyValue?.let { "${formatOne(it)} kWh" } ?: "--", Modifier.weight(1f))
-                InputMetric("均价", unitPrice?.let { "¥ ${formatTwo(it)}" } ?: "--", Modifier.weight(1f))
+            ResponsiveMetricGrid(metrics.size) { index, modifier ->
+                val (label, value) = metrics[index]
+                InputMetric(label, value, modifier)
             }
         }
     }
