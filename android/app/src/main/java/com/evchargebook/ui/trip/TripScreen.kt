@@ -18,10 +18,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
@@ -30,6 +34,7 @@ import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
+import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -354,8 +359,36 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
     val firstPoint = points.firstOrNull()
     val lastPoint = points.lastOrNull()
     val wholeTripAverageMps = if (trip.elapsedSeconds > 0) trip.distanceMeters / trip.elapsedSeconds else null
+    val context = LocalContext.current
+    val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context) }
+    var startAddress by remember(trip.id) { mutableStateOf<String?>(null) }
+    var endAddress by remember(trip.id) { mutableStateOf<String?>(null) }
+    var resolvingAddresses by remember(trip.id) { mutableStateOf(false) }
+    val hasAltitude = listOf(
+        trip.startAltitudeMeters,
+        trip.endAltitudeMeters,
+        trip.minAltitudeMeters,
+        trip.maxAltitudeMeters
+    ).any { it != null }
     val geometry = remember(points) {
         if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) }) else null
+    }
+
+    LaunchedEffect(trip.id, trip.status, firstPoint?.id, lastPoint?.id) {
+        if (trip.status == TripStatus.RECORDING || (firstPoint == null && lastPoint == null)) {
+            startAddress = null
+            endAddress = null
+            resolvingAddresses = false
+            return@LaunchedEffect
+        }
+        resolvingAddresses = true
+        startAddress = firstPoint?.let { addressResolver.reverse(it.latitude, it.longitude) }
+        endAddress = when {
+            lastPoint == null -> null
+            firstPoint != null && firstPoint.latitude == lastPoint.latitude && firstPoint.longitude == lastPoint.longitude -> startAddress
+            else -> addressResolver.reverse(lastPoint.latitude, lastPoint.longitude)
+        }
+        resolvingAddresses = false
     }
 
     Scaffold(
@@ -403,12 +436,27 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
 
             geometry?.let { if (it.isDrawable) item { TripRoutePreview(points) } }
 
+            if (hasAltitude) {
+                item {
+                    SectionHeading("海拔", "来自设备定位海拔；暂不根据原始噪声推算累计爬升")
+                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                    ResponsiveCockpitMetrics(
+                        listOf(
+                            CockpitMetricData("起点海拔", formatAltitude(trip.startAltitudeMeters)),
+                            CockpitMetricData("终点海拔", formatAltitude(trip.endAltitudeMeters)),
+                            CockpitMetricData("最低海拔", formatAltitude(trip.minAltitudeMeters)),
+                            CockpitMetricData("最高海拔", formatAltitude(trip.maxAltitudeMeters))
+                        )
+                    )
+                }
+            }
+
             item {
                 SectionHeading("轨迹可信度", if ((geometry?.gapCount ?: 0) > 0) "存在长时间 GPS 缺口，缺失区间保持断开" else "当前轨迹未检测到超过 2 分钟的长缺口")
                 Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                CoordinateRow("起点", firstPoint)
-                Spacer(Modifier.height(MaterialTheme.spacing.xs))
-                CoordinateRow("终点", lastPoint)
+                EndpointRow("起点", firstPoint, startAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
+                Spacer(Modifier.height(MaterialTheme.spacing.md))
+                EndpointRow("终点", lastPoint, endAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
                 if (points.isEmpty()) Text("本次没有保存有效 GPS 轨迹点。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
@@ -429,10 +477,33 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
 }
 
 @Composable
-private fun CoordinateRow(label: String, point: TripPointEntity?) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun EndpointRow(
+    label: String,
+    point: TripPointEntity?,
+    address: String?,
+    resolving: Boolean,
+    tripRecording: Boolean
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(point?.let { "${formatCoordinate(it.latitude)}, ${formatCoordinate(it.longitude)}" } ?: "--", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            when {
+                point == null -> "--"
+                tripRecording -> "行程进行中，结束后解析地址"
+                resolving -> "地址解析中…"
+                !address.isNullOrBlank() -> address
+                else -> "地址暂不可用"
+            },
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (point != null) {
+            Text(
+                "坐标 · ${formatCoordinate(point.latitude)}, ${formatCoordinate(point.longitude)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -490,7 +561,12 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
                 StatusPill(if (geometry.gapCount > 0) "${geometry.gapCount} 个长缺口" else "轨迹连续", geometry.gapCount > 0)
             }
 
-            Canvas(Modifier.fillMaxWidth().height(240.dp)) {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .semantics { contentDescription = "真实行程轨迹；圆形标记为起点，方形标记为终点" }
+            ) {
                 val p = 16.dp.toPx()
                 val w = (size.width - p * 2).coerceAtLeast(1f)
                 val h = (size.height - p * 2).coerceAtLeast(1f)
@@ -500,13 +576,28 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
                         drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
                     }
                 }
-                drawCircle(startColor, 6.dp.toPx(), offset(geometry.points.first()))
-                drawCircle(endColor, 6.dp.toPx(), offset(geometry.points.last()))
+                val start = offset(geometry.points.first())
+                val end = offset(geometry.points.last())
+                drawCircle(startColor, 8.dp.toPx(), start)
+                val endSize = 14.dp.toPx()
+                drawRect(
+                    color = endColor,
+                    topLeft = Offset(end.x - endSize / 2, end.y - endSize / 2),
+                    size = Size(endSize, endSize)
+                )
             }
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("起点", style = MaterialTheme.typography.labelMedium, color = startColor)
-                Text("终点", style = MaterialTheme.typography.labelMedium, color = endColor)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(startColor, CircleShape))
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text("起点 · 圆形", style = MaterialTheme.typography.labelMedium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(endColor))
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text("终点 · 方形", style = MaterialTheme.typography.labelMedium)
+                }
             }
             if (geometry.gapCount > 0) {
                 Text("检测到 ${geometry.gapCount} 处超过 2 分钟的 GPS 缺口。断点保持断开，不使用实线伪装连续。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -525,6 +616,7 @@ private fun formatDuration(seconds: Long): String {
 }
 private fun formatDistance(meters: Double) = if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0) else String.format(Locale.US, "%.0f m", meters)
 private fun formatSpeed(mps: Double) = String.format(Locale.US, "%.1f km/h", mps * 3.6)
+private fun formatAltitude(meters: Double?) = meters?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.0f m", it) } ?: "--"
 private fun formatCoordinate(value: Double) = String.format(Locale.US, "%.6f", value)
 private fun statusText(status: String) = when (status) {
     TripStatus.RECORDING -> "进行中"
