@@ -31,6 +31,8 @@ import java.time.ZoneId
 
 data class MainUiState(
     val vehicle: VehicleEntity? = null,
+    val currentSoc: Int? = null,
+    val currentMileageKm: Double? = null,
     val vehicles: List<VehicleEntity> = emptyList(),
     val catalogVehicles: List<VehicleCatalogEntity> = emptyList(),
     val bluetoothSettings: BluetoothPromptSettings = BluetoothPromptSettings(),
@@ -74,6 +76,14 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
+        viewModelScope.launch {
+            repository.vehicleState.collect { vehicleState ->
+                _uiState.value = _uiState.value.copy(
+                    currentSoc = vehicleState?.currentSoc,
+                    currentMileageKm = vehicleState?.currentMileage
+                )
+            }
+        }
         viewModelScope.launch {
             selectedTripId.flatMapLatest { tripId -> tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList()) }
                 .collect { points -> _uiState.value = _uiState.value.copy(selectedTripId = selectedTripId.value, selectedTripPoints = points) }
