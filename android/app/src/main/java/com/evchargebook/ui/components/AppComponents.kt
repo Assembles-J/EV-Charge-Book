@@ -1,11 +1,15 @@
 package com.evchargebook.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material3.Button
@@ -16,7 +20,9 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import com.evchargebook.ui.theme.spacing
 
 @Composable
@@ -48,5 +54,33 @@ fun EmptyState(title: String, message: String, actionLabel: String, onAction: ()
         )
         Spacer(Modifier.height(MaterialTheme.spacing.lg))
         Button(onClick = onAction) { Text(actionLabel) }
+    }
+}
+
+@Composable
+fun ResponsiveMetricGrid(
+    itemCount: Int,
+    itemContent: @Composable (index: Int, modifier: Modifier) -> Unit
+) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp || LocalDensity.current.fontScale >= 1.3f
+        val columns = if (compact) 2 else 3
+
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            var start = 0
+            while (start < itemCount) {
+                val end = minOf(start + columns, itemCount)
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+                ) {
+                    for (index in start until end) {
+                        itemContent(index, Modifier.weight(1f))
+                    }
+                    repeat(columns - (end - start)) { Spacer(Modifier.weight(1f)) }
+                }
+                start = end
+            }
+        }
     }
 }
