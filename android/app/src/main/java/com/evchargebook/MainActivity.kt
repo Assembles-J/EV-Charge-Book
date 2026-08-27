@@ -19,6 +19,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -231,15 +232,18 @@ fun MainApp(
             SnackbarHost(snackbarHostState) { data ->
                 Snackbar(
                     snackbarData = data,
-                    containerColor = MaterialTheme.colorScheme.inverseSurface,
-                    contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                    actionColor = MaterialTheme.colorScheme.inversePrimary
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    actionColor = MaterialTheme.colorScheme.primary
                 )
             }
         },
         bottomBar = {
             if (!hasOverlayPage) {
-                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                NavigationBar(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    tonalElevation = 0.dp
+                ) {
                     titles.forEachIndexed { index, title ->
                         NavigationBarItem(
                             selected = tab == index,
@@ -247,9 +251,9 @@ fun MainApp(
                             icon = { Icon(icons[index], title) },
                             label = { Text(title) },
                             colors = NavigationBarItemDefaults.colors(
-                                selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                indicatorColor = androidx.compose.ui.graphics.Color.Transparent,
                                 unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                 unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -298,7 +302,12 @@ fun MainApp(
                     onSave = { brand, model, capacity, range -> viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId); catalogSelection = null; addVehicle = false },
                     onBack = { addVehicle = false }
                 )
-                selectCatalogVehicle -> VehicleCatalogScreen(state.catalogVehicles, { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true }, { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true }, { selectCatalogVehicle = false })
+                selectCatalogVehicle -> VehicleCatalogScreen(
+                    state.catalogVehicles,
+                    { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true },
+                    { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true },
+                    { selectCatalogVehicle = false }
+                )
                 bluetoothPrompt -> BluetoothPromptScreen(state.bluetoothSettings, state.pairedBluetoothDevices, viewModel::saveBluetoothPrompt) { bluetoothPrompt = false }
                 else -> when (tab) {
                     0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
@@ -336,7 +345,13 @@ fun MainApp(
                                 }
                             } else bluetoothPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
                         },
-                        onExportBackup = { viewModel.exportBackup(BuildConfig.VERSION_NAME) { content -> pendingExportContent = content; val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date()); createBackupLauncher.launch("ev-charge-book-backup-$date.json") } },
+                        onExportBackup = {
+                            viewModel.exportBackup(BuildConfig.VERSION_NAME) { content ->
+                                pendingExportContent = content
+                                val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                                createBackupLauncher.launch("ev-charge-book-backup-$date.json")
+                            }
+                        },
                         onExportCsv = {
                             pendingCsvContent = ChargingCsvExporter.encode(state.chargingRecords)
                             val date = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())

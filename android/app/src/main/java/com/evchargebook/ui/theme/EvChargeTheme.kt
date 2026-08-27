@@ -1,6 +1,6 @@
 package com.evchargebook.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
+import android.content.Context
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
@@ -9,8 +9,13 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -22,108 +27,118 @@ data class AppSpacing(
     val xs: Dp = 8.dp,
     val sm: Dp = 12.dp,
     val md: Dp = 16.dp,
-    val lg: Dp = 20.dp,
-    val xl: Dp = 24.dp,
+    val lg: Dp = 24.dp,
+    val xl: Dp = 32.dp,
     val touch: Dp = 48.dp
 )
 
+data class AppThemeController(
+    val darkTheme: Boolean,
+    val setDarkTheme: (Boolean) -> Unit
+)
+
 val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
+val LocalAppThemeController = staticCompositionLocalOf { AppThemeController(true) {} }
 val MaterialTheme.spacing: AppSpacing
     @Composable get() = LocalAppSpacing.current
 
-private val WarningLight = Color(0xFF8A4B08)
-private val WarningDark = Color(0xFFFFC56B)
-private val LocalWarningColor = staticCompositionLocalOf { WarningLight }
-val MaterialTheme.warningColor: Color
-    @Composable get() = LocalWarningColor.current
-
-private val Ink = Color(0xFF171A1F)
-private val MutedInk = Color(0xFF686E78)
-private val Canvas = Color(0xFFF7F8FA)
-private val Surface = Color(0xFFFFFFFF)
-private val Line = Color(0xFFE4E7EC)
-private val Energy = Color(0xFF176B52)
-private val EnergySoft = Color(0xFFE5F3ED)
-private val Electric = Color(0xFF45E6A8)
-private val Cockpit = Color(0xFF11171B)
-private val CockpitInk = Color(0xFFF4F8F6)
+private val LightBackground = Color(0xFFF4F7F5)
+private val LightSurface = Color(0xFFFFFFFF)
+private val LightSurfaceLow = Color(0xFFF0F4F2)
+private val LightSurfaceHigh = Color(0xFFE7EDE9)
 
 private val BrandLight = lightColorScheme(
-    primary = Energy,
+    primary = Color(0xFF087A3B),
     onPrimary = Color.White,
-    primaryContainer = EnergySoft,
-    onPrimaryContainer = Color(0xFF0C3D2E),
-    secondary = Color(0xFF4F5E58),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDF1EF),
-    onSecondaryContainer = Color(0xFF29332F),
-    tertiary = Electric,
-    onTertiary = Color(0xFF073B2B),
-    background = Canvas,
-    onBackground = Ink,
-    surface = Surface,
-    onSurface = Ink,
-    surfaceVariant = Color(0xFFF0F2F5),
-    onSurfaceVariant = MutedInk,
-    outline = Line,
-    outlineVariant = Color(0xFFEEF0F3),
-    inverseSurface = Cockpit,
-    inverseOnSurface = CockpitInk,
-    inversePrimary = Electric,
-    error = Color(0xFFB42318)
+    primaryContainer = Color(0xFFD6F8E2),
+    onPrimaryContainer = Color(0xFF082414),
+    background = LightBackground,
+    onBackground = Color(0xFF101512),
+    surface = LightSurface,
+    onSurface = Color(0xFF101512),
+    surfaceVariant = LightSurfaceLow,
+    onSurfaceVariant = Color(0xFF5F6D66),
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF4F7F5),
+    surfaceContainer = LightSurfaceLow,
+    surfaceContainerHigh = LightSurfaceHigh,
+    surfaceContainerHighest = Color(0xFFDDE6E1),
+    outline = Color(0xFFC9D5CF),
+    outlineVariant = Color(0xFFDCE5E0),
+    error = Color(0xFFBA1A1A),
+    onError = Color.White
 )
 
 private val BrandDark = darkColorScheme(
-    primary = Color(0xFF83D5B6),
-    onPrimary = Color(0xFF073C2C),
-    primaryContainer = Color(0xFF153F33),
-    onPrimaryContainer = Color(0xFFC2F1DF),
-    secondary = Color(0xFFBAC8C2),
-    onSecondary = Color(0xFF25332E),
-    secondaryContainer = Color(0xFF2A3430),
-    onSecondaryContainer = Color(0xFFDDE7E2),
-    tertiary = Electric,
-    onTertiary = Color(0xFF063B2B),
-    background = Color(0xFF101214),
-    onBackground = Color(0xFFF1F3F5),
-    surface = Color(0xFF171A1D),
-    onSurface = Color(0xFFF1F3F5),
-    surfaceVariant = Color(0xFF22262A),
-    onSurfaceVariant = Color(0xFFB9C0C8),
-    outline = Color(0xFF353B42),
-    outlineVariant = Color(0xFF252A2F),
-    inverseSurface = Color(0xFFF1F3F5),
-    inverseOnSurface = Color(0xFF15191C),
-    inversePrimary = Color(0xFF176B52),
-    error = Color(0xFFFFB4AB)
+    primary = EVDesignTokens.Energy.green,
+    onPrimary = Color(0xFF041007),
+    primaryContainer = Color(0xFF123321),
+    onPrimaryContainer = EVDesignTokens.Dark.primaryText,
+    background = EVDesignTokens.Dark.background,
+    onBackground = EVDesignTokens.Dark.primaryText,
+    surface = EVDesignTokens.Dark.surface,
+    onSurface = EVDesignTokens.Dark.primaryText,
+    surfaceVariant = EVDesignTokens.Dark.surfaceElevated,
+    onSurfaceVariant = EVDesignTokens.Dark.secondaryText,
+    surfaceContainerLowest = Color(0xFF060908),
+    surfaceContainerLow = Color(0xFF0D1311),
+    surfaceContainer = EVDesignTokens.Dark.surface,
+    surfaceContainerHigh = EVDesignTokens.Dark.surfaceElevated,
+    surfaceContainerHighest = Color(0xFF202925),
+    outline = EVDesignTokens.Dark.outline,
+    outlineVariant = Color(0xFF1B2521),
+    error = EVDesignTokens.Energy.danger,
+    onError = Color(0xFF220001),
+    inverseSurface = Color(0xFFEAF3EE),
+    inverseOnSurface = Color(0xFF0A0E0C),
+    inversePrimary = Color(0xFF168C4A)
 )
 
 private val AppTypography = Typography(
+    displayMedium = Typography().displayMedium.copy(fontSize = 40.sp, lineHeight = 46.sp, fontWeight = FontWeight.SemiBold),
+    displaySmall = Typography().displaySmall.copy(fontSize = 34.sp, lineHeight = 40.sp, fontWeight = FontWeight.SemiBold),
     headlineMedium = Typography().headlineMedium.copy(fontSize = 28.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold),
     headlineSmall = Typography().headlineSmall.copy(fontSize = 22.sp, lineHeight = 28.sp, fontWeight = FontWeight.SemiBold),
     titleLarge = Typography().titleLarge.copy(fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
     titleMedium = Typography().titleMedium.copy(fontSize = 16.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
     bodyLarge = Typography().bodyLarge.copy(fontSize = 16.sp, lineHeight = 24.sp),
     bodyMedium = Typography().bodyMedium.copy(fontSize = 14.sp, lineHeight = 20.sp),
-    labelLarge = Typography().labelLarge.copy(fontSize = 14.sp, fontWeight = FontWeight.Medium)
+    bodySmall = Typography().bodySmall.copy(fontSize = 12.sp, lineHeight = 18.sp),
+    labelLarge = Typography().labelLarge.copy(fontSize = 13.sp, fontWeight = FontWeight.Medium),
+    labelMedium = Typography().labelMedium.copy(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    labelSmall = Typography().labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.8.sp, fontWeight = FontWeight.Medium)
 )
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(18.dp),
-    extraLarge = RoundedCornerShape(24.dp)
+    small = RoundedCornerShape(EVDesignTokens.Radius.small.dp),
+    medium = RoundedCornerShape(EVDesignTokens.Radius.medium.dp),
+    large = RoundedCornerShape(EVDesignTokens.Radius.large.dp),
+    extraLarge = RoundedCornerShape(28.dp)
 )
 
 @Composable
-fun EvChargeTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) BrandDark else BrandLight
-    val warning = if (dark) WarningDark else WarningLight
+fun EvChargeTheme(
+    darkTheme: Boolean? = null,
+    content: @Composable () -> Unit
+) {
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("ev_charge_ui", Context.MODE_PRIVATE)
+    }
+    var storedDarkTheme by remember {
+        mutableStateOf(preferences.getBoolean("dark_theme", true))
+    }
+    val resolvedDarkTheme = darkTheme ?: storedDarkTheme
+    val controller = AppThemeController(resolvedDarkTheme) { enabled ->
+        storedDarkTheme = enabled
+        preferences.edit().putBoolean("dark_theme", enabled).apply()
+    }
+    val colors = if (resolvedDarkTheme) BrandDark else BrandLight
+
     CompositionLocalProvider(
         LocalAppSpacing provides AppSpacing(),
-        LocalWarningColor provides warning
+        LocalAppThemeController provides controller
     ) {
         MaterialTheme(
             colorScheme = colors,

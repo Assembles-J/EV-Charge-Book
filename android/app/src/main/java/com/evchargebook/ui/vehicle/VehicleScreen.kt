@@ -1,10 +1,10 @@
 package com.evchargebook.ui.vehicle
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -14,6 +14,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.ui.dashboard.HeroVehicleCard
+import com.evchargebook.ui.theme.LocalAppThemeController
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 
@@ -32,12 +34,18 @@ fun VehicleScreen(
     onImportBackup: () -> Unit
 ) {
     var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
+    val themeController = LocalAppThemeController.current
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("车辆", style = MaterialTheme.typography.headlineSmall) },
+                title = {
+                    Column {
+                        Text("车辆", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("MY EV GARAGE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 actions = { IconButton(onClick = onAdd) { Icon(Icons.Default.Add, "添加车辆") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
@@ -45,28 +53,38 @@ fun VehicleScreen(
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.xs),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
-            vehicle?.let { current -> item { CurrentVehicleCockpit(current, onEdit) } }
+            if (vehicle != null) {
+                item { HeroVehicleCard(vehicle) }
+                item {
+                    OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Default.Edit, null)
+                        Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                        Text("编辑当前车辆")
+                    }
+                }
+            } else {
+                item { EmptyGarage(onAdd) }
+            }
 
             if (vehicles.size > 1) {
-                item { SettingsSectionTitle("切换车辆") }
+                item { SettingsSectionTitle("其他车辆", "VEHICLE SWITCHER") }
                 items(vehicles.filter { it.id != vehicle?.id }, key = { it.id }) { item ->
-                    VehicleRow(
-                        vehicle = item,
-                        canArchive = true,
-                        onSelect = { onSelect(item.id) },
-                        onArchive = { archiveCandidate = item }
-                    )
+                    VehicleRow(item, { onSelect(item.id) }) { archiveCandidate = item }
                 }
             }
 
-            item { SettingsSectionTitle("连接与数据") }
+            item { SettingsSectionTitle("外观", "APPEARANCE") }
+            item { ThemeSettingsRow(themeController.darkTheme, themeController.setDarkTheme) }
+
+            item { SettingsSectionTitle("连接与数据", "CONNECTION & DATA") }
             item { SettingsRow(Icons.Default.Bluetooth, "车载蓝牙", "连接指定设备时提醒开始行程", onBluetoothPrompt) }
             item { SettingsRow(Icons.Default.UploadFile, "导出备份", "完整 JSON，可用于恢复车辆、充电记录和行程", onExportBackup) }
             item { SettingsRow(Icons.Default.TableView, "导出分析 CSV", "当前车辆充电账本，可用于 Excel / Python 分析", onExportCsv) }
             item { SettingsRow(Icons.Default.Download, "恢复备份", "从本地 JSON 备份恢复数据", onImportBackup) }
+            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 
@@ -82,76 +100,76 @@ fun VehicleScreen(
 }
 
 @Composable
-private fun CurrentVehicleCockpit(vehicle: VehicleEntity, onEdit: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shape = MaterialTheme.shapes.extraLarge
+private fun ThemeSettingsRow(darkTheme: Boolean, onDarkThemeChange: (Boolean) -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+        Surface(Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    if (darkTheme) Icons.Default.DarkMode else Icons.Default.LightMode,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        Spacer(Modifier.width(MaterialTheme.spacing.sm))
+        Column(Modifier.weight(1f)) {
+            Text(if (darkTheme) "深色模式" else "浅色模式", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text("Dark First · 选择会自动保存", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = darkTheme, onCheckedChange = onDarkThemeChange)
+    }
+}
+
+@Composable
+private fun EmptyGarage(onAdd: () -> Unit) {
+    Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(Modifier.size(8.dp), color = MaterialTheme.colorScheme.inversePrimary, shape = MaterialTheme.shapes.extraSmall) {}
+                Surface(Modifier.size(7.dp), color = MaterialTheme.colorScheme.primary, shape = CircleShape) {}
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("VEHICLE / ACTIVE", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .60f))
+                Text("VEHICLE / EMPTY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
-
-            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-                Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text("当前车辆", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .58f))
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)) {
-                VehicleMetric("电池", "${one(vehicle.batteryCapacityKwh)} kWh", Modifier.weight(1f))
-                VehicleMetric("标称续航", "${vehicle.rangeKm} km", Modifier.weight(1f))
-            }
-
-            OutlinedButton(
-                onClick = onEdit,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.inverseOnSurface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .22f))
-            ) {
-                Icon(Icons.Default.Edit, null)
+            Text("添加你的第一辆车", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+            Text("车辆资料会用于首页主视觉、充电统计和行程记录。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
+                Icon(Icons.Default.Add, null)
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("编辑当前车辆")
+                Text("添加车辆")
             }
         }
     }
 }
 
 @Composable
-private fun VehicleMetric(label: String, value: String, modifier: Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .52f))
-        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.inverseOnSurface)
-    }
-}
-
-@Composable
-private fun VehicleRow(vehicle: VehicleEntity, canArchive: Boolean, onSelect: () -> Unit, onArchive: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onSelect),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-    ) {
+private fun VehicleRow(vehicle: VehicleEntity, onSelect: () -> Unit, onArchive: () -> Unit) {
+    Surface(onClick = onSelect, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large) {
         Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.titleMedium)
+            Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(Icons.Default.DirectionsCar, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                }
+            }
+            Spacer(Modifier.width(MaterialTheme.spacing.sm))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("${one(vehicle.batteryCapacityKwh)} kWh · ${vehicle.rangeKm} km", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onSelect) { Text("切换") }
-            if (canArchive) IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, "归档车辆") }
+            IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, "归档车辆", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
     }
 }
 
 @Composable
-private fun SettingsSectionTitle(title: String) {
-    Text(title, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun SettingsSectionTitle(title: String, eyebrow: String) {
+    Column {
+        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+        Text(eyebrow, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 @Composable
@@ -161,21 +179,21 @@ private fun SettingsRow(
     subtitle: String,
     onClick: () -> Unit
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.width(MaterialTheme.spacing.sm))
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Surface(Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp))
             }
-            Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        Spacer(Modifier.width(MaterialTheme.spacing.sm))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Medium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Icon(Icons.Default.ChevronRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

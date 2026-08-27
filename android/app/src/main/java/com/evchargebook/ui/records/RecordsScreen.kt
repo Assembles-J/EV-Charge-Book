@@ -1,17 +1,21 @@
 package com.evchargebook.ui.records
 
-import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
@@ -22,6 +26,10 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+private val LedgerHeroBrush = Brush.linearGradient(
+    listOf(Color(0xFF06100B), Color(0xFF0B2117), Color(0xFF07120D))
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,7 +45,12 @@ fun RecordsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("充电记录", style = MaterialTheme.typography.headlineSmall) },
+                title = {
+                    Column {
+                        Text("充电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("CHARGE JOURNAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         },
@@ -56,19 +69,18 @@ fun RecordsScreen(
         } else {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.xs),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+                contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
             ) {
                 item { LedgerCockpit(records) }
                 item {
-                    Text(
-                        "最近记录",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text("最近记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("RECENT CHARGING", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 items(records, key = { it.id }) { record ->
-                    RecordItem(record, onEdit = { onEdit(record) }) { pendingDelete = record }
+                    RecordTimelineItem(record, onEdit = { onEdit(record) }) { pendingDelete = record }
                 }
                 item { Spacer(Modifier.height(72.dp)) }
             }
@@ -101,46 +113,21 @@ private fun LedgerCockpit(records: List<ChargingRecordEntity>) {
         "均价" to "¥ ${two(averagePrice)}"
     )
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.inverseSurface,
-        contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-        shape = MaterialTheme.shapes.extraLarge
-    ) {
+    Surface(modifier = Modifier.fillMaxWidth(), color = Color.Transparent, shape = MaterialTheme.shapes.extraLarge) {
         Column(
-            Modifier.padding(MaterialTheme.spacing.lg),
+            Modifier.background(LedgerHeroBrush).padding(MaterialTheme.spacing.lg),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(8.dp),
-                    color = MaterialTheme.colorScheme.inversePrimary,
-                    shape = MaterialTheme.shapes.extraSmall
-                ) {}
+                Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text(
-                    "CHARGE / LEDGER",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .62f)
-                )
+                Text("CHARGE / LEDGER", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
-
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-                Text(
-                    "累计支出",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .66f)
-                )
-                Text(
-                    "¥ ${two(totalCost)}",
-                    style = MaterialTheme.typography.displaySmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.inverseOnSurface
-                )
+                Text("累计支出", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("¥ ${two(totalCost)}", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
             }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
-
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
             ResponsiveMetricGrid(metrics.size) { index, modifier ->
                 val (label, value) = metrics[index]
                 CockpitValue(label, value, modifier)
@@ -152,75 +139,55 @@ private fun LedgerCockpit(records: List<ChargingRecordEntity>) {
 @Composable
 private fun CockpitValue(label: String, value: String, modifier: Modifier) {
     Column(modifier) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .52f)
-        )
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.inverseOnSurface
-        )
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
 
 @Composable
-private fun RecordItem(record: ChargingRecordEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
-    Surface(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit),
-        color = MaterialTheme.colorScheme.surface,
-        shape = MaterialTheme.shapes.medium,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+private fun RecordTimelineItem(record: ChargingRecordEntity, onEdit: () -> Unit, onDelete: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(vertical = MaterialTheme.spacing.sm),
+        verticalAlignment = Alignment.Top
     ) {
-        Column(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md)) {
-            Row(verticalAlignment = Alignment.Top) {
+        ChargingRail()
+        Spacer(Modifier.width(MaterialTheme.spacing.md))
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(record.location ?: "未命名充电地点", style = MaterialTheme.typography.titleMedium)
-                    Spacer(Modifier.height(MaterialTheme.spacing.xxs))
-                    Text(
-                        format(record.chargeTimeEpochMillis),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text(record.location ?: "未命名充电地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text(format(record.chargeTimeEpochMillis), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleLarge)
-                    Text("${one(record.energyKwh)} kWh", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("+ ${one(record.energyKwh)} kWh", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
-
-            Spacer(Modifier.height(MaterialTheme.spacing.sm))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Spacer(Modifier.height(MaterialTheme.spacing.sm))
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "SOC ${record.startSoc}% → ${record.endSoc}%",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.weight(1f)
-                )
-                Text(
-                    "¥ ${two(record.pricePerKwh)}/kWh",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, "删除此记录") }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text("SOC ${record.startSoc}% → ${record.endSoc}%", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                Text("¥ ${two(record.pricePerKwh)}/kWh", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.DeleteOutline, "删除此记录", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                }
             }
-
-            val extras = listOfNotNull(
-                record.chargerType,
-                record.odometerKm?.let { "里程 ${formatKm(it)} km" }
-            )
+            val extras = listOfNotNull(record.chargerType, record.odometerKm?.let { "里程 ${formatKm(it)} km" })
             if (extras.isNotEmpty()) {
-                Text(
-                    extras.joinToString(" · "),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text(extras.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+    }
+}
+
+@Composable
+private fun ChargingRail() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Surface(Modifier.size(36.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(Icons.Default.Bolt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
+            }
+        }
+        Box(Modifier.width(1.dp).height(68.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = .42f)))
     }
 }
 
