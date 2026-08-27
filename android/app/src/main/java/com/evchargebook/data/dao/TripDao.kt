@@ -5,6 +5,7 @@ import androidx.room.Delete
 import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Update
+import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +36,15 @@ interface TripDao {
     @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY capturedAtEpochMillis")
     suspend fun getPoints(tripId: Long): List<TripPointEntity>
 
+    @Query("SELECT * FROM trip_diagnostic_events WHERE tripId = :tripId ORDER BY occurredAtEpochMillis, id")
+    fun observeDiagnosticEvents(tripId: Long): Flow<List<TripDiagnosticEventEntity>>
+
+    @Query("SELECT * FROM trip_diagnostic_events WHERE tripId = :tripId ORDER BY occurredAtEpochMillis, id")
+    suspend fun getDiagnosticEvents(tripId: Long): List<TripDiagnosticEventEntity>
+
+    @Query("SELECT * FROM trip_diagnostic_events ORDER BY tripId, occurredAtEpochMillis, id")
+    suspend fun getAllDiagnosticEvents(): List<TripDiagnosticEventEntity>
+
     @Insert
     suspend fun insertSession(session: TripSessionEntity): Long
 
@@ -49,6 +59,12 @@ interface TripDao {
 
     @Insert
     suspend fun insertPoints(points: List<TripPointEntity>)
+
+    @Insert
+    suspend fun insertDiagnosticEvent(event: TripDiagnosticEventEntity): Long
+
+    @Insert
+    suspend fun insertDiagnosticEvents(events: List<TripDiagnosticEventEntity>)
 
     @Delete
     suspend fun deleteSession(session: TripSessionEntity)
