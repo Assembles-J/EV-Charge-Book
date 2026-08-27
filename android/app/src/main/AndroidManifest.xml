@@ -12,7 +12,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <application
         android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
         android:label="EV Charge Book"
+        android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <receiver android:name=".bluetooth.BluetoothConnectionReceiver" android:exported="false">
