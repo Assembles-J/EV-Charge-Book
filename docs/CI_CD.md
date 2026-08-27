@@ -1,65 +1,47 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v1.3.0
-更新时间: 2026-08-26
+版本: v1.4.0
+更新时间: 2026-08-27
 状态: Authority Subdocument
 
 ## 1. 目标
 
 遵循 Assembles-J 组织发布思路：CI 与 Production Release 分离、signed APK、Actions Artifact、production Environment、服务器不可变 release 与原子激活。
 
+新增原则：**正式 APK 版本只在真正执行 Production Release 时生成。普通业务提交、PR、Debug CI 和文档提交不升级正式版本。**
+
+APK 自动升级详细设计见 `APK_AUTO_UPDATE.md`。
+
 ---
 
 ## 2. Android Build Baseline
 
-当前已具备:
-
-- android/build.gradle.kts
-- android/settings.gradle.kts
-- android/app/build.gradle.kts
-- AndroidManifest
-- `android/gradlew` / `gradlew.bat`
-- `android/gradle/wrapper/**`
-
-当前统一构建参数:
+当前统一构建参数：
 
 - JDK 17
 - compile/target SDK 36
-- CI 安装 Android platform 36
+- CI Android platform 36
 - Build Tools 36.0.0
 - Gradle Wrapper 9.5.0
 
-CI 与 Release 必须优先使用仓库的 `./gradlew`，避免本地、CI 两套 Gradle 来源。
+CI 与 Release 必须使用仓库 `./gradlew`。
 
----
-
-## 3. 2026-08-26 CI 故障复盘
-
-Android Build run #41 在 `Install Android SDK packages` 失败，业务代码尚未进入编译阶段。
-
-根因:
+开发/普通 CI 使用 `build.gradle.kts` 默认 dev 版本：
 
 ```text
-project compileSdk = 36
-workflow requested platforms;android-37
-sdkmanager: Failed to find package 'platforms;android-37'
+versionCode = 1
+versionName = 0.1.0-dev
 ```
 
-已修复:
-
-- android-build.yml -> platform 36
-- android-release.yml -> platform 36
-- CI / Release -> `./gradlew`
-- wrapper 文件加入 baseline validation
-
-因此在新的 Action 成功前，不得声称 Debug CI Green。
+这些值不是正式发布版本，不应随业务 commit 修改。
 
 ---
 
-## 4. CI 流程
+## 3. CI 流程
 
 ```text
-Checkout
+push / pull request Android change
+ -> Checkout
  -> Validate build + wrapper
  -> JDK 17
  -> Android SDK 36 / Build Tools 36
@@ -68,68 +50,148 @@ Checkout
  -> Debug APK Artifact
 ```
 
+Android Build 只验证代码，不产生正式版本号，不更新线上 `latest.json`。
+
 ---
 
-## 5. Production Release
+## 4. Production Release
 
-当前仍 `workflow_dispatch` 手动门禁:
+Production Release 继续保持 `workflow_dispatch` 手动门禁。
+
+输入：
+
+- `ref`: 要发布的 commit / branch / tag
+- `release_series`: 产品阶段版本，例如 `0.4`
+
+Release workflow 内部才生成：
 
 ```text
-Checkout ref
- -> validate signing + wrapper
- -> SDK 36
- -> restore keystore
- -> ./gradlew :app:assembleRelease
+VERSION_CODE = github.run_number
+VERSION_NAME = <release_series>.<github.run_number>
+APK_FILE = ev-charge-book-<VERSION_NAME>.apk
+```
+
+示例：Android Release Run #12 + release_series `0.4` => `0.4.12`。
+
+正式流程：
+
+```text
+人工确认需要下发 APK
+ -> Run Android Release
+ -> Checkout ref
+ -> resolve real commit SHA
+ -> inject production version
+ -> restore production signing key
+ -> assembleRelease
  -> apksigner verify
  -> SHA-256
  -> Actions Artifact
  -> SCP *.part
- -> atomic activate under /opt/ev-charge-book/releases
- -> update latest
+ -> server SHA verification
+ -> immutable releases/<version>.apk
+ -> per-version env/json metadata
+ -> update latest.env
+ -> update latest APK symlink
+ -> atomic replace release-meta/latest.json LAST
 ```
+
+只有 `latest.json` 最终替换成功后，App 才能发现新版本。
 
 ---
 
-## 6. 版本 / Secrets
+## 5. APK 自动升级发现
 
-- VERSION_CODE = github.run_number
-- VERSION_NAME = 0.1.<run_number>（v0.1）
+生产 App 默认读取：
 
-Secrets:
+```text
+https://groupim.cn/ev-charge-book/release-meta/latest.json
+```
+
+该地址通过 `BuildConfig.UPDATE_MANIFEST_URL` 注入；Release 环境可用 `APP_UPDATE_MANIFEST_URL` 覆盖。
+
+App 仅在 `release` build 检查更新：
+
+```text
+latest.versionCode > BuildConfig.VERSION_CODE
+ -> 提示用户升级
+ -> DownloadManager 下载 immutable APK
+ -> SHA-256 校验
+ -> Android 系统安装器确认覆盖安装
+```
+
+更新检查失败必须静默降级，不影响 Local First 核心功能。
+
+---
+
+## 6. 版本规则
+
+1. 普通 commit 不修改正式 `versionName/versionCode`。
+2. Android Build 不发布正式版本。
+3. 只有明确需要给用户下发新 APK 时才触发 Android Release。
+4. `versionCode` 是 Android 升级顺序依据，必须单调增加；Release workflow run number 满足该要求。
+5. `versionName` 用于用户展示，由 `release_series + release run number` 组成。
+6. Release 失败允许跳号；未成功原子激活的版本不对客户端可见。
+7. product series 只在产品阶段变化时修改，例如 `0.4 -> 0.5`。
+
+---
+
+## 7. Secrets
+
+Production Environment / organization secrets：
 
 - ANDROID_KEYSTORE_BASE64
 - ANDROID_KEYSTORE_PASSWORD
 - ANDROID_KEY_ALIAS
 - ANDROID_KEY_PASSWORD
-- SERVER_IP
-- SERVER_USER
-- SERVER_SSH_KEY
+- COMMON_SERVER_HOST
+- COMMON_SERVER_USER
+- COMMON_SSH_PRIVATE_KEY
+
+生产 signing key 必须长期保持一致，否则 Android 不允许旧版 App 被新版 APK 覆盖安装。
 
 ---
 
-## 7. 自动 Production Release 门禁
+## 8. 发布门禁
 
-必须满足:
+Production Release 前至少满足：
 
-- Debug CI Green
-- Debug APK 可下载
+- 目标 commit 的 Android CI Green
+- Debug APK 可用
+- release signing secrets 可用
 - assembleRelease Green
-- production signing secrets 验证
-- server directory permission 验证
-- 首次 signed APK 原子发布完成
+- apksigner verify Green
+- server directory 可写
 
-再启用 main Android 变更自动 production release。
+升级功能额外验收：
+
+- `release-meta/latest.json` 公网可访问
+- JSON 指向 immutable APK
+- SHA-256 与服务器 APK 一致
+- 旧正式 APK 能发现更高 versionCode
+- 下载后校验成功才进入安装器
+- 签名一致，可完成覆盖安装
 
 ---
 
-## 8. 变更记录
+## 9. 历史故障
+
+2026-08-26 Android Build Run #41 曾因 workflow 请求不存在的 `platforms;android-37` 在 SDK 安装阶段失败。现已统一到 SDK 36；该故障与业务代码无关。
+
+---
+
+## 10. 变更记录
+
+### v1.4.0
+
+- 正式版本改为仅在 Production Release 生成
+- Release 增加 `release_series`
+- server publish `latest.json` update manifest
+- latest.json 作为客户端最后原子发现指针
+- 增加 App release-only 自动检查 / 下载 / SHA 校验 / 系统安装流程
+- 新增 `APK_AUTO_UPDATE.md`
 
 ### v1.3.0
 
-- Gradle Wrapper 已实际提交，恢复为 CI/Release 标准入口
-- SDK 从 stale 37 配置统一到项目 SDK 36
-- 记录 run #41 失败根因，明确失败发生在 SDK 安装而非业务编译
-
-### v1.2.0
-
-- Android build baseline 和 production workflow 落地
+- Gradle Wrapper 已实际提交
+- SDK 统一到项目 SDK 36
+- CI / Release 统一使用仓库 wrapper
