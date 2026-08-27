@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
@@ -53,6 +54,7 @@ fun TripScreen(
     }
 
     var deleteTarget by remember { mutableStateOf<TripSessionEntity?>(null) }
+    var confirmStop by remember { mutableStateOf(false) }
     val activeVehicle = activeTrip?.let { trip -> vehicles.firstOrNull { it.id == trip.vehicleId } }
 
     Scaffold(topBar = { TopAppBar(title = { Text("行程") }) }) { padding ->
@@ -61,7 +63,7 @@ fun TripScreen(
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
-            item { ActiveTripPanel(vehicle, activeVehicle, activeTrip, onStart, onResume, onStop, onOpenDetail) }
+            item { ActiveTripPanel(vehicle, activeVehicle, activeTrip, onStart, onResume, { confirmStop = true }, onOpenDetail) }
             item { SectionHeading("历史行程", if (trips.isEmpty()) "开始一次真实行程后会显示在这里" else "${trips.count { it.id != activeTrip?.id }} 条已保存行程") }
             if (trips.isEmpty()) {
                 item { Text("暂无行程记录", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
@@ -71,6 +73,20 @@ fun TripScreen(
                 }
             }
         }
+    }
+
+    if (confirmStop && activeTrip != null) {
+        AlertDialog(
+            onDismissRequest = { confirmStop = false },
+            title = { Text("结束当前行程？") },
+            text = { Text("结束后会停止持续定位并保存当前已记录的行程数据。") },
+            confirmButton = {
+                TextButton(onClick = { confirmStop = false; onStop() }) {
+                    Text("结束行程", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmStop = false }) { Text("继续记录") } }
+        )
     }
 
     deleteTarget?.let { trip ->
@@ -160,11 +176,13 @@ private fun ActiveTripPanel(
             }
 
             HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                CockpitMetric("耗时", formatDuration(activeTrip.elapsedSeconds), Modifier.weight(1f))
-                CockpitMetric("行驶均速", activeTrip.averageSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
-                CockpitMetric("最高速度", activeTrip.maxSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
-            }
+            ResponsiveCockpitMetrics(
+                listOf(
+                    CockpitMetricData("耗时", formatDuration(activeTrip.elapsedSeconds)),
+                    CockpitMetricData("行驶均速", activeTrip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
+                    CockpitMetricData("最高速度", activeTrip.maxSpeedMps?.let(::formatSpeed) ?: "--")
+                )
+            )
 
             if (interrupted) {
                 Text(
@@ -277,16 +295,16 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
                         }
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.inverseOnSurface.copy(alpha = .12f))
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                            CockpitMetric("总耗时", formatDuration(trip.elapsedSeconds), Modifier.weight(1f))
-                            CockpitMetric("全程均速", wholeTripAverageMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
-                            CockpitMetric("行驶均速", trip.averageSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                            CockpitMetric("最高速度", trip.maxSpeedMps?.let(::formatSpeed) ?: "--", Modifier.weight(1f))
-                            CockpitMetric("移动时间", trip.movingSeconds?.let(::formatDuration) ?: "--", Modifier.weight(1f))
-                            CockpitMetric("GPS 点", points.size.toString(), Modifier.weight(1f))
-                        }
+                        ResponsiveCockpitMetrics(
+                            listOf(
+                                CockpitMetricData("总耗时", formatDuration(trip.elapsedSeconds)),
+                                CockpitMetricData("全程均速", wholeTripAverageMps?.let(::formatSpeed) ?: "--"),
+                                CockpitMetricData("行驶均速", trip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
+                                CockpitMetricData("最高速度", trip.maxSpeedMps?.let(::formatSpeed) ?: "--"),
+                                CockpitMetricData("移动时间", trip.movingSeconds?.let(::formatDuration) ?: "--"),
+                                CockpitMetricData("GPS 点", points.size.toString())
+                            )
+                        )
                     }
                 }
             }
@@ -311,6 +329,26 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
                         }
                         point.horizontalAccuracyMeters?.let { Text("±${it.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
+                }
+            }
+        }
+    }
+}
+
+private data class CockpitMetricData(val label: String, val value: String)
+
+@Composable
+private fun ResponsiveCockpitMetrics(metrics: List<CockpitMetricData>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
+        val columns = if (compact) 2 else 3
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            metrics.chunked(columns).forEach { rowMetrics ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+                    rowMetrics.forEach { metric ->
+                        CockpitMetric(metric.label, metric.value, Modifier.weight(1f))
+                    }
+                    repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
