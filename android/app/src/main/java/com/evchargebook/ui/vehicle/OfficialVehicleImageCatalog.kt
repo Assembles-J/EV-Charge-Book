@@ -3,22 +3,22 @@ package com.evchargebook.ui.vehicle
 import com.evchargebook.data.entity.VehicleEntity
 
 /**
- * Maps known vehicle names to official manufacturer media assets.
+ * Maps known vehicle names to local artwork bundled with the app.
  *
  * Keep the matcher deliberately strict. A wrong vehicle image is worse than
  * falling back to the generic EV illustration in the dashboard hero.
  */
 data class OfficialVehicleImage(
-    val imageUrl: String,
+    val assetPath: String,
     val sourcePage: String,
     val sourceLabel: String
 )
 
 object OfficialVehicleImageCatalog {
     private val bydSeal = OfficialVehicleImage(
-        imageUrl = "https://media.byd.com/wp-content/uploads/2025/10/c0454f9a5bebbe1860e37535f53cf3e2.jpg.webp",
+        assetPath = "vehicle_artwork/byd_seal_2025.webp.b64",
         sourcePage = "https://media.byd.com/section/models/pure-electric/seal/?lang=eng",
-        sourceLabel = "BYD Media Hub"
+        sourceLabel = "BYD SEAL hero artwork"
     )
 
     fun resolve(vehicle: VehicleEntity?): OfficialVehicleImage? {
