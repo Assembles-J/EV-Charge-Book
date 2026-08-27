@@ -16,6 +16,12 @@ interface ChargingRecordDao {
     @Query("SELECT * FROM charging_records WHERE vehicleId = :vehicleId AND isDeleted = 0 ORDER BY chargeTimeEpochMillis DESC")
     fun observeForVehicle(vehicleId: Long): Flow<List<ChargingRecordEntity>>
 
+    @Query("SELECT * FROM charging_records WHERE vehicleId = :vehicleId AND isDeleted = 0 ORDER BY chargeTimeEpochMillis DESC, id DESC LIMIT 1")
+    suspend fun getLatestForVehicle(vehicleId: Long): ChargingRecordEntity?
+
+    @Query("SELECT * FROM charging_records WHERE vehicleId = :vehicleId AND isDeleted = 0 AND odometerKm IS NOT NULL ORDER BY chargeTimeEpochMillis DESC, id DESC LIMIT 1")
+    suspend fun getLatestWithOdometerForVehicle(vehicleId: Long): ChargingRecordEntity?
+
     @Query("SELECT * FROM charging_records ORDER BY id")
     suspend fun getAll(): List<ChargingRecordEntity>
 
