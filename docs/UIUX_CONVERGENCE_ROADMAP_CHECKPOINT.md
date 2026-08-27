@@ -1,0 +1,3 @@
+# UIUX Checkpoint
+
+Phase initialized.
