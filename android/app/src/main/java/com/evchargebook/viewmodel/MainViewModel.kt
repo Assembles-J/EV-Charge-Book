@@ -122,8 +122,31 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         }
     }
 
-    fun exportBackup(appVersion: String, onReady: (String) -> Unit) { viewModelScope.launch { runCatching { repository.exportBackup(appVersion) }.onSuccess(onReady).onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份导出失败") } } }
-    fun restoreBackup(content: String) { viewModelScope.launch { runCatching { repository.restoreBackup(content) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "本地备份已恢复") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份恢复失败") } } }
+    fun exportBackup(appVersion: String, onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            runCatching { repository.exportBackup(appVersion) }
+                .onSuccess { content ->
+                    if (_uiState.value.activeTrip != null) {
+                        _uiState.value = _uiState.value.copy(successMessage = "已生成备份；当前行程仍在进行，这是进行中快照")
+                    }
+                    onReady(content)
+                }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份导出失败") }
+        }
+    }
+
+    fun restoreBackup(content: String) {
+        if (_uiState.value.activeTrip != null) {
+            _uiState.value = _uiState.value.copy(errorMessage = "行程进行中，结束行程后才能恢复备份")
+            return
+        }
+        viewModelScope.launch {
+            runCatching { repository.restoreBackup(content) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "本地备份已恢复") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份恢复失败") }
+        }
+    }
+
     fun startTrip() { val vehicleId = _uiState.value.vehicle?.id ?: return; viewModelScope.launch { runCatching { repository.startTrip(vehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已开始") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法开始行程") } } }
     fun resumeTrip(tripId: Long) { viewModelScope.launch { runCatching { repository.resumeTrip(tripId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程记录已恢复") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法恢复行程") } } }
     fun stopTrip() { viewModelScope.launch { runCatching { repository.stopActiveTrip() }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "行程已结束") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法结束行程") } } }
@@ -132,8 +155,32 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     fun deleteTrip(trip: TripSessionEntity) { viewModelScope.launch { runCatching { repository.deleteTrip(trip) }.onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") } } }
     fun saveVehicle(brand: String, model: String, battery: Double, range: Int) { val current = _uiState.value.vehicle ?: return; viewModelScope.launch { runCatching { repository.saveVehicle(current.copy(brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
     fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) { viewModelScope.launch { runCatching { repository.addVehicle(brand, model, battery, range, catalogVehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
-    fun selectVehicle(vehicleId: Long) { viewModelScope.launch { runCatching { repository.selectVehicle(vehicleId) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
-    fun archiveVehicle(vehicleId: Long) { viewModelScope.launch { runCatching { repository.archiveVehicle(vehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已归档，历史记录仍保留") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
+
+    fun selectVehicle(vehicleId: Long) {
+        val activeTrip = _uiState.value.activeTrip
+        viewModelScope.launch {
+            runCatching { repository.selectVehicle(vehicleId) }
+                .onSuccess {
+                    if (activeTrip != null && activeTrip.vehicleId != vehicleId) {
+                        _uiState.value = _uiState.value.copy(successMessage = "已切换当前车辆；正在进行的行程仍归属原车辆")
+                    }
+                }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
+
+    fun archiveVehicle(vehicleId: Long) {
+        if (_uiState.value.activeTrip?.vehicleId == vehicleId) {
+            _uiState.value = _uiState.value.copy(errorMessage = "该车辆正在记录行程，请结束行程后再归档")
+            return
+        }
+        viewModelScope.launch {
+            runCatching { repository.archiveVehicle(vehicleId) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已归档，历史记录仍保留") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
+        }
+    }
+
     fun refreshPairedBluetoothDevices() { _uiState.value = _uiState.value.copy(pairedBluetoothDevices = repository.pairedBluetoothDevices()) }
     fun saveBluetoothPrompt(enabled: Boolean, address: String?, name: String?) { viewModelScope.launch { repository.saveBluetoothPrompt(enabled, address, name) } }
     fun addChargingRecord(startSoc: Int, endSoc: Int, energyKwh: Double, cost: Double, location: String?, chargerType: String?, remark: String?, chargeTime: Long, odometerKm: Double?, latitude: Double?, longitude: Double?, locationAccuracyMeters: Double?) {
