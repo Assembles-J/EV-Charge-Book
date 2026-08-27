@@ -41,7 +41,11 @@ import java.util.Locale
 private const val VEHICLE_ARTWORK_TAG = "VehicleArtwork"
 
 @Composable
-fun HeroVehicleCard(vehicle: VehicleEntity?) {
+fun HeroVehicleCard(
+    vehicle: VehicleEntity?,
+    currentSoc: Int? = null,
+    currentMileageKm: Double? = null
+) {
     val cockpit = LocalCockpitColors.current
     val background = Brush.linearGradient(listOf(Color(0xFF07100C), Color(0xFF0B2417), Color(0xFF07100C)))
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = Color.Transparent) {
@@ -63,11 +67,11 @@ fun HeroVehicleCard(vehicle: VehicleEntity?) {
             VehicleStage(vehicle)
             if (vehicle != null) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    InlineMetric("当前 SOC", currentSoc?.let { "$it%" } ?: "--")
+                    MetricDivider()
+                    InlineMetric("当前里程", currentMileageKm?.let { "${one(it)} km" } ?: "--")
+                    MetricDivider()
                     InlineMetric("电池容量", "${one(vehicle.batteryCapacityKwh)} kWh")
-                    MetricDivider()
-                    InlineMetric("标称续航", "${vehicle.rangeKm} km")
-                    MetricDivider()
-                    InlineMetric("状态", "可记录")
                 }
             } else {
                 Text("完成车辆资料后，这里会作为你的车辆主视觉。", style = MaterialTheme.typography.bodyMedium, color = cockpit.secondaryText)
