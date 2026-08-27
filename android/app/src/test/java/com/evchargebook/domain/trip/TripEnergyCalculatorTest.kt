@@ -30,4 +30,30 @@ class TripEnergyCalculatorTest {
         assertNull(result.consumedEnergyKwh)
         assertNull(result.averageConsumptionKwhPer100Km)
     }
+
+    @Test
+    fun `unchanged soc is unknown rather than zero consumption`() {
+        val result = TripEnergyCalculator.estimate(
+            batteryCapacityKwh = 67.7,
+            startSoc = 80,
+            endSoc = 80,
+            distanceMeters = 3_000.0
+        )
+
+        assertNull(result.consumedEnergyKwh)
+        assertNull(result.averageConsumptionKwhPer100Km)
+    }
+
+    @Test
+    fun `soc gain from regen or rounding is not forced into consumption`() {
+        val result = TripEnergyCalculator.estimate(
+            batteryCapacityKwh = 67.7,
+            startSoc = 80,
+            endSoc = 81,
+            distanceMeters = 5_000.0
+        )
+
+        assertNull(result.consumedEnergyKwh)
+        assertNull(result.averageConsumptionKwhPer100Km)
+    }
 }
