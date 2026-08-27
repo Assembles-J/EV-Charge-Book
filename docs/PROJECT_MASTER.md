@@ -1,6 +1,6 @@
 # EV Charge Book 项目总纲（PROJECT MASTER）
 
-版本: v2.2.0
+版本: v2.3.0
 更新时间: 2026-08-27
 状态: Authority Document / Single Source of Truth
 
@@ -15,8 +15,9 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 3. 位置 / 驾驶行程数据
 4. 充电与行程的数据闭环
 5. 本地分析与可靠性
-6. 跨设备同步 / 云恢复
-7. Web / AI 增值能力
+6. 产品级 UI/UX 与真实使用 hardening
+7. 跨设备同步 / 云恢复
+8. Web / AI 增值能力
 
 首个验证车型为零跑 C16，但产品、数据库和 UI 不绑定单一品牌。
 
@@ -57,6 +58,7 @@ EV Charge Book 是新能源车主的 Local First 车辆数据中心。
 - 不伪造实时 SOC / SOH / 续航
 - 定位记录与地图 SDK 解耦
 - 车型目录与用户车辆分离
+- 车辆图片只能精确匹配；不支持车型宁可 fallback，也不能展示错误近似车型
 - 外部供应商可替换
 - 云同步不能成为唯一恢复路径
 - 无网络和云端故障不能阻塞本地记账 / Trip
@@ -179,7 +181,45 @@ Vehicle + ChargingRecord 已具备 stable `syncId`、`updatedAtEpochMillis`、Ch
 
 ---
 
-## 9. P3 Optional Vehicle Data / OBD-II
+## 9. v0.5 Product UI/UX Baseline
+
+状态: **Core UI implementation merged / physical polish and usability hardening pending**
+
+PR #71 已合并到 `main`。其最终 head 已包含当时最新 `main` 基线，Android Build Run #294 Green，并产出 Debug APK artifact。
+
+已落地：
+
+- Dark First EV cockpit 设计语言
+- 显式 Light 模式切换并持久化
+- 五个一级入口：总览 / 记录 / 统计 / 行程 / 车辆
+- Dashboard vehicle Hero + energy cockpit + recent charging
+- Records timeline + Add/Edit charge hierarchy
+- Trip READY / LIVE / INTERRUPTED + detail / GPS gap visual semantics
+- Stats month / comparison / mix / place / lifetime / interval hierarchy
+- Vehicle garage / catalog / editor / Bluetooth / backup / CSV 一致化
+- compact empty states
+- 本地 drawable 车型图片与严格映射测试
+
+车辆图运行时 Base64/network 加载已经移除。当前仅覆盖少量精确车型，规模化车型/图片覆盖必须回到 #20 的可维护目录管道，不允许继续在 UI 中无边界硬编码。
+
+v0.5 当前剩余不是“大改设计”，而是真机使用 hardening：
+
+- 五个一级页面视觉复核
+- Light mode 对比度
+- 320-360dp / fontScale 1.3-1.5
+- TalkBack / contentDescription / touch target
+- 超长车型/地点/蓝牙名称
+- dirty form 返回保护
+- active Trip 下 Restore / archive / current vehicle switch 的状态安全
+- IME / 长表单可用性
+
+主 owner：Issue #42。定位“坐标是真实事实、地址是异步增强”的降级与验收继续由 #66/#14 负责；最终顶部密度复核由 #22 负责。
+
+CI Green 不等于真机视觉/可用性已经通过，因此 Issue #70 在最终真机 pass 前保持 open。
+
+---
+
+## 10. P3 Optional Vehicle Data / OBD-II
 
 OBD-II 是未来可选数据源，不是当前产品依赖。
 
@@ -203,7 +243,7 @@ VehicleSpeedSource
 
 ---
 
-## 10. 恢复与隐私
+## 11. 恢复与隐私
 
 - Local JSON Backup 长期保留
 - Cloud Sync 不是唯一恢复路径
@@ -215,13 +255,14 @@ VehicleSpeedSource
 
 ---
 
-## 11. 发布 / CI / APK 自动升级基线
+## 12. 发布 / CI / APK 自动升级基线
 
 - JDK 17
 - Android SDK 36
 - Build Tools 36.0.0
 - repository Gradle Wrapper
 - Android CI 与 Production Release 分离
+- debug application ID 与 release 分离，可并存安装
 - signed APK
 - Actions Artifact
 - 普通 Android Build 使用 dev 版本，不生成正式版本号
@@ -238,11 +279,11 @@ VehicleSpeedSource
 
 - Build Run #169：ChargingPlace + CSV 基线 Green
 - Build Run #184：PR #36 Trip GPS health / route gap / speed semantics，Build/Test + Debug APK Green
-- APK auto-update Android CI：当前等待最新 updater cumulative build 完成
+- Build Run #294：PR #71 v0.5 Dark First UI cumulative baseline Green + Debug APK
 
 ---
 
-## 12. 架构约束
+## 13. 架构约束
 
 Android 保持：
 
@@ -265,7 +306,7 @@ OBD 未来也必须是 optional adapter，不允许反向污染核心 Trip 架�
 
 ---
 
-## 13. 当前执行顺序
+## 14. 当前执行顺序
 
 ```text
 Trip P0 reliability
@@ -273,6 +314,7 @@ Trip P0 reliability
   -> GPS / Network dedupe + quality policy
   -> Trip completeness / persistent diagnostics
   -> lock-screen long-drive physical verification
+  -> v0.5 physical UI/usability hardening (#42/#66/#14/#22)
   -> Trip P1 segmented speed + continuous color route
   -> v0.3 reliability closeout
   -> resume v0.4 sync expansion
@@ -283,7 +325,7 @@ APK 自动升级属于发布基础设施，不改变当前业务优先级；它�
 
 ---
 
-## 14. 开发验收规则
+## 15. 开发验收规则
 
 每轮业务代码必须：
 
@@ -295,6 +337,7 @@ APK 自动升级属于发布基础设施，不改变当前业务优先级；它�
 - 不把“代码已写”标成“CI Accepted”
 - 不把 CI 通过标成“真机已验收”
 - GPS `COMPLETED` 不等同于 continuity accepted
+- UI merge 不等同于 accessibility / large-font / small-screen / active-Trip state-safety accepted
 
 正式 APK 版本规则：
 
@@ -303,18 +346,32 @@ APK 自动升级属于发布基础设施，不改变当前业务优先级；它�
 
 ---
 
-## 15. 当前 Issues
+## 16. 当前 Issues
 
-- #19 Data Reliability：只保留增量可靠性尾项
-- #22 UI polish：主要视觉工作已合并，真机视觉复核非阻塞
+- #70 v0.5 UI redesign：核心实现已 merge；仅剩真机视觉 closeout
+- #42 UI/UX hardening：accessibility、large font、小屏、dirty form、active Trip guards
+- #66 Location temporary unavailable / coordinate-first fallback
+- #14 Location / Geocoder physical acceptance
+- #22 top spacing 最终真机复核
 - #26 Background activity / lock-screen Trip status / notification center
 - #27 v0.4 Sync 主线：foundation 保留，扩展暂缓
 - #28 Sync Phase A 实现与验收
-- #20 Catalog Coverage：后续可持续车型目录管道
+- #19 Data Reliability：只保留增量可靠性尾项
+- #20 Catalog Coverage：可持续车型目录与覆盖管道
 
 ---
 
-## 16. 决策记录
+## 17. 决策记录
+
+### v2.3.0
+
+- PR #71 v0.5 Dark First UI baseline 合并到 `main`
+- Build Run #294 Green + Debug APK
+- 车辆图改为 APK 本地 drawable 精确匹配，明确禁止错配近似车型
+- UI 后续从“大规模重设计”收束为真机 polish + usability/state-safety hardening
+- #42 成为 accessibility/large-font/small-screen/dirty-form/active-Trip guard owner
+- #66/#14 保持 Location coordinate-first fallback 与真机验收 owner
+- 车型覆盖扩展继续归 #20，不在 UI 层继续硬编码
 
 ### v2.2.0
 
