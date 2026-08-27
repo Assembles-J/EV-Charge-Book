@@ -22,8 +22,8 @@ data class AppSpacing(
     val xs: Dp = 8.dp,
     val sm: Dp = 12.dp,
     val md: Dp = 16.dp,
-    val lg: Dp = 20.dp,
-    val xl: Dp = 24.dp,
+    val lg: Dp = 24.dp,
+    val xl: Dp = 32.dp,
     val touch: Dp = 48.dp
 )
 
@@ -31,71 +31,31 @@ val LocalAppSpacing = staticCompositionLocalOf { AppSpacing() }
 val MaterialTheme.spacing: AppSpacing
     @Composable get() = LocalAppSpacing.current
 
-private val WarningLight = Color(0xFF8A4B08)
-private val WarningDark = Color(0xFFFFC56B)
-private val LocalWarningColor = staticCompositionLocalOf { WarningLight }
-val MaterialTheme.warningColor: Color
-    @Composable get() = LocalWarningColor.current
-
-private val Ink = Color(0xFF171A1F)
-private val MutedInk = Color(0xFF686E78)
-private val Canvas = Color(0xFFF7F8FA)
-private val Surface = Color(0xFFFFFFFF)
-private val Line = Color(0xFFE4E7EC)
-private val Energy = Color(0xFF176B52)
-private val EnergySoft = Color(0xFFE5F3ED)
-private val Electric = Color(0xFF45E6A8)
-private val Cockpit = Color(0xFF11171B)
-private val CockpitInk = Color(0xFFF4F8F6)
+private val LightBackground = Color(0xFFF5F7F6)
+private val LightSurface = Color.White
 
 private val BrandLight = lightColorScheme(
-    primary = Energy,
-    onPrimary = Color.White,
-    primaryContainer = EnergySoft,
-    onPrimaryContainer = Color(0xFF0C3D2E),
-    secondary = Color(0xFF4F5E58),
-    onSecondary = Color.White,
-    secondaryContainer = Color(0xFFEDF1EF),
-    onSecondaryContainer = Color(0xFF29332F),
-    tertiary = Electric,
-    onTertiary = Color(0xFF073B2B),
-    background = Canvas,
-    onBackground = Ink,
-    surface = Surface,
-    onSurface = Ink,
-    surfaceVariant = Color(0xFFF0F2F5),
-    onSurfaceVariant = MutedInk,
-    outline = Line,
-    outlineVariant = Color(0xFFEEF0F3),
-    inverseSurface = Cockpit,
-    inverseOnSurface = CockpitInk,
-    inversePrimary = Electric,
-    error = Color(0xFFB42318)
+    primary = EVDesignTokens.Energy.green,
+    onPrimary = Color(0xFF07140D),
+    background = LightBackground,
+    onBackground = Color(0xFF101512),
+    surface = LightSurface,
+    onSurface = Color(0xFF101512),
+    surfaceVariant = Color(0xFFE9EFEC),
+    onSurfaceVariant = Color(0xFF66736D),
+    outline = Color(0xFFD8E1DC)
 )
 
 private val BrandDark = darkColorScheme(
-    primary = Color(0xFF83D5B6),
-    onPrimary = Color(0xFF073C2C),
-    primaryContainer = Color(0xFF153F33),
-    onPrimaryContainer = Color(0xFFC2F1DF),
-    secondary = Color(0xFFBAC8C2),
-    onSecondary = Color(0xFF25332E),
-    secondaryContainer = Color(0xFF2A3430),
-    onSecondaryContainer = Color(0xFFDDE7E2),
-    tertiary = Electric,
-    onTertiary = Color(0xFF063B2B),
-    background = Color(0xFF101214),
-    onBackground = Color(0xFFF1F3F5),
-    surface = Color(0xFF171A1D),
-    onSurface = Color(0xFFF1F3F5),
-    surfaceVariant = Color(0xFF22262A),
-    onSurfaceVariant = Color(0xFFB9C0C8),
-    outline = Color(0xFF353B42),
-    outlineVariant = Color(0xFF252A2F),
-    inverseSurface = Color(0xFFF1F3F5),
-    inverseOnSurface = Color(0xFF15191C),
-    inversePrimary = Color(0xFF176B52),
-    error = Color(0xFFFFB4AB)
+    primary = EVDesignTokens.Energy.green,
+    onPrimary = Color(0xFF041007),
+    background = EVDesignTokens.Dark.background,
+    onBackground = EVDesignTokens.Dark.primaryText,
+    surface = EVDesignTokens.Dark.surface,
+    onSurface = EVDesignTokens.Dark.primaryText,
+    surfaceVariant = EVDesignTokens.Dark.surfaceElevated,
+    onSurfaceVariant = EVDesignTokens.Dark.secondaryText,
+    outline = EVDesignTokens.Dark.outline
 )
 
 private val AppTypography = Typography(
@@ -110,20 +70,16 @@ private val AppTypography = Typography(
 
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(6.dp),
-    small = RoundedCornerShape(10.dp),
-    medium = RoundedCornerShape(14.dp),
-    large = RoundedCornerShape(18.dp),
-    extraLarge = RoundedCornerShape(24.dp)
+    small = RoundedCornerShape(EVDesignTokens.Radius.small.dp),
+    medium = RoundedCornerShape(EVDesignTokens.Radius.medium.dp),
+    large = RoundedCornerShape(EVDesignTokens.Radius.large.dp)
 )
 
 @Composable
 fun EvChargeTheme(content: @Composable () -> Unit) {
-    val dark = isSystemInDarkTheme()
-    val colors = if (dark) BrandDark else BrandLight
-    val warning = if (dark) WarningDark else WarningLight
+    val colors = if (isSystemInDarkTheme()) BrandDark else BrandLight
     CompositionLocalProvider(
-        LocalAppSpacing provides AppSpacing(),
-        LocalWarningColor provides warning
+        LocalAppSpacing provides AppSpacing()
     ) {
         MaterialTheme(
             colorScheme = colors,
