@@ -32,13 +32,16 @@ data class AppUpdateInfo(
 
 class AppUpdateManager(private val context: Context) {
     suspend fun checkForUpdate(currentVersionCode: Int = BuildConfig.VERSION_CODE): AppUpdateInfo? = withContext(Dispatchers.IO) {
-        val manifestUrl = BuildConfig.UPDATE_MANIFEST_URL
+        val manifestBaseUrl = BuildConfig.UPDATE_MANIFEST_URL
+        val manifestUrl = cacheBustedUrl(manifestBaseUrl)
         val connection = (URL(manifestUrl).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
             connectTimeout = 5_000
             readTimeout = 5_000
             useCaches = false
             setRequestProperty("Accept", "application/json")
+            setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0")
+            setRequestProperty("Pragma", "no-cache")
         }
         try {
             require(connection.responseCode in 200..299) { "更新服务暂时不可用（${connection.responseCode}）" }
@@ -53,7 +56,7 @@ class AppUpdateManager(private val context: Context) {
             AppUpdateInfo(
                 versionCode = versionCode,
                 versionName = root.getString("versionName"),
-                apkUrl = URL(URL(manifestUrl), apkPath).toString(),
+                apkUrl = URL(URL(manifestBaseUrl), apkPath).toString(),
                 sha256 = sha256,
                 publishedAt = root.optString("publishedAt"),
                 mandatory = root.optBoolean("mandatory", false)
@@ -129,6 +132,11 @@ class AppUpdateManager(private val context: Context) {
             }
         }
         return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
+    private fun cacheBustedUrl(baseUrl: String): String {
+        val separator = if ('?' in baseUrl) '&' else '?'
+        return "$baseUrl${separator}_updateCheck=${System.currentTimeMillis()}"
     }
 
     companion object {
