@@ -124,35 +124,21 @@ fun HeroVehicleCard(
                     )
             )
 
-            Column(
+            Text(
+                text = vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(
                         start = 16.dp,
-                        top = topSystemInset + 14.dp,
+                        top = topSystemInset + 16.dp,
                         end = 72.dp
-                    )
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        "MY EV",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = cockpit.primaryText
-                    )
-                }
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = cockpit.primaryText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+                    ),
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium,
+                color = cockpit.primaryText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
 
             if (vehicle != null) {
                 Box(
@@ -230,8 +216,7 @@ private fun VehicleStage(
     val context = LocalContext.current
     val artwork = OfficialVehicleImageCatalog.resolve(vehicle, artworkKey)
     var remoteArtwork by remember(artwork?.key) {
-        mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
-    }
+        mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null) }
 
     LaunchedEffect(artwork?.key) {
         remoteArtwork = artwork?.let { HeroArtworkManifestRepository.resolve(context, it.key) }
@@ -334,10 +319,6 @@ private fun HeroDynamicStatePanel(
                 shape = panelShape
             )
     ) {
-        // The panel now sits on top of the artwork. The translucent smoke/highlight layers
-        // intentionally preserve some of the underlying image so the surface reads as glass
-        // instead of a second opaque card. Compose has no true arbitrary backdrop blur here,
-        // so the frost is created with controlled translucency and edge highlights.
         Box(
             Modifier
                 .fillMaxSize()
@@ -360,7 +341,7 @@ private fun HeroDynamicStatePanel(
             HeroSocMetric(
                 safeSoc = safeSoc,
                 animatedProgress = animatedProgress,
-                modifier = Modifier.weight(0.92f)
+                modifier = Modifier.weight(0.84f)
             )
             MetricDivider()
             HeroMetric(
@@ -369,15 +350,15 @@ private fun HeroDynamicStatePanel(
                 value = currentMileageKm?.let(::formatMileage) ?: "--",
                 unit = if (currentMileageKm != null) "km" else null,
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp)
+                    .weight(1.18f)
+                    .padding(horizontal = 10.dp)
             )
             MetricDivider()
             HeroRecentTripMetric(
                 trip = latestTrip,
                 modifier = Modifier
-                    .weight(1.08f)
-                    .padding(start = 12.dp)
+                    .weight(1.02f)
+                    .padding(start = 10.dp)
             )
         }
     }
@@ -386,7 +367,7 @@ private fun HeroDynamicStatePanel(
 @Composable
 private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modifier = Modifier) {
     val cockpit = LocalCockpitColors.current
-    Column(modifier = modifier.padding(end = 12.dp)) {
+    Column(modifier = modifier.padding(end = 10.dp)) {
         if (safeSoc != null) {
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
@@ -452,19 +433,27 @@ private fun HeroMetric(
             Text(label, style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
         }
         Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom
+        ) {
             Text(
                 value,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
-                color = cockpit.primaryText
+                color = cockpit.primaryText,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
             if (unit != null) {
                 Spacer(Modifier.size(3.dp))
                 Text(
                     unit,
                     style = MaterialTheme.typography.labelMedium,
-                    color = cockpit.primaryText.copy(alpha = 0.86f)
+                    color = cockpit.primaryText.copy(alpha = 0.86f),
+                    maxLines = 1,
+                    softWrap = false
                 )
             }
         }
