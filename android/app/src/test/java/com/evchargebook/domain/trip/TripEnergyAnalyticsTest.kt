@@ -23,7 +23,7 @@ class TripEnergyAnalyticsTest {
     }
 
     @Test
-    fun `excludes completed trips without trustworthy energy and ignores active trips`() {
+    fun `excludes empty invalid and energy-incomplete trips and ignores active trips`() {
         val trips = listOf(
             completedTrip(id = 1, distanceMeters = 20_000.0, energyKwh = null),
             completedTrip(id = 2, distanceMeters = 0.0, energyKwh = 2.0),
@@ -32,6 +32,7 @@ class TripEnergyAnalyticsTest {
                 vehicleId = 1,
                 startedAtEpochMillis = 3000,
                 distanceMeters = 30_000.0,
+                elapsedSeconds = 60,
                 consumedEnergyKwh = 3.0,
                 status = TripStatus.RECORDING
             )
@@ -39,9 +40,9 @@ class TripEnergyAnalyticsTest {
 
         val summary = TripEnergyAnalytics.summarize(trips)
 
-        assertEquals(2, summary.completedTripCount)
+        assertEquals(1, summary.completedTripCount)
         assertEquals(0, summary.eligibleTripCount)
-        assertEquals(2, summary.excludedTripCount)
+        assertEquals(1, summary.excludedTripCount)
         assertEquals(0.0, summary.estimatedEnergyKwh, 0.001)
         assertNull(summary.weightedAverageKwhPer100Km)
     }
@@ -76,6 +77,7 @@ class TripEnergyAnalyticsTest {
         startedAtEpochMillis = 1000,
         endedAtEpochMillis = endedAt,
         distanceMeters = distanceMeters,
+        elapsedSeconds = ((endedAt - 1000) / 1_000).coerceAtLeast(1),
         consumedEnergyKwh = energyKwh,
         status = TripStatus.COMPLETED
     )
