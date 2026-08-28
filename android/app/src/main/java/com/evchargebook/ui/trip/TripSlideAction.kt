@@ -118,6 +118,7 @@ internal fun TripSlideAction(
                             .fillMaxWidth(
                                 ((displayedOffsetPx + thumbSizePx) / trackWidthPx).coerceIn(0f, 1f)
                             )
+                            .clip(CircleShape)
                             .background(accent.copy(alpha = 0.10f))
                     )
                 }
