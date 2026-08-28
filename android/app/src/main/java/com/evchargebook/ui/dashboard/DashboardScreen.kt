@@ -30,7 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
-import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripValidityRules
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
@@ -52,7 +52,7 @@ fun DashboardScreen(
     val selectedVehicleId = state.vehicle?.id
     val latestCompletedTrip = state.trips
         .asSequence()
-        .filter { it.vehicleId == selectedVehicleId && it.status == TripStatus.COMPLETED }
+        .filter { it.vehicleId == selectedVehicleId && TripValidityRules.isEligibleForAnalytics(it) }
         .maxByOrNull { it.endedAtEpochMillis ?: it.startedAtEpochMillis }
 
     LazyColumn(
@@ -156,83 +156,33 @@ private fun RecentChargingHeader(
 
 @Composable
 private fun EmptyChargingTimeline(onAddClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onAddClick)
-            .padding(vertical = MaterialTheme.spacing.sm),
-        verticalAlignment = Alignment.Top
-    ) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onAddClick).padding(vertical = MaterialTheme.spacing.sm), verticalAlignment = Alignment.Top) {
         TimelineRail(isLast = true)
         Spacer(Modifier.size(MaterialTheme.spacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                "等待第一笔充电",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text("等待第一笔充电", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(MaterialTheme.spacing.xxs))
-            Text(
-                "记录后会在这里形成连续的充电时间轴。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Text("记录后会在这里形成连续的充电时间轴。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
-            Text(
-                "记录第一次充电  →",
-                style = MaterialTheme.typography.bodyMedium,
-                color = EVDesignTokens.Energy.green
-            )
+            Text("记录第一次充电  →", style = MaterialTheme.typography.bodyMedium, color = EVDesignTokens.Energy.green)
         }
     }
 }
 
 @Composable
-private fun ChargingTimelineRow(
-    record: ChargingRecordEntity,
-    onEdit: () -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onEdit)
-            .padding(vertical = MaterialTheme.spacing.sm),
-        verticalAlignment = Alignment.Top
-    ) {
+private fun ChargingTimelineRow(record: ChargingRecordEntity, onEdit: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(vertical = MaterialTheme.spacing.sm), verticalAlignment = Alignment.Top) {
         TimelineRail(isLast = false)
         Spacer(Modifier.size(MaterialTheme.spacing.md))
         Column(modifier = Modifier.weight(1f)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    record.location ?: "未命名充电地点",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Text(
-                    "¥ ${two(record.cost)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text(record.location ?: "未命名充电地点", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(MaterialTheme.spacing.xxs))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "${formatTime(record.chargeTimeEpochMillis)} · ${record.chargerType ?: "未标记方式"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "+ ${one(record.energyKwh)} kWh",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = EVDesignTokens.Energy.green
-                )
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text("${formatTime(record.chargeTimeEpochMillis)} · ${record.chargerType ?: "未标记方式"}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("+ ${one(record.energyKwh)} kWh", style = MaterialTheme.typography.bodyMedium, color = EVDesignTokens.Energy.green)
             }
         }
     }
@@ -241,26 +191,10 @@ private fun ChargingTimelineRow(
 @Composable
 private fun TimelineRail(isLast: Boolean) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(36.dp)
-                .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Bolt,
-                contentDescription = null,
-                tint = EVDesignTokens.Energy.green,
-                modifier = Modifier.size(18.dp)
-            )
+        Box(Modifier.size(36.dp).background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.Bolt, contentDescription = null, tint = EVDesignTokens.Energy.green, modifier = Modifier.size(18.dp))
         }
-        if (!isLast) {
-            Box(
-                modifier = Modifier
-                    .size(width = 1.dp, height = 36.dp)
-                    .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.55f))
-            )
-        }
+        if (!isLast) Box(Modifier.size(width = 1.dp, height = 36.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = 0.55f)))
     }
 }
 
