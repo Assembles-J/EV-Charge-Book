@@ -1,0 +1,148 @@
+name: Hero Admin Deploy
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/**'
+      - 'hero-assets/manifest-v1.json'
+      - 'scripts/deploy-hero-admin.sh'
+      - '.github/workflows/hero-admin-deploy.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/**'
+      - 'hero-assets/manifest-v1.json'
+      - 'scripts/deploy-hero-admin.sh'
+      - '.github/workflows/hero-admin-deploy.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ev-charge-book-hero-admin-production
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate Hero Admin deployment bundle
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deploy script
+        shell: bash
+        run: |
+          set -eu
+          bash -n scripts/deploy-hero-admin.sh
+          test -f hero-admin/Dockerfile
+          test -f hero-admin/app.py
+          test -f hero-assets/manifest-v1.json
+
+      - name: Build Hero Admin image
+        run: docker build -t ev-charge-book-hero-admin:deploy-check hero-admin
+
+  deploy:
+    name: Deploy Hero Admin to groupim.cn
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare remote staging directory
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            rm -rf /opt/ev-charge-book/hero-admin-deploy
+            mkdir -p /opt/ev-charge-book/hero-admin-deploy
+            test -w /opt/ev-charge-book
+
+      - name: Upload Hero Admin deployment bundle
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
+          source: hero-admin,hero-assets/manifest-v1.json,scripts/deploy-hero-admin.sh
+          target: /opt/ev-charge-book/hero-admin-deploy
+          overwrite: true
+
+      - name: Deploy service and Nginx routes
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            chmod +x /opt/ev-charge-book/hero-admin-deploy/scripts/deploy-hero-admin.sh
+            /opt/ev-charge-book/hero-admin-deploy/scripts/deploy-hero-admin.sh
+
+      - name: Verify public Hero manifest
+        shell: bash
+        run: |
+          set -eu
+          tmp="$(mktemp)"
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error \
+              --location \
+              --max-time 15 \
+              https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json \
+              -o "$tmp"; then
+              if python3 - "$tmp" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          manifest = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert manifest.get('schemaVersion') == 1
+          artworks = manifest.get('artworks')
+          assert isinstance(artworks, dict) and artworks
+          PY
+              then
+                exit 0
+              fi
+            fi
+            sleep 2
+          done
+          echo "Public Hero manifest validation failed" >&2
+          exit 1
+
+      - name: Verify Hero Admin authentication gate
+        shell: bash
+        run: |
+          set -eu
+          for attempt in 1 2 3 4 5; do
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
+              --max-time 15 \
+              https://groupim.cn/ev-charge-book/hero-admin/ || true)"
+            if [ "$status" = "401" ]; then
+              exit 0
+            fi
+            echo "Attempt $attempt: expected 401, got $status"
+            sleep 2
+          done
+          echo "Hero Admin is not protected by the expected authentication gate" >&2
+          exit 1
+
+      - name: Deployment summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Hero Admin deployment"
+            echo ""
+            echo "- Admin: https://groupim.cn/ev-charge-book/hero-admin/"
+            echo "- Manifest: https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
+            echo "- Server credentials file: /opt/ev-charge-book/hero-admin.env"
+            echo "- The password is never printed into Actions logs."
+          } >> "$GITHUB_STEP_SUMMARY"
