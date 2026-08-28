@@ -181,6 +181,8 @@ internal fun TripDetailScreenV06(
                 }
             }
 
+            item { CompletedTripTrendsV06(points) }
+
             item {
                 CompletedTripDiagnosticsV06(
                     points = points,
@@ -541,7 +543,7 @@ private fun CompletedTripDiagnosticsV06(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                TextButton(onClick = onToggle) { Text(if (expanded) "收起" else "展开") }
+                TextButton(onClick = onToggle) { Text(if (expanded) "收起" else "查看轨迹点") }
             }
 
             if (expanded) {
