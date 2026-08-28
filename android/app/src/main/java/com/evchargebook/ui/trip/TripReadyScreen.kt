@@ -60,7 +60,7 @@ fun TripReadyScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             item { ReadyGpsCard() }
             item {
@@ -131,7 +131,7 @@ fun TripReadyScreen(
                 }
             } else {
                 items(orderedTrips, key = { it.id }) { trip ->
-                    ReadyRecentTripRow(
+                    TripHistoryCardV06(
                         trip = trip,
                         onClick = { onOpenDetail(trip.id) },
                         onDelete = { deleteTarget = trip }
