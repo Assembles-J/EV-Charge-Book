@@ -39,6 +39,7 @@ internal fun TripTrendPlotV06(
     if (samples.size < 2) return
 
     val accent = EVDesignTokens.Energy.green
+    val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
     val minValue = samples.minOf { it.value }
     val maxValue = samples.maxOf { it.value }
     val valueRange = max(1.0, maxValue - minValue)
@@ -62,7 +63,6 @@ internal fun TripTrendPlotV06(
             Canvas(Modifier.weight(1f).height(76.dp)) {
                 val padY = 5.dp.toPx()
                 val usableHeight = (size.height - padY * 2).coerceAtLeast(1f)
-                val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
 
                 listOf(0f, 0.5f, 1f).forEach { fraction ->
                     val y = padY + fraction * usableHeight
