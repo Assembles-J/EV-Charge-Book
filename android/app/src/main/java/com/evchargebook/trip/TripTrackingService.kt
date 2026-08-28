@@ -12,10 +12,12 @@ import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
 import android.os.SystemClock
+import android.provider.Settings
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
@@ -35,6 +37,9 @@ import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
 import com.evchargebook.domain.TripServiceLifecycleRules
 import com.evchargebook.domain.TripSpeedTrustRules
+import com.evchargebook.domain.TripTrackingRepairReason
+import com.evchargebook.domain.TripTrackingRepairRules
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,6 +56,7 @@ import kotlin.math.min
 class TripTrackingService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val pointMutex = Mutex()
+    private val repairInProgress = AtomicBoolean(false)
     private lateinit var locationManager: LocationManager
     private val tripDao by lazy { AppDatabase.getInstance(applicationContext).tripDao() }
     private var currentTripId: Long? = null
@@ -74,7 +80,7 @@ class TripTrackingService : Service() {
     override fun onCreate() {
         super.onCreate()
         locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -119,6 +125,8 @@ class TripTrackingService : Service() {
     private fun beginTracking(tripId: Long, redelivered: Boolean) {
         if (currentTripId == tripId) return
         currentTripId = tripId
+        repairInProgress.set(false)
+        getSystemService(NotificationManager::class.java).cancel(REPAIR_NOTIFICATION_ID)
         trackingStartedAtEpochMillis = System.currentTimeMillis()
         tripStartedAtEpochMillis = 0L
         currentDistanceMeters = 0.0
@@ -170,20 +178,16 @@ class TripTrackingService : Service() {
     }
 
     private fun requestLocationUpdatesOrInterrupt(tripId: Long) {
-        val fineGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        val coarseGranted = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val fineGranted = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarseGranted = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
 
         if (!fineGranted && !coarseGranted) {
-            serviceScope.launch {
-                recordEvent(tripId, TripDiagnosticEventType.PERMISSION_MISSING, detail = "fine=false coarse=false")
-                markInterrupted(tripId)
-                stopTrackingAndSelf()
-            }
+            serviceScope.launch { interruptForRepair(tripId, TripTrackingRepairReason.LOCATION_PERMISSION_MISSING) }
             return
         }
 
-        val gpsEnabled = runCatching { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
-        val networkEnabled = runCatching { locationManager.isProviderEnabled(LocationManager.NETWORK_PROVIDER) }.getOrDefault(false)
+        val gpsEnabled = providerEnabled(LocationManager.GPS_PROVIDER)
+        val networkEnabled = providerEnabled(LocationManager.NETWORK_PROVIDER)
         if (fineGranted && !gpsEnabled) serviceScope.launch {
             recordEvent(tripId, TripDiagnosticEventType.PROVIDER_DISABLED, provider = LocationManager.GPS_PROVIDER)
         }
@@ -197,10 +201,7 @@ class TripTrackingService : Service() {
         }.distinct()
 
         if (providers.isEmpty()) {
-            serviceScope.launch {
-                markInterrupted(tripId)
-                stopTrackingAndSelf()
-            }
+            serviceScope.launch { interruptForRepair(tripId, TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED) }
             return
         }
 
@@ -226,10 +227,48 @@ class TripTrackingService : Service() {
         healthMonitorJob?.cancel()
         healthMonitorJob = serviceScope.launch {
             while (isActive && currentTripId != null) {
+                val tripId = currentTripId ?: break
+                val repairReason = currentRepairReason()
+                if (repairReason != null) {
+                    interruptForRepair(tripId, repairReason)
+                    break
+                }
                 updateNotification()
                 delay(HEALTH_REFRESH_INTERVAL_MS)
             }
         }
+    }
+
+    private fun currentRepairReason(): TripTrackingRepairReason? {
+        val fineGranted = hasPermission(Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarseGranted = hasPermission(Manifest.permission.ACCESS_COARSE_LOCATION)
+        val hasLocationPermission = fineGranted || coarseGranted
+        val hasUsableProvider =
+            (fineGranted && providerEnabled(LocationManager.GPS_PROVIDER)) ||
+                (coarseGranted && providerEnabled(LocationManager.NETWORK_PROVIDER))
+        return TripTrackingRepairRules.evaluate(
+            hasLocationPermission = hasLocationPermission,
+            hasUsableLocationProvider = hasUsableProvider
+        )
+    }
+
+    private fun hasPermission(permission: String): Boolean =
+        ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
+
+    private fun providerEnabled(provider: String): Boolean =
+        runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+
+    private suspend fun interruptForRepair(tripId: Long, reason: TripTrackingRepairReason) {
+        if (!repairInProgress.compareAndSet(false, true)) return
+        when (reason) {
+            TripTrackingRepairReason.LOCATION_PERMISSION_MISSING ->
+                recordEvent(tripId, TripDiagnosticEventType.PERMISSION_MISSING, detail = "location permission missing while trip active")
+            TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED ->
+                recordEvent(tripId, TripDiagnosticEventType.PROVIDER_DISABLED, detail = "no usable location provider while trip active")
+        }
+        markInterrupted(tripId)
+        postRepairNotification(reason)
+        stopTrackingAndSelf()
     }
 
     private suspend fun handleLocation(tripId: Long, location: Location) {
@@ -449,6 +488,52 @@ class TripTrackingService : Service() {
         )
         .build()
 
+    private fun postRepairNotification(reason: TripTrackingRepairReason) {
+        val title: String
+        val text: String
+        val actionLabel: String
+        when (reason) {
+            TripTrackingRepairReason.LOCATION_PERMISSION_MISSING -> {
+                title = "行程已中断 · 缺少定位权限"
+                text = "恢复定位权限后回到行程，确认继续记录。"
+                actionLabel = "权限设置"
+            }
+            TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED -> {
+                title = "行程已中断 · 系统定位已关闭"
+                text = "开启系统定位后回到行程，确认继续记录。"
+                actionLabel = "开启定位"
+            }
+        }
+        val notification = NotificationCompat.Builder(this, WARNING_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_alert)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(openActiveTripPendingIntent(20))
+            .addAction(android.R.drawable.ic_menu_manage, actionLabel, repairSettingsPendingIntent(reason))
+            .addAction(android.R.drawable.ic_menu_view, "打开行程", openActiveTripPendingIntent(21))
+            .build()
+        runCatching {
+            getSystemService(NotificationManager::class.java).notify(REPAIR_NOTIFICATION_ID, notification)
+        }
+    }
+
+    private fun repairSettingsPendingIntent(reason: TripTrackingRepairReason): PendingIntent {
+        val intent = when (reason) {
+            TripTrackingRepairReason.LOCATION_PERMISSION_MISSING ->
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED ->
+                Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+        }.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        return PendingIntent.getActivity(
+            this,
+            30 + reason.ordinal,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
     private fun openActiveTripPendingIntent(requestCode: Int): PendingIntent = PendingIntent.getActivity(
         this,
         requestCode,
@@ -487,11 +572,16 @@ class TripTrackingService : Service() {
 
     private fun formatAge(seconds: Long): String = if (seconds < 60) "${seconds}秒" else "${seconds / 60}分${seconds % 60}秒"
 
-    private fun createNotificationChannel() {
+    private fun createNotificationChannels() {
         val manager = getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(CHANNEL_ID, "行程记录", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "用户主动开启行程后显示持续定位与 GPS 健康状态"
+            }
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(WARNING_CHANNEL_ID, "行程异常", NotificationManager.IMPORTANCE_DEFAULT).apply {
+                description = "行程因定位权限或系统定位状态中断时提供一次性修复入口"
             }
         )
     }
@@ -501,7 +591,9 @@ class TripTrackingService : Service() {
         private const val ACTION_STOP = "com.evchargebook.trip.STOP"
         private const val EXTRA_TRIP_ID = "trip_id"
         private const val CHANNEL_ID = "trip_tracking"
+        private const val WARNING_CHANNEL_ID = "trip_warnings"
         private const val NOTIFICATION_ID = 2201
+        private const val REPAIR_NOTIFICATION_ID = 2202
         private const val SAMPLE_INTERVAL_MS = 4_000L
         // Keep callback liveness time-based; TripSamplingRules owns stationary write throttling.
         private const val SAMPLE_DISTANCE_METERS = 0f
