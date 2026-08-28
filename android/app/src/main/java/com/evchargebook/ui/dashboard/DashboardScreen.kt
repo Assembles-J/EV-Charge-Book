@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,7 +45,9 @@ fun DashboardScreen(
     onAddClick: () -> Unit,
     onSelectVehicle: (Long) -> Unit,
     onOpenTrips: () -> Unit = {},
-    onOpenChargingRecords: () -> Unit = {}
+    onOpenTripDetail: (Long) -> Unit = {},
+    onOpenChargingRecords: () -> Unit = {},
+    onEditChargingRecord: (ChargingRecordEntity) -> Unit = {}
 ) {
     val selectedVehicleId = state.vehicle?.id
     val latestCompletedTrip = state.trips
@@ -69,18 +72,25 @@ fun DashboardScreen(
                 currentSoc = state.currentSoc,
                 currentMileageKm = state.currentMileageKm,
                 latestTrip = latestCompletedTrip,
+                vehicleSwitchEnabled = state.activeTrip == null,
                 onSelectVehicle = onSelectVehicle
             )
         }
-        item { DashboardRecentTripCard(latestCompletedTrip, onOpenTrips) }
+        item {
+            DashboardRecentTripCard(
+                trip = latestCompletedTrip,
+                onViewAll = onOpenTrips,
+                onOpenTrip = onOpenTripDetail
+            )
+        }
         item { EnergyCockpitCard(state, onOpenChargingRecords) }
-        item { RecentChargingHeader(onAddClick) }
+        item { RecentChargingHeader(onOpenChargingRecords, onAddClick) }
 
         if (state.chargingRecords.isEmpty()) {
             item { EmptyChargingTimeline(onAddClick) }
         } else {
             items(state.chargingRecords.take(3), key = { it.id }) { record ->
-                ChargingTimelineRow(record)
+                ChargingTimelineRow(record, onEdit = { onEditChargingRecord(record) })
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -88,7 +98,10 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun RecentChargingHeader(onAddClick: () -> Unit) {
+private fun RecentChargingHeader(
+    onViewAll: () -> Unit,
+    onAddClick: () -> Unit
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -102,19 +115,41 @@ private fun RecentChargingHeader(onAddClick: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .clip(CircleShape)
-                .background(EVDesignTokens.Energy.green)
-                .clickable(onClick = onAddClick),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Add,
-                contentDescription = "记录充电",
-                tint = MaterialTheme.colorScheme.onPrimary
-            )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier
+                    .clip(CircleShape)
+                    .clickable(onClick = onViewAll)
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "查看全部",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = EVDesignTokens.Energy.green
+                )
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = "查看全部充电记录",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(Modifier.size(4.dp))
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(CircleShape)
+                    .background(EVDesignTokens.Energy.green)
+                    .clickable(onClick = onAddClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "记录充电",
+                    tint = MaterialTheme.colorScheme.onPrimary
+                )
+            }
         }
     }
 }
@@ -153,10 +188,14 @@ private fun EmptyChargingTimeline(onAddClick: () -> Unit) {
 }
 
 @Composable
-private fun ChargingTimelineRow(record: ChargingRecordEntity) {
+private fun ChargingTimelineRow(
+    record: ChargingRecordEntity,
+    onEdit: () -> Unit
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onEdit)
             .padding(vertical = MaterialTheme.spacing.sm),
         verticalAlignment = Alignment.Top
     ) {
