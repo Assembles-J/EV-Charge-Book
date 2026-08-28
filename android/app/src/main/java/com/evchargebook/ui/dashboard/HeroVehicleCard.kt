@@ -3,7 +3,6 @@ package com.evchargebook.ui.dashboard
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.DropdownMenu
@@ -38,15 +36,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
@@ -71,127 +67,120 @@ fun HeroVehicleCard(
     var vehicleMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1.20f),
+        modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = Color.Transparent
+        color = Color(0xFF06100C)
     ) {
-        Box(Modifier.fillMaxSize()) {
-            VehicleStage(vehicle, Modifier.fillMaxSize())
-
+        Column {
             Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0x72020806),
-                                Color(0x18020806),
-                                Color.Transparent,
-                                Color(0x3D020806)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(1.46f)
+            ) {
+                VehicleStage(vehicle, Modifier.fillMaxSize())
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color(0x7A020806),
+                                    Color(0x16020806),
+                                    Color.Transparent,
+                                    Color(0x12020806)
+                                )
                             )
                         )
-                    )
-            )
-
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 18.dp, top = 16.dp, end = 18.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        "MY EV",
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = cockpit.primaryText
-                    )
-                }
-                Spacer(Modifier.height(18.dp))
-                Text(
-                    vehicle?.brand ?: "EV Charge Book",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = cockpit.primaryText.copy(alpha = 0.88f)
                 )
-                Text(
-                    vehicle?.model ?: "添加你的第一辆车",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = cockpit.primaryText
-                )
-            }
 
-            if (vehicle != null) {
-                Box(
+                Column(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 14.dp, end = 14.dp)
+                        .align(Alignment.TopStart)
+                        .padding(start = 16.dp, top = 14.dp, end = 72.dp)
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .size(width = 54.dp, height = 48.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x8F07110F))
-                            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                            .clickable(enabled = selectableVehicles.isNotEmpty()) {
-                                vehicleMenuExpanded = true
-                            }
-                            .padding(horizontal = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = "切换车辆",
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Icon(
-                            imageVector = Icons.Default.KeyboardArrowDown,
-                            contentDescription = null,
-                            tint = Color.White.copy(alpha = 0.92f),
-                            modifier = Modifier.size(16.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
+                        Spacer(Modifier.size(8.dp))
+                        Text(
+                            "MY EV",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = cockpit.primaryText
                         )
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = cockpit.primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
 
-                    DropdownMenu(
-                        expanded = vehicleMenuExpanded,
-                        onDismissRequest = { vehicleMenuExpanded = false }
+                if (vehicle != null) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 12.dp, end = 12.dp)
                     ) {
-                        selectableVehicles.forEach { candidate ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            candidate.model,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
-                                        )
-                                        Text(
-                                            candidate.brand,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0x8F07110F))
+                                .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                                .clickable(enabled = selectableVehicles.isNotEmpty()) {
+                                    vehicleMenuExpanded = true
                                 },
-                                onClick = {
-                                    vehicleMenuExpanded = false
-                                    onSelectVehicle(candidate.id)
-                                }
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.DirectionsCar,
+                                contentDescription = "切换车辆",
+                                tint = Color.White,
+                                modifier = Modifier.size(23.dp)
                             )
+                        }
+
+                        DropdownMenu(
+                            expanded = vehicleMenuExpanded,
+                            onDismissRequest = { vehicleMenuExpanded = false }
+                        ) {
+                            selectableVehicles.forEach { candidate ->
+                                DropdownMenuItem(
+                                    text = {
+                                        Column {
+                                            Text(
+                                                candidate.model,
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                            )
+                                            Text(
+                                                candidate.brand,
+                                                style = MaterialTheme.typography.labelMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        vehicleMenuExpanded = false
+                                        onSelectVehicle(candidate.id)
+                                    }
+                                )
+                            }
                         }
                     }
                 }
+            }
 
-                HeroDynamicStateOverlay(
+            if (vehicle != null) {
+                HeroDynamicStatePanel(
                     currentSoc = currentSoc,
                     currentMileageKm = currentMileageKm,
                     latestTrip = latestTrip,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
                 )
             }
         }
@@ -230,13 +219,18 @@ private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier)
                 alignment = Alignment.Center
             )
         } else {
-            VehicleSilhouetteFallback(Modifier.fillMaxSize())
+            Icon(
+                imageVector = Icons.Default.DirectionsCar,
+                contentDescription = null,
+                tint = EVDesignTokens.Energy.green.copy(alpha = 0.65f),
+                modifier = Modifier.size(72.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun HeroDynamicStateOverlay(
+private fun HeroDynamicStatePanel(
     currentSoc: Int?,
     currentMileageKm: Double?,
     latestTrip: TripSessionEntity?,
@@ -254,9 +248,9 @@ private fun HeroDynamicStateOverlay(
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.14f), panelShape),
+            .border(1.dp, Color.White.copy(alpha = 0.12f), panelShape),
         shape = panelShape,
-        color = Color(0xD9091511)
+        color = Color(0xFF091511)
     ) {
         Row(
             modifier = Modifier
@@ -442,51 +436,6 @@ private fun MetricDivider() {
             .size(width = 1.dp, height = 56.dp)
             .background(LocalCockpitColors.current.secondaryText.copy(alpha = .24f))
     )
-}
-
-@Composable
-private fun VehicleSilhouetteFallback(modifier: Modifier = Modifier) {
-    val energy = EVDesignTokens.Energy.green
-    Canvas(modifier) {
-        val w = size.width
-        val h = size.height
-        drawCircle(
-            brush = Brush.radialGradient(
-                listOf(energy.copy(alpha = 0.16f), Color.Transparent),
-                center = Offset(w * 0.58f, h * 0.60f),
-                radius = w * 0.46f
-            ),
-            radius = w * 0.46f,
-            center = Offset(w * 0.58f, h * 0.60f)
-        )
-        val body = Path().apply {
-            moveTo(w * .10f, h * .68f)
-            cubicTo(w * .16f, h * .61f, w * .23f, h * .57f, w * .30f, h * .55f)
-            cubicTo(w * .36f, h * .39f, w * .43f, h * .31f, w * .54f, h * .30f)
-            lineTo(w * .66f, h * .30f)
-            cubicTo(w * .73f, h * .33f, w * .79f, h * .43f, w * .84f, h * .53f)
-            cubicTo(w * .91f, h * .55f, w * .95f, h * .60f, w * .96f, h * .68f)
-            lineTo(w * .91f, h * .72f)
-            lineTo(w * .14f, h * .72f)
-            close()
-        }
-        drawPath(
-            body,
-            brush = Brush.horizontalGradient(
-                listOf(Color(0xFF0D1713), Color(0xFF173728), Color(0xFF0B1511))
-            )
-        )
-        drawPath(body, color = energy.copy(alpha = .72f), style = Stroke(width = 1.5.dp.toPx()))
-        listOf(w * .27f, w * .78f).forEach { x ->
-            drawCircle(Color(0xFF050807), 16.dp.toPx(), Offset(x, h * .70f))
-            drawCircle(
-                energy.copy(alpha = .55f),
-                10.dp.toPx(),
-                Offset(x, h * .70f),
-                style = Stroke(1.5.dp.toPx())
-            )
-        }
-    }
 }
 
 private fun formatMileage(value: Double): String =

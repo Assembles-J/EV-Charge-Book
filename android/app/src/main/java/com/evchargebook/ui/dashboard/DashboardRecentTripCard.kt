@@ -1,6 +1,7 @@
 package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -39,9 +41,12 @@ import java.util.Date
 import java.util.Locale
 
 @Composable
-fun DashboardRecentTripCard(trip: TripSessionEntity?) {
+fun DashboardRecentTripCard(
+    trip: TripSessionEntity?,
+    onViewAll: () -> Unit = {}
+) {
     if (trip == null) {
-        RecentTripEmptyState()
+        RecentTripEmptyState(onViewAll)
         return
     }
 
@@ -77,7 +82,7 @@ fun DashboardRecentTripCard(trip: TripSessionEntity?) {
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            RecentTripHeader()
+            RecentTripHeader(onViewAll)
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -136,7 +141,7 @@ fun DashboardRecentTripCard(trip: TripSessionEntity?) {
 }
 
 @Composable
-private fun RecentTripHeader() {
+private fun RecentTripHeader(onViewAll: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -165,7 +170,13 @@ private fun RecentTripHeader() {
             )
         }
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            modifier = Modifier
+                .clip(CircleShape)
+                .clickable(onClick = onViewAll)
+                .padding(start = 10.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 "查看全部",
                 style = MaterialTheme.typography.bodyMedium,
@@ -173,7 +184,7 @@ private fun RecentTripHeader() {
             )
             Icon(
                 Icons.Default.ChevronRight,
-                contentDescription = null,
+                contentDescription = "查看全部行程",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(20.dp)
             )
@@ -229,7 +240,7 @@ private fun MetricSeparator() {
 }
 
 @Composable
-private fun RecentTripEmptyState() {
+private fun RecentTripEmptyState(onViewAll: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -239,7 +250,7 @@ private fun RecentTripEmptyState() {
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            RecentTripHeader()
+            RecentTripHeader(onViewAll)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically

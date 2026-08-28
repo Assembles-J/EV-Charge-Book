@@ -343,7 +343,16 @@ fun MainApp(
                 )
                 bluetoothPrompt -> BluetoothPromptScreen(state.bluetoothSettings, state.pairedBluetoothDevices, viewModel::saveBluetoothPrompt) { bluetoothPrompt = false }
                 else -> when (tab) {
-                    0 -> DashboardScreen(state, { addRecord = true }, viewModel::selectVehicle)
+                    0 -> DashboardScreen(
+                        state = state,
+                        onAddClick = { addRecord = true },
+                        onSelectVehicle = viewModel::selectVehicle,
+                        onOpenTrips = {
+                            viewModel.closeTripDetail()
+                            tab = 3
+                        },
+                        onOpenChargingRecords = { tab = 1 }
+                    )
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
                     3 -> {
@@ -354,7 +363,8 @@ fun MainApp(
                                 currentMileageKm = state.currentMileageKm,
                                 recentTrips = state.trips.filter { it.status == TripStatus.COMPLETED },
                                 onStart = ::startTripWithPermission,
-                                onOpenDetail = viewModel::openTripDetail
+                                onOpenDetail = viewModel::openTripDetail,
+                                onDelete = viewModel::deleteTrip
                             )
                         } else {
                             TripScreen(

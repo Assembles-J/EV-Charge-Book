@@ -1,6 +1,7 @@
 package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,7 +32,10 @@ import com.evchargebook.viewmodel.MainUiState
 import java.util.Locale
 
 @Composable
-fun EnergyCockpitCard(state: MainUiState) {
+fun EnergyCockpitCard(
+    state: MainUiState,
+    onOpenRecords: () -> Unit = {}
+) {
     val surfaceBrush = Brush.verticalGradient(
         listOf(Color(0xFF0D1512), Color(0xFF09100E))
     )
@@ -81,7 +85,13 @@ fun EnergyCockpitCard(state: MainUiState) {
                         )
                     }
                 }
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .clickable(onClick = onOpenRecords)
+                        .padding(start = 10.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
                         "${state.chargingCount} 次充电",
                         style = MaterialTheme.typography.bodyMedium,
@@ -89,7 +99,7 @@ fun EnergyCockpitCard(state: MainUiState) {
                     )
                     Icon(
                         Icons.Default.ChevronRight,
-                        contentDescription = null,
+                        contentDescription = "查看充电记录",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.size(20.dp)
                     )

@@ -42,7 +42,9 @@ import java.util.Locale
 fun DashboardScreen(
     state: MainUiState,
     onAddClick: () -> Unit,
-    onSelectVehicle: (Long) -> Unit
+    onSelectVehicle: (Long) -> Unit,
+    onOpenTrips: () -> Unit = {},
+    onOpenChargingRecords: () -> Unit = {}
 ) {
     val selectedVehicleId = state.vehicle?.id
     val latestCompletedTrip = state.trips
@@ -70,8 +72,8 @@ fun DashboardScreen(
                 onSelectVehicle = onSelectVehicle
             )
         }
-        item { DashboardRecentTripCard(latestCompletedTrip) }
-        item { EnergyCockpitCard(state) }
+        item { DashboardRecentTripCard(latestCompletedTrip, onOpenTrips) }
+        item { EnergyCockpitCard(state, onOpenChargingRecords) }
         item { RecentChargingHeader(onAddClick) }
 
         if (state.chargingRecords.isEmpty()) {
