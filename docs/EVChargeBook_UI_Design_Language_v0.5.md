@@ -129,6 +129,32 @@ Displays:
 - Cost analysis
 - Energy distribution
 
+### Background Update Card
+
+The release-only APK updater is part of the same Dashboard visual system, not a generic Material dialog.
+
+Visual rules:
+
+- float above the bottom navigation without a scrim;
+- use the Dashboard horizontal gutter (8dp starting point);
+- use `EVDesignTokens.Dark.surfaceElevated` with a subtle `EVDesignTokens.Dark.outline` hairline;
+- use the large radius family (about 24dp) and no visible Material elevation;
+- keep the icon in a compact circular tinted container;
+- use energy green for normal/update-ready actions, warning only for permission state, and danger only for failures;
+- keep primary copy near-white and supporting copy muted gray-green;
+- prefer compact text/pill actions over large tonal buttons;
+- downloading uses a thin green progress line at the card bottom;
+- the card must remain non-modal and must never interrupt Local First usage.
+
+State copy hierarchy:
+
+1. `正在后台更新 <version>` — application remains usable while download and verification run.
+2. `<version> 已准备好` — compact install action becomes available.
+3. `允许安装后即可更新` — guide the Android unknown-source permission flow without changing card geometry.
+4. `后台更新失败` — error accent plus retry, while keeping the same dark card surface.
+
+The visual alignment issue is tracked in #125. Functional old-release -> new-release device acceptance remains tracked separately by #102.
+
 ## Navigation
 
 Bottom navigation:
