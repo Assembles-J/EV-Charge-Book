@@ -3,31 +3,16 @@ package com.evchargebook.update
 import android.app.Activity
 import android.net.Uri
 import android.util.Log
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
-import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,17 +22,27 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupProperties
 import com.evchargebook.BuildConfig
 import com.evchargebook.ui.theme.EVDesignTokens
 
+/**
+ * Release-only update flow.
+ *
+ * There is deliberately no floating Popup while an APK is downloading. A Popup creates a
+ * separate Android window and physical devices can report a touchable region that does not
+ * exactly match its translated visual bounds. That made normal Dashboard/navigation controls
+ * untappable even though the updater looked non-modal.
+ *
+ * The updater is modal only at explicit decision points:
+ * 1. ask before download;
+ * 2. ask after the verified APK is ready to install.
+ *
+ * DownloadManager owns progress in between, so every app screen remains fully interactive.
+ */
 @Composable
 fun AppUpdatePrompt() {
     if (BuildConfig.BUILD_TYPE != "release") return
@@ -60,7 +55,6 @@ fun AppUpdatePrompt() {
     var downloadedUri by remember { mutableStateOf<Uri?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var downloadToken by remember { mutableIntStateOf(0) }
-    var showInstallConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { manager.checkForUpdate() }
@@ -92,6 +86,10 @@ fun AppUpdatePrompt() {
             }
     }
 
+    fun deferOptionalUpdate() {
+        if (!info.mandatory) update = null
+    }
+
     fun continueInstall() {
         val uri = downloadedUri ?: return
         if (!manager.canRequestPackageInstalls()) {
@@ -102,247 +100,128 @@ fun AppUpdatePrompt() {
         }
     }
 
-    Popup(
-        alignment = Alignment.BottomCenter,
-        properties = PopupProperties(
-            focusable = false,
-            dismissOnBackPress = false,
-            dismissOnClickOutside = false,
-            clippingEnabled = true
+    when (phase) {
+        UpdatePhase.IDLE,
+        UpdatePhase.DISCOVERED -> UpdateDecisionDialog(
+            icon = Icons.Rounded.SystemUpdateAlt,
+            accent = EVDesignTokens.Energy.green,
+            title = "发现新版本 ${info.versionName}",
+            lines = listOf(
+                "是否现在下载更新？",
+                "确认后由 Android 下载管理器在后台下载并校验，进度会显示在系统通知栏。",
+                "下载期间总览、记录、统计、行程和车辆页面都可以正常使用。"
+            ),
+            confirmText = "更新",
+            dismissText = if (info.mandatory) null else "稍后",
+            onConfirm = { downloadToken += 1 },
+            onDismiss = ::deferOptionalUpdate
         )
-    ) {
-        // Important: use offset instead of bottom/vertical padding here. Padding enlarges the
-        // Popup window's touchable bounds and can cover the bottom navigation even though the
-        // visible card itself sits above it. Offset keeps the popup hit region equal to the card.
-        Box(
-            modifier = Modifier
-                .offset(y = (-82).dp)
-                .padding(horizontal = 8.dp)
-                .widthIn(min = 320.dp, max = 520.dp)
-        ) {
-            BackgroundUpdateCard(
-                versionName = info.versionName,
-                phase = phase,
-                errorMessage = errorMessage,
-                mandatory = info.mandatory,
-                onUpdate = { downloadToken += 1 },
-                onInstall = { showInstallConfirmation = true },
-                onContinueInstall = ::continueInstall,
-                onRetry = { downloadToken += 1 },
-                onLater = {
-                    if (!info.mandatory && phase != UpdatePhase.DOWNLOADING) {
-                        update = null
-                    }
-                }
-            )
-        }
-    }
 
-    if (showInstallConfirmation) {
-        AlertDialog(
-            onDismissRequest = { showInstallConfirmation = false },
-            containerColor = EVDesignTokens.Dark.surfaceElevated,
-            titleContentColor = EVDesignTokens.Dark.primaryText,
-            textContentColor = EVDesignTokens.Dark.secondaryText,
-            title = {
-                Text(
-                    text = "确认安装更新 ${info.versionName}",
-                    fontWeight = FontWeight.SemiBold
-                )
-            },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("更新包已下载并完成完整性校验。")
-                    Text("安装时 Android 会打开系统安装界面，安装期间应用会暂时退出；完成后重新打开即可。")
-                    Text(
-                        text = "建议在停车且网络、电量状态良好时安装。",
-                        color = EVDesignTokens.Energy.green
-                    )
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showInstallConfirmation = false
-                        continueInstall()
-                    }
-                ) {
-                    Text(
-                        text = "确认安装",
-                        color = EVDesignTokens.Energy.green,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showInstallConfirmation = false }) {
-                    Text("取消", color = EVDesignTokens.Dark.secondaryText)
-                }
-            }
+        UpdatePhase.DOWNLOADING -> Unit
+
+        UpdatePhase.READY -> UpdateDecisionDialog(
+            icon = Icons.Rounded.CheckCircle,
+            accent = EVDesignTokens.Energy.success,
+            title = "${info.versionName} 已准备好",
+            lines = listOf(
+                "更新包已下载并通过 SHA-256 完整性校验。",
+                "点击安装后会进入 Android 系统安装界面；安装前不会退出当前应用。"
+            ),
+            confirmText = "安装",
+            dismissText = if (info.mandatory) null else "稍后",
+            onConfirm = ::continueInstall,
+            onDismiss = ::deferOptionalUpdate
+        )
+
+        UpdatePhase.PERMISSION_REQUIRED -> UpdateDecisionDialog(
+            icon = Icons.Rounded.CheckCircle,
+            accent = EVDesignTokens.Energy.warning,
+            title = "允许安装此来源应用",
+            lines = listOf(
+                "Android 需要先允许 EV Charge Book 安装下载的更新包。",
+                "完成系统授权后返回这里，再点击继续安装。"
+            ),
+            confirmText = "继续安装",
+            dismissText = if (info.mandatory) null else "稍后",
+            onConfirm = ::continueInstall,
+            onDismiss = ::deferOptionalUpdate
+        )
+
+        UpdatePhase.FAILED -> UpdateDecisionDialog(
+            icon = Icons.Rounded.ErrorOutline,
+            accent = EVDesignTokens.Energy.danger,
+            title = "更新失败",
+            lines = listOf(errorMessage ?: "更新包下载失败，请稍后重试"),
+            confirmText = "重试",
+            dismissText = if (info.mandatory) null else "稍后",
+            onConfirm = { downloadToken += 1 },
+            onDismiss = ::deferOptionalUpdate
         )
     }
 }
 
 @Composable
-private fun BackgroundUpdateCard(
-    versionName: String,
-    phase: UpdatePhase,
-    errorMessage: String?,
-    mandatory: Boolean,
-    onUpdate: () -> Unit,
-    onInstall: () -> Unit,
-    onContinueInstall: () -> Unit,
-    onRetry: () -> Unit,
-    onLater: () -> Unit
+private fun UpdateDecisionDialog(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    accent: Color,
+    title: String,
+    lines: List<String>,
+    confirmText: String,
+    dismissText: String?,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
 ) {
-    val copy = when (phase) {
-        UpdatePhase.IDLE,
-        UpdatePhase.DISCOVERED -> UpdateCardCopy(
-            icon = Icons.Rounded.SystemUpdateAlt,
-            title = "发现新版本 $versionName",
-            subtitle = "确认后将在后台下载，期间可以继续使用应用",
-            accent = EVDesignTokens.Energy.green,
-            action = "更新"
-        )
-        UpdatePhase.DOWNLOADING -> UpdateCardCopy(
-            icon = Icons.Rounded.Download,
-            title = "正在后台更新 $versionName",
-            subtitle = "可以继续使用应用，下载并校验完成后再安装",
-            accent = EVDesignTokens.Energy.green,
-            action = null
-        )
-        UpdatePhase.READY -> UpdateCardCopy(
-            icon = Icons.Rounded.CheckCircle,
-            title = "$versionName 已准备好",
-            subtitle = "更新已下载完成，可随时安装",
-            accent = EVDesignTokens.Energy.success,
-            action = "立即安装"
-        )
-        UpdatePhase.PERMISSION_REQUIRED -> UpdateCardCopy(
-            icon = Icons.Rounded.CheckCircle,
-            title = "$versionName 已准备好",
-            subtitle = "允许安装此来源应用后，返回继续安装",
-            accent = EVDesignTokens.Energy.warning,
-            action = "继续安装"
-        )
-        UpdatePhase.FAILED -> UpdateCardCopy(
-            icon = Icons.Rounded.ErrorOutline,
-            title = "更新失败",
-            subtitle = errorMessage ?: "网络恢复后可以重试",
-            accent = EVDesignTokens.Energy.danger,
-            action = "重试"
-        )
-    }
-
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(EVDesignTokens.Radius.large.dp),
-        color = EVDesignTokens.Dark.surfaceElevated.copy(alpha = 0.98f),
-        contentColor = EVDesignTokens.Dark.primaryText,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(1.dp, EVDesignTokens.Dark.outline)
-    ) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, top = 14.dp, end = 10.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Surface(
-                    modifier = Modifier.size(40.dp),
-                    shape = CircleShape,
-                    color = copy.accent.copy(alpha = 0.12f),
-                    contentColor = copy.accent,
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = copy.icon,
-                            contentDescription = null,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = EVDesignTokens.Dark.surfaceElevated,
+        titleContentColor = EVDesignTokens.Dark.primaryText,
+        textContentColor = EVDesignTokens.Dark.secondaryText,
+        icon = {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent
+            )
+        },
+        title = {
+            Text(
+                text = title,
+                fontWeight = FontWeight.SemiBold
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                lines.forEachIndexed { index, line ->
+                    if (index > 0) Spacer(Modifier.height(1.dp))
                     Text(
-                        text = copy.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = EVDesignTokens.Dark.primaryText
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = copy.subtitle,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = EVDesignTokens.Dark.secondaryText
-                    )
-                }
-
-                copy.action?.let { label ->
-                    TextButton(
-                        onClick = when (phase) {
-                            UpdatePhase.IDLE,
-                            UpdatePhase.DISCOVERED -> onUpdate
-                            UpdatePhase.READY -> onInstall
-                            UpdatePhase.PERMISSION_REQUIRED -> onContinueInstall
-                            UpdatePhase.FAILED -> onRetry
-                            UpdatePhase.DOWNLOADING -> ({})
+                        text = line,
+                        color = if (index == lines.lastIndex && lines.size > 1) {
+                            EVDesignTokens.Dark.secondaryText
+                        } else {
+                            EVDesignTokens.Dark.primaryText.copy(alpha = 0.92f)
                         }
-                    ) {
-                        Text(
-                            text = label,
-                            color = copy.accent,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-
-                val canDefer = !mandatory && phase in setOf(
-                    UpdatePhase.IDLE,
-                    UpdatePhase.DISCOVERED,
-                    UpdatePhase.READY,
-                    UpdatePhase.PERMISSION_REQUIRED,
-                    UpdatePhase.FAILED
-                )
-                if (canDefer) {
-                    TextButton(onClick = onLater) {
-                        Text("稍后", color = EVDesignTokens.Dark.secondaryText)
-                    }
+                    )
                 }
             }
-
-            if (phase == UpdatePhase.DOWNLOADING) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(3.dp)
-                        .background(EVDesignTokens.Dark.outline)
-                ) {
-                    LinearProgressIndicator(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(3.dp),
-                        color = EVDesignTokens.Energy.green,
-                        trackColor = Color.Transparent
-                    )
+        },
+        confirmButton = {
+            TextButton(onClick = onConfirm) {
+                Text(
+                    text = confirmText,
+                    color = accent,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        },
+        dismissButton = dismissText?.let { label ->
+            {
+                TextButton(onClick = onDismiss) {
+                    Text(label, color = EVDesignTokens.Dark.secondaryText)
                 }
             }
         }
-    }
+    )
 }
-
-private data class UpdateCardCopy(
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val title: String,
-    val subtitle: String,
-    val accent: Color,
-    val action: String?
-)
 
 private enum class UpdatePhase {
     IDLE,
