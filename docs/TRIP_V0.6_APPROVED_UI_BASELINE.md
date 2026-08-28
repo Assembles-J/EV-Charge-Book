@@ -1,6 +1,6 @@
 # EV Charge Book Trip v0.6 Approved UI Baseline
 
-Status: approved visual / interaction baseline from 2026-08-28 physical-device review.
+Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison.
 
 Owning issue: #145
 
@@ -8,7 +8,7 @@ Owning issue: #145
 
 This document is the implementation authority for the Trip v0.6 UI pass. It refines the existing v0.5 Dark First language without changing Trip persistence, GPS truth semantics, or the current Local First product boundary.
 
-The approved direction is **denser, clearer, and more data-led** than the current physical-device Trip UI. It should not look like a debug screen, a dashboard of unrelated cards, or an advertising surface.
+The approved direction is **denser, clearer, and more data-led** than the earlier physical-device Trip UI. It should not look like a debug screen, a dashboard of unrelated cards, or an advertising surface.
 
 ## Design token authority
 
@@ -24,8 +24,9 @@ Do not introduce a second Trip-specific green.
 
 - Primary green is used for selected state, positive status, route/start accents, compact trend lines and interaction progress.
 - Avoid bright outer glow, neon bloom, luminous rings or large halos.
-- Red remains semantic: endpoint flag, danger or critical interruption only.
+- Red remains semantic: completed endpoint flag, danger or critical interruption only.
 - Start and end must remain distinguishable by icon shape, not only by color.
+- While a Trip is still recording, the latest point is a green `当前点`, not a red completed endpoint.
 - Dark surfaces remain low-noise so actual route/data keeps visual priority.
 
 ## Product boundary
@@ -46,17 +47,20 @@ Completed Trips may show the recorded end address when available. Coordinate fal
 
 ## Six implementation surfaces
 
-### 1. Trip list / history — #146
+### 1. Trip home / history — #146, #175
 
 Goal: make the Trip landing page compact and immediately useful.
 
+The Trip home and READY preparation are separate states. Entering the Trip tab should not immediately expose the preparation form.
+
 Display priority:
 
-1. date/time and completion state
-2. start -> end presentation
-3. distance + duration
-4. average consumption when trustworthy
-5. additional technical facts only when they improve scanning
+1. compact start action
+2. latest completed Trip summary when available
+3. date/time and completion state
+4. explicit start/end presentation
+5. distance + duration
+6. average consumption when trustworthy
 
 Rules:
 
@@ -65,22 +69,28 @@ Rules:
 - avoid oversized introductory copy
 - avoid decorative status cards
 - do not expose raw GPS diagnostics in the list
+- use only persisted completed-Trip facts in the latest summary
 
-### 2. READY / preparation — #147
+### 2. READY / preparation — #147, #171, #175
 
-Goal: tell the user what will be recorded and whether recording can start.
+Goal: tell the user what will be recorded immediately before the user starts recording.
 
 Display priority:
 
 1. selected vehicle identity
 2. current SOC / mileage when known
-3. GPS readiness + accuracy context
+3. compact GPS recording truth
 4. one clear start interaction
+
+GPS readiness / accuracy must only be shown when the app actually owns a real sample. Before recording starts, do not invent a GPS quality badge merely to match a mockup.
 
 Interaction:
 
+- READY is entered explicitly from Trip home
+- back returns to Trip home without creating an empty Trip
 - use a restrained slide-to-start control
 - thumb and progress use the primary green family
+- the animated progress edge remains rounded with the capsule track
 - no bright glow
 - partial drag returns naturally
 - successful drag requires a meaningful threshold
@@ -88,42 +98,46 @@ Interaction:
 
 Do not add feature-advertising cards such as “high accuracy / continuous recording / privacy safe”. These are implementation qualities, not promotional UI.
 
-### 3. Active Trip cockpit — #148
+### 3. Active Trip cockpit — #148, #168, #171
 
 Goal: a glanceable driving surface with a clear route focus.
 
 Primary facts may include, when truthful:
 
 - recorded distance
+- current/recent trusted speed
 - elapsed duration
-- current/recent speed
 - average speed
-- SOC snapshot / current known SOC
-- estimated consumption from existing Trip logic
+- max speed
+- starting SOC
+
+Point counts / altitude sample counts belong to supporting telemetry and should not duplicate the primary cockpit grid.
 
 Do not show battery voltage in the Trip UI.
 
 Supporting visualization:
 
-- compact route preview
+- compact truthful route preview
 - compact speed trend
 - compact altitude trend when altitude samples are available
+- sparse X elapsed-time and Y value references on trend plots
 
 Interaction:
 
 - restrained slide-to-end control
+- the slide opens the final completion surface directly; do not stack a redundant generic confirmation alert in between
 - preserve existing interrupted / pause / resume semantics
 - no selected-destination implication while the Trip is active
 
 ### 4. Completed Trip overview — #149
 
-Goal: compress the current long detail page into a useful summary before deeper diagnostics.
+Goal: compress the detail page into a useful summary before deeper diagnostics.
 
 Endpoint summary:
 
 - start + end belong in one card
 - start icon: small primary-green play/start glyph
-- end icon: small red flag
+- completed end icon: small red flag
 - no large endpoint rings or halos
 
 Metric hierarchy may include:
@@ -137,23 +151,25 @@ Metric hierarchy may include:
 
 Missing values stay unavailable. Do not infer legacy data.
 
-### 5. Route / map — #150
+### 5. Route / map — #150, #168
 
 Goal: recorded geometry is the visual focus.
 
 Rules:
 
-- dark, low-noise map surface
+- dark, low-noise route surface
 - restrained primary-green route treatment where reliable
 - keep large-gap / continuity semantics from the existing reliability work
 - start marker is compact and green
-- end marker is a small red flag only
+- completed end marker is a small red flag only
+- recording latest point stays green; interrupted/non-final latest point is not presented as a completed endpoint
 - map controls stay secondary
 - no animated route pulse or neon route glow
+- do not draw a fake basemap when the product does not own one
 
 Speed coloring may be retained only when it remains readable and truthful. A legend should explain any color encoding.
 
-### 6. Diagnostics / trends — #151
+### 6. Diagnostics / trends — #151, #168
 
 Goal: progressive disclosure instead of a raw GPS log.
 
@@ -168,9 +184,35 @@ Default summary may include:
 - speed trend
 - altitude trend
 
+Trend plots must provide sparse axis context rather than an unlabeled decorative line. Long gaps stay disconnected and are never interpolated.
+
 Raw recent GPS points must not be expanded by default. Provide an explicit troubleshooting action such as `查看轨迹点`.
 
 If altitude is unavailable or untrustworthy, omit the metric rather than showing a synthetic value.
+
+## Completion flow — #173
+
+The final completion form is part of the Trip interaction language even though it is not one of the six browsing surfaces.
+
+After slide-to-end:
+
+1. show GPS distance + starting SOC / mileage evidence
+2. collect ending SOC / optional ending mileage
+3. show the existing SOC-derived estimate only when trustworthy
+4. expose explicit `继续行驶` and `保存并结束`
+
+Rules:
+
+- one explicit completion confirmation is enough; do not stack a second generic alert before it
+- ending SOC remains 0..100
+- ending mileage remains optional, numeric, non-negative and never below starting mileage
+- existing start-mileage + GPS-distance prefill may remain, but is editable
+- estimate remains clearly non-BMS
+- dismiss / continue never ends the Trip
+
+## System inset ownership
+
+The root `MainActivity` owns system safe-area padding for the normal tab content. Nested Trip Scaffolds / TopAppBars must not claim a second top system inset. The 2026-08-29 device comparison showed that double ownership creates a large blank band above Trip content.
 
 ## Typography and density
 
@@ -193,7 +235,7 @@ Animation is allowed only where it communicates state or interaction.
 Approved:
 
 - slide thumb drag
-- progress fill during slide
+- rounded progress fill during slide
 - subtle spring/snap return after an incomplete slide
 - subtle completion transition
 
@@ -216,20 +258,24 @@ The redesign must preserve existing domain authority:
 - estimated energy must not be presented as BMS measurement
 - active Trip remains bound to its original vehicleId
 
-## PR strategy
+## Implementation history
 
-Implement the work as narrow PRs mapped to #146–#151. A PR should avoid mixing unrelated Trip surfaces unless a shared component makes separation unreasonable.
+Original slices:
 
-Suggested order:
+1. #146 / PR #154 — Trip list
+2. #147 / PR #155 — READY + slide foundation
+3. #148 / PR #156 — active Trip cockpit
+4. #149/#150 / PR #158 — completed overview + route markers
+5. #151 / PR #161 — diagnostics + trends
 
-1. #146 Trip list
-2. #147 READY + slide interaction foundation
-3. #148 active Trip cockpit
-4. #149 completed overview
-5. #150 route/map marker polish
-6. #151 diagnostics + trends
+Physical-device corrections:
 
-Shared component extraction is encouraged when it reduces duplication, but avoid a speculative component framework.
+- #168 / PR #170 — rounded slider progress, labeled trends, history density, inset ownership, recording endpoint semantics
+- #171 / PR #172 — compact READY information group + active metric de-duplication
+- #173 / PR #174 — compact completion flow + removal of redundant intermediate confirmation
+- #175 / PR #176 — separate Trip home/history from READY preparation
+
+#152 remains the future destination-selection capability and is not part of v0.6.
 
 ## Acceptance gate
 
@@ -242,4 +288,15 @@ Every implementation PR requires:
 - no bright glow / neon treatment introduced
 - primary green remains `EVDesignTokens.Energy.green`
 
-Final closure of #145 requires one physical-device pass across all six surfaces.
+Final closure of #145 requires one physical-device pass across:
+
+1. Trip home/history
+2. READY preparation
+3. active cockpit
+4. completion form
+5. completed overview
+6. route
+7. speed + altitude trends
+8. diagnostics disclosure
+
+Also verify 320–360dp width and fontScale 1.3 before declaring UI acceptance complete.
