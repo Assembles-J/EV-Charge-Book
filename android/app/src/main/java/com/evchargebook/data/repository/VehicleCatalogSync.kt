@@ -82,10 +82,10 @@ class VehicleCatalogSync(private val database: AppDatabase) {
         if (items.isEmpty()) return false
 
         database.withTransaction {
-            // A successful, fully parsed document is authoritative only for previously managed rows.
-            // Bundled/local fallback rows are never removed by a failed or partial network response.
+            // Only a complete, valid remote document may change the local catalog.
+            // Previously managed rows missing from the new document become inactive, never deleted.
             dao.deactivateManagedEntries()
-            dao.insertAll(items)
+            dao.upsertManaged(items)
         }
         return true
     }
