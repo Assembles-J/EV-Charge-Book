@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
@@ -54,7 +55,9 @@ internal fun TripSlideAction(
     label: String,
     enabled: Boolean,
     onConfirmed: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    icon: ImageVector = Icons.Default.PlayArrow,
+    releaseLabel: String = "松开开始"
 ) {
     val accent = EVDesignTokens.Energy.green
     val density = LocalDensity.current
@@ -120,7 +123,7 @@ internal fun TripSlideAction(
                 }
 
                 Text(
-                    text = if (readyToConfirm) "松开开始" else label,
+                    text = if (readyToConfirm) releaseLabel else label,
                     modifier = Modifier.align(Alignment.Center),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
@@ -165,7 +168,7 @@ internal fun TripSlideAction(
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
-                            imageVector = Icons.Default.PlayArrow,
+                            imageVector = icon,
                             contentDescription = null,
                             tint = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(26.dp)
