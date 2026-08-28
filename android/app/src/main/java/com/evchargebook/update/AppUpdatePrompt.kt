@@ -1,6 +1,7 @@
 package com.evchargebook.update
 
 import android.app.Activity
+import android.util.Log
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
@@ -31,8 +32,10 @@ fun AppUpdatePrompt() {
     LaunchedEffect(Unit) {
         runCatching { manager.checkForUpdate() }
             .onSuccess { update = it }
-            // Update discovery must never block Local First app usage.
-            .onFailure { }
+            // Update discovery must never block Local First app usage, but keep an adb-visible diagnostic.
+            .onFailure { error ->
+                Log.w(TAG, "Update discovery failed for ${BuildConfig.UPDATE_MANIFEST_URL}", error)
+            }
     }
 
     val info = update ?: return
@@ -81,3 +84,5 @@ fun AppUpdatePrompt() {
         icon = if (busy) ({ CircularProgressIndicator() }) else null
     )
 }
+
+private const val TAG = "AppUpdatePrompt"
