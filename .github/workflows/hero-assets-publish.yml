@@ -32,9 +32,9 @@ jobs:
         shell: bash
         run: |
           set -eu
-          tracked="$(find hero-assets -type f -name '*.webp' -print)"
+          tracked="$(find hero-assets -type f \( -name '*.webp' -o -name '*.png' \) -print)"
           if [ -n "$tracked" ]; then
-            echo "Hero WebP files are CDN-only and must not be committed to Git:"
+            echo "Hero PNG/WebP files are CDN-only and must not be committed to Git:"
             echo "$tracked"
             exit 1
           fi
