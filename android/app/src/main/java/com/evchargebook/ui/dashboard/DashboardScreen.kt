@@ -70,6 +70,7 @@ fun DashboardScreen(
             )
         }
         item { EnergyCockpitCard(state) }
+        item { RecentTripCard(latestCompletedTrip) }
         item { RecentChargingHeader(onAddClick) }
 
         if (state.chargingRecords.isEmpty()) {
