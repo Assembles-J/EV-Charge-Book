@@ -5,11 +5,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY hero-admin/requirements.txt /app/requirements.txt
+COPY requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r /app/requirements.txt
 
-COPY hero-admin/app.py /app/app.py
-COPY hero-admin/templates /app/templates
+COPY app.py /app/app.py
+COPY templates /app/templates
 
 EXPOSE 8080
 
