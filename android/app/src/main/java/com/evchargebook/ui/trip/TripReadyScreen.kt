@@ -4,13 +4,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -31,8 +33,14 @@ fun TripReadyScreen(
     currentMileageKm: Double?,
     recentTrips: List<TripSessionEntity>,
     onStart: () -> Unit,
-    onOpenDetail: (Long) -> Unit
+    onOpenDetail: (Long) -> Unit,
+    onDelete: (TripSessionEntity) -> Unit = {}
 ) {
+    var deleteTarget by remember { mutableStateOf<TripSessionEntity?>(null) }
+    val orderedTrips = remember(recentTrips) {
+        recentTrips.sortedByDescending { it.endedAtEpochMillis ?: it.startedAtEpochMillis }
+    }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -106,11 +114,11 @@ fun TripReadyScreen(
             }
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("最近行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("RECENT TRIPS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("全部行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                    Text("TRIP HISTORY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            if (recentTrips.isEmpty()) {
+            if (orderedTrips.isEmpty()) {
                 item {
                     Text(
                         "完成第一段行程后，这里会显示真实距离、SOC 与能耗记录。",
@@ -120,13 +128,37 @@ fun TripReadyScreen(
                     )
                 }
             } else {
-                items(minOf(recentTrips.size, 3)) { index ->
-                    val trip = recentTrips[index]
-                    ReadyRecentTripRow(trip = trip, onClick = { onOpenDetail(trip.id) })
+                items(orderedTrips, key = { it.id }) { trip ->
+                    ReadyRecentTripRow(
+                        trip = trip,
+                        onClick = { onOpenDetail(trip.id) },
+                        onDelete = { deleteTarget = trip }
+                    )
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
+    }
+
+    deleteTarget?.let { trip ->
+        AlertDialog(
+            onDismissRequest = { deleteTarget = null },
+            title = { Text("删除这条行程？") },
+            text = { Text("行程及关联轨迹点会一并删除，删除后无法恢复。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onDelete(trip)
+                        deleteTarget = null
+                    }
+                ) {
+                    Text("确认删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteTarget = null }) { Text("取消") }
+            }
+        )
     }
 }
 
@@ -176,9 +208,16 @@ private fun ReadyStateMetric(label: String, value: String, modifier: Modifier) {
 }
 
 @Composable
-private fun ReadyRecentTripRow(trip: TripSessionEntity, onClick: () -> Unit) {
+private fun ReadyRecentTripRow(
+    trip: TripSessionEntity,
+    onClick: () -> Unit,
+    onDelete: () -> Unit
+) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = MaterialTheme.spacing.sm),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = MaterialTheme.spacing.sm),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .12f)) {
@@ -204,6 +243,14 @@ private fun ReadyRecentTripRow(trip: TripSessionEntity, onClick: () -> Unit) {
                 Text("${String.format(Locale.US, "%.1f", it)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("kWh/100km", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } ?: Text("--", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
+            Icon(
+                Icons.Default.Delete,
+                contentDescription = "删除行程",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(19.dp)
+            )
         }
     }
 }
