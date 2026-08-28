@@ -60,10 +60,10 @@ private const val VEHICLE_ARTWORK_TAG = "VehicleArtwork"
 @Composable
 fun HeroVehicleCard(
     vehicle: VehicleEntity?,
-    vehicles: List<VehicleEntity> = emptyList(),
     currentSoc: Int? = null,
     currentMileageKm: Double? = null,
     latestTrip: TripSessionEntity? = null,
+    vehicles: List<VehicleEntity> = emptyList(),
     onSelectVehicle: (Long) -> Unit = {}
 ) {
     val cockpit = LocalCockpitColors.current
