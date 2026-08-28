@@ -14,14 +14,12 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -35,7 +33,6 @@ import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.export.ChargingCsvExporter
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.TripNotificationPermissionPolicy
-import com.evchargebook.domain.trip.TripEnergyCalculator
 import com.evchargebook.ui.dashboard.DashboardScreen
 import com.evchargebook.ui.records.AddRecordScreen
 import com.evchargebook.ui.records.RecordEditScreen
@@ -43,6 +40,7 @@ import com.evchargebook.ui.records.RecordsScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
 import com.evchargebook.ui.theme.LocalAppThemeController
+import com.evchargebook.ui.trip.TripCompletionDialogV06
 import com.evchargebook.ui.trip.TripReadyScreen
 import com.evchargebook.ui.trip.TripScreen
 import com.evchargebook.ui.vehicle.BluetoothPromptScreen
@@ -517,86 +515,35 @@ fun MainApp(
             showTripCompletion = false
         } else {
             val tripVehicle = state.vehicles.firstOrNull { it.id == active.vehicleId } ?: state.vehicle
-            val endSoc = tripEndSocText.toIntOrNull()
-            val estimate = TripEnergyCalculator.estimate(
+            TripCompletionDialogV06(
+                activeTrip = active,
                 batteryCapacityKwh = tripVehicle?.batteryCapacityKwh,
-                startSoc = active.startSoc,
-                endSoc = endSoc,
-                distanceMeters = active.distanceMeters
-            )
-            AlertDialog(
-                onDismissRequest = { showTripCompletion = false },
-                title = { Text("完成本次行程") },
-                text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(
-                            "开始 SOC ${active.startSoc?.let { "$it%" } ?: "未知"} · GPS 距离 ${String.format(Locale.US, "%.1f", active.distanceMeters / 1000.0)} km",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        OutlinedTextField(
-                            value = tripEndSocText,
-                            onValueChange = { tripEndSocText = it.filter(Char::isDigit).take(3); tripCompletionError = null },
-                            label = { Text("结束 SOC") },
-                            suffix = { Text("%") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        OutlinedTextField(
-                            value = tripEndMileageText,
-                            onValueChange = { tripEndMileageText = it; tripCompletionError = null },
-                            label = { Text("结束总里程") },
-                            suffix = { Text("km") },
-                            supportingText = { Text("已按开始里程 + GPS 距离预填，可修改；留空则保存时自动估算") },
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        if (estimate.consumedEnergyKwh != null) {
-                            HorizontalDivider()
-                            Text(
-                                "SOC ${active.startSoc}% → ${endSoc}% · 估算消耗 ${String.format(Locale.US, "%.1f", estimate.consumedEnergyKwh)} kWh",
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            Text(
-                                estimate.averageConsumptionKwhPer100Km?.let { "估算平均能耗 ${String.format(Locale.US, "%.1f", it)} kWh/100km" }
-                                    ?: "距离不足，暂不能计算平均能耗",
-                                style = MaterialTheme.typography.titleMedium,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        } else if (active.startSoc != null && endSoc != null && endSoc in 0..100) {
-                            HorizontalDivider()
-                            Text(
-                                if (endSoc >= active.startSoc) {
-                                    "SOC 未下降或出现回升；可能来自取整、回收制动或补能，本次不强行计算行驶能耗。"
-                                } else {
-                                    "当前数据不足以形成可靠的 SOC 能耗估算。"
-                                },
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        tripCompletionError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                endSocText = tripEndSocText,
+                onEndSocChange = {
+                    tripEndSocText = it
+                    tripCompletionError = null
+                },
+                endMileageText = tripEndMileageText,
+                onEndMileageChange = {
+                    tripEndMileageText = it
+                    tripCompletionError = null
+                },
+                errorText = tripCompletionError,
+                onContinue = { showTripCompletion = false },
+                onSaveAndStop = {
+                    val parsedSoc = tripEndSocText.toIntOrNull()
+                    val parsedMileage = tripEndMileageText.toDoubleOrNull()
+                    tripCompletionError = when {
+                        parsedSoc == null || parsedSoc !in 0..100 -> "请输入 0~100 的结束 SOC"
+                        tripEndMileageText.isNotBlank() && (parsedMileage == null || parsedMileage < 0.0) -> "请输入有效的结束总里程"
+                        active.startMileageKm != null && parsedMileage != null && parsedMileage < active.startMileageKm -> "结束里程不能低于开始里程"
+                        else -> null
                     }
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        val parsedSoc = tripEndSocText.toIntOrNull()
-                        val parsedMileage = tripEndMileageText.toDoubleOrNull()
-                        tripCompletionError = when {
-                            parsedSoc == null || parsedSoc !in 0..100 -> "请输入 0~100 的结束 SOC"
-                            tripEndMileageText.isNotBlank() && (parsedMileage == null || parsedMileage < 0.0) -> "请输入有效的结束总里程"
-                            active.startMileageKm != null && parsedMileage != null && parsedMileage < active.startMileageKm -> "结束里程不能低于开始里程"
-                            else -> null
-                        }
-                        if (tripCompletionError == null) {
-                            showTripCompletion = false
-                            viewModel.stopTrip(parsedSoc!!, parsedMileage)
-                        }
-                    }) { Text("保存并结束") }
-                },
-                dismissButton = { TextButton(onClick = { showTripCompletion = false }) { Text("继续行驶") } }
+                    if (tripCompletionError == null) {
+                        showTripCompletion = false
+                        viewModel.stopTrip(parsedSoc!!, parsedMileage)
+                    }
+                }
             )
         }
     }
