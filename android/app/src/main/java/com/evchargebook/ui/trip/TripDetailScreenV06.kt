@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -18,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -130,6 +132,7 @@ internal fun TripDetailScreenV06(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
@@ -139,6 +142,7 @@ internal fun TripDetailScreenV06(
                         Icon(Icons.Default.ArrowBack, contentDescription = "返回")
                     }
                 },
+                windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
         }
@@ -169,7 +173,12 @@ internal fun TripDetailScreenV06(
             }
 
             geometry?.takeIf { it.isDrawable }?.let {
-                item { CompletedTripRoutePreviewV06(points) }
+                item {
+                    CompletedTripRoutePreviewV06(
+                        points = points,
+                        finalEndpoint = trip.status == TripStatus.COMPLETED
+                    )
+                }
             }
 
             if (hasAltitude) {
@@ -279,6 +288,7 @@ private fun CompletedTripEndpointCardV06(
     resolving: Boolean
 ) {
     val accent = EVDesignTokens.Energy.green
+    val finalEndpoint = trip.status == TripStatus.COMPLETED
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -294,6 +304,7 @@ private fun CompletedTripEndpointCardV06(
                 address = startAddress,
                 resolving = resolving,
                 recording = trip.status == TripStatus.RECORDING,
+                recordingText = "行程进行中，结束后解析地址",
                 icon = {
                     Icon(
                         Icons.Default.PlayArrow,
@@ -304,21 +315,40 @@ private fun CompletedTripEndpointCardV06(
                 }
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
-            EndpointLineV06(
-                label = "终点",
-                point = endPoint,
-                address = endAddress,
-                resolving = resolving,
-                recording = trip.status == TripStatus.RECORDING,
-                icon = {
-                    Icon(
-                        Icons.Default.Flag,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(17.dp)
-                    )
-                }
-            )
+            if (finalEndpoint) {
+                EndpointLineV06(
+                    label = "终点",
+                    point = endPoint,
+                    address = endAddress,
+                    resolving = resolving,
+                    recording = false,
+                    icon = {
+                        Icon(
+                            Icons.Default.Flag,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                )
+            } else {
+                EndpointLineV06(
+                    label = if (trip.status == TripStatus.RECORDING) "当前点" else "最后记录点",
+                    point = endPoint,
+                    address = endAddress,
+                    resolving = resolving,
+                    recording = trip.status == TripStatus.RECORDING,
+                    recordingText = "当前最新定位点",
+                    icon = {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = accent,
+                            modifier = Modifier.size(17.dp)
+                        )
+                    }
+                )
+            }
         }
     }
 }
@@ -330,6 +360,7 @@ private fun EndpointLineV06(
     address: String?,
     resolving: Boolean,
     recording: Boolean,
+    recordingText: String? = null,
     icon: @Composable () -> Unit
 ) {
     Row(
@@ -349,7 +380,7 @@ private fun EndpointLineV06(
             Text(
                 when {
                     point == null -> "暂无保存的${label}"
-                    recording -> if (label == "终点") "行程进行中，终点尚未确定" else "行程进行中，结束后解析地址"
+                    recording -> recordingText ?: "行程进行中"
                     resolving -> "地址解析中…"
                     !address.isNullOrBlank() -> address
                     else -> "地址暂不可用"
@@ -403,7 +434,7 @@ private fun SummaryMetricGridV06(metrics: List<SummaryMetricV06>) {
 }
 
 @Composable
-private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>) {
+private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEndpoint: Boolean) {
     val accent = EVDesignTokens.Energy.green
     val geometry = remember(points) {
         TripRouteGeometryBuilder.build(points.map { it.toV06RoutePoint() })
@@ -434,7 +465,11 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>) {
                     .fillMaxWidth()
                     .height(150.dp)
                     .semantics {
-                        contentDescription = "真实行程轨迹；绿色播放标记为起点，红旗标记为终点，长 GPS 缺口保持断开"
+                        contentDescription = if (finalEndpoint) {
+                            "真实行程轨迹；绿色播放标记为起点，红旗标记为终点，长 GPS 缺口保持断开"
+                        } else {
+                            "真实行程轨迹；绿色播放标记为起点，绿色圆点为当前或最后记录点，长 GPS 缺口保持断开"
+                        }
                     }
             ) {
                 val pad = 12.dp.toPx()
@@ -465,15 +500,20 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>) {
                 }
                 drawPath(startTriangle, accent)
 
-                val poleHeight = 13.dp.toPx()
-                drawLine(endColor, end, Offset(end.x, end.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
-                val flag = Path().apply {
-                    moveTo(end.x, end.y - poleHeight)
-                    lineTo(end.x + 9.dp.toPx(), end.y - poleHeight + 3.dp.toPx())
-                    lineTo(end.x, end.y - poleHeight + 6.dp.toPx())
-                    close()
+                if (finalEndpoint) {
+                    val poleHeight = 13.dp.toPx()
+                    drawLine(endColor, end, Offset(end.x, end.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+                    val flag = Path().apply {
+                        moveTo(end.x, end.y - poleHeight)
+                        lineTo(end.x + 9.dp.toPx(), end.y - poleHeight + 3.dp.toPx())
+                        lineTo(end.x, end.y - poleHeight + 6.dp.toPx())
+                        close()
+                    }
+                    drawPath(flag, endColor)
+                } else {
+                    drawCircle(accent.copy(alpha = .22f), 6.dp.toPx(), end)
+                    drawCircle(accent, 3.dp.toPx(), end)
                 }
-                drawPath(flag, endColor)
             }
 
             if (geometry.gapCount > 0) {
