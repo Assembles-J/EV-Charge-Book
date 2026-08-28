@@ -1,7 +1,6 @@
 package com.evchargebook.ui.trip
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.Icon
@@ -35,7 +33,6 @@ import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
-import kotlin.math.max
 
 private const val ACTIVE_TREND_LONG_GAP_MS = 120_000L
 
@@ -83,12 +80,12 @@ internal fun TripActiveTelemetryV06(
     }
     val speedSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedSpeed(point)?.let { TrendSample(point.capturedAtEpochMillis, it * 3.6) }
+            trustedSpeed(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it * 3.6) }
         }
     }
     val altitudeSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedAltitude(point)?.let { TrendSample(point.capturedAtEpochMillis, it) }
+            trustedAltitude(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it) }
         }
     }
 
@@ -174,45 +171,58 @@ internal fun TripActiveTelemetryV06(
             }
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
             TripTrendMiniCard(
                 title = "速度趋势",
                 unit = "km/h",
                 samples = speedSamples,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 emptyText = "暂无可信速度"
             )
             TripTrendMiniCard(
                 title = "海拔趋势",
                 unit = "m",
                 samples = altitudeSamples,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxWidth(),
                 emptyText = "暂无可信海拔"
             )
         }
     }
 }
 
-private data class TrendSample(
-    val timestamp: Long,
-    val value: Double
-)
-
 @Composable
 private fun TripTrendMiniCard(
     title: String,
     unit: String,
-    samples: List<TrendSample>,
+    samples: List<TripTrendSampleV06>,
     modifier: Modifier,
     emptyText: String
 ) {
-    val accent = EVDesignTokens.Energy.green
     Surface(modifier = modifier, shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (samples.isNotEmpty()) {
+                        Text(
+                            formatActiveTrendValue(samples.last().value, unit),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+                if (samples.size >= 2) {
+                    Text(
+                        "${formatActiveTrendAxis(samples.minOf { it.value })}–${formatActiveTrendAxis(samples.maxOf { it.value })} $unit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             if (samples.size < 2) {
                 Column(
                     modifier = Modifier.fillMaxWidth().height(68.dp),
@@ -221,41 +231,11 @@ private fun TripTrendMiniCard(
                     Text(emptyText, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             } else {
-                val latest = samples.last().value
-                Text(
-                    String.format(Locale.US, if (unit == "m") "%.0f %s" else "%.0f %s", latest, unit),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                TripTrendPlotV06(
+                    samples = samples,
+                    unit = unit,
+                    longGapMs = ACTIVE_TREND_LONG_GAP_MS
                 )
-                Canvas(Modifier.fillMaxWidth().height(56.dp)) {
-                    val values = samples.map { it.value }
-                    val minValue = values.minOrNull() ?: 0.0
-                    val maxValue = values.maxOrNull() ?: minValue
-                    val range = max(1.0, maxValue - minValue)
-                    val minTime = samples.first().timestamp
-                    val maxTime = samples.last().timestamp
-                    val timeRange = max(1L, maxTime - minTime).toDouble()
-                    val padY = 4.dp.toPx()
-                    val usableHeight = (size.height - padY * 2).coerceAtLeast(1f)
-                    fun point(sample: TrendSample): Offset {
-                        val x = ((sample.timestamp - minTime) / timeRange).toFloat() * size.width
-                        val normalized = ((sample.value - minValue) / range).toFloat().coerceIn(0f, 1f)
-                        val y = padY + (1f - normalized) * usableHeight
-                        return Offset(x, y)
-                    }
-
-                    samples.zipWithNext().forEach { (from, to) ->
-                        if (to.timestamp - from.timestamp <= ACTIVE_TREND_LONG_GAP_MS) {
-                            drawLine(
-                                color = accent.copy(alpha = .78f),
-                                start = point(from),
-                                end = point(to),
-                                strokeWidth = 2.dp.toPx(),
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
-                }
             }
         }
     }
@@ -282,3 +262,8 @@ private fun trustedAltitude(point: TripPointEntity): Double? {
     if (horizontalAccuracy != null && (!horizontalAccuracy.isFinite() || horizontalAccuracy > 80.0)) return null
     return altitude
 }
+
+private fun formatActiveTrendValue(value: Double, unit: String): String =
+    String.format(Locale.US, "%.0f %s", value, unit)
+
+private fun formatActiveTrendAxis(value: Double): String = String.format(Locale.US, "%.0f", value)
