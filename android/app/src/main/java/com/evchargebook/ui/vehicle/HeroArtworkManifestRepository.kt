@@ -2,7 +2,10 @@ package com.evchargebook.ui.vehicle
 
 import android.content.Context
 import com.evchargebook.BuildConfig
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -13,8 +16,12 @@ import java.net.URL
 /**
  * Small, dependency-free manifest loader for vehicle Hero artwork.
  *
- * The manifest is cached in SharedPreferences so Coil can continue resolving the same versioned
- * image URL while offline. Image bytes themselves are handled by Coil's memory/disk cache.
+ * Hero resolution is deliberately local-first:
+ * 1. read the last successful manifest from SharedPreferences and return it immediately;
+ * 2. let Coil resolve the versioned image from memory/disk cache before network;
+ * 3. refresh the manifest once in the background for the next Hero resolve.
+ *
+ * A network failure must never delay or clear an already cached Hero mapping.
  */
 object HeroArtworkManifestRepository {
     data class RemoteArtwork(
@@ -28,34 +35,54 @@ object HeroArtworkManifestRepository {
     private const val READ_TIMEOUT_MS = 5_000
 
     private val loadMutex = Mutex()
-    @Volatile private var loaded = false
+    private val refreshScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    @Volatile private var cacheLoaded = false
+    @Volatile private var refreshStarted = false
     @Volatile private var artworks: Map<String, RemoteArtwork> = emptyMap()
 
     suspend fun resolve(context: Context, artworkKey: String): RemoteArtwork? {
-        ensureLoaded(context.applicationContext)
+        val appContext = context.applicationContext
+        ensureCachedManifestLoaded(appContext)
+        startRemoteRefresh(appContext)
         return artworks[artworkKey]
     }
 
-    private suspend fun ensureLoaded(context: Context) {
-        if (loaded) return
+    private suspend fun ensureCachedManifestLoaded(context: Context) {
+        if (cacheLoaded) return
         loadMutex.withLock {
-            if (loaded) return
+            if (cacheLoaded) return
 
             val cachedJson = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
                 .getString(KEY_MANIFEST_JSON, null)
-            val cached = cachedJson?.let(::parseManifest).orEmpty()
+            artworks = cachedJson?.let(::parseManifest).orEmpty()
+            cacheLoaded = true
+        }
+    }
 
+    /**
+     * Refresh once per app process without blocking the current Hero render.
+     *
+     * The refreshed mapping is persisted and becomes available on the next Hero resolve
+     * (for example when returning to Dashboard or on the next app launch).
+     */
+    private fun startRemoteRefresh(context: Context) {
+        if (refreshStarted) return
+        synchronized(this) {
+            if (refreshStarted) return
+            refreshStarted = true
+        }
+
+        refreshScope.launch {
             val remoteJson = fetchManifest(BuildConfig.HERO_ARTWORK_MANIFEST_URL)
             val remote = remoteJson?.let(::parseManifest).orEmpty()
+            if (remote.isEmpty() || remoteJson == null) return@launch
 
-            artworks = if (remote.isNotEmpty()) remote else cached
-            if (remote.isNotEmpty() && remoteJson != null) {
-                context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-                    .edit()
-                    .putString(KEY_MANIFEST_JSON, remoteJson)
-                    .apply()
-            }
-            loaded = true
+            artworks = remote
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_MANIFEST_JSON, remoteJson)
+                .apply()
         }
     }
 
