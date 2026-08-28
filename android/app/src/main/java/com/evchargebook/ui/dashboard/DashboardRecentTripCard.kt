@@ -43,7 +43,8 @@ import java.util.Locale
 @Composable
 fun DashboardRecentTripCard(
     trip: TripSessionEntity?,
-    onViewAll: () -> Unit = {}
+    onViewAll: () -> Unit = {},
+    onOpenTrip: (Long) -> Unit = {}
 ) {
     if (trip == null) {
         RecentTripEmptyState(onViewAll)
@@ -80,61 +81,70 @@ fun DashboardRecentTripCard(
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             RecentTripHeader(onViewAll)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(MaterialTheme.shapes.medium)
+                    .clickable { onOpenTrip(trip.id) }
+                    .padding(vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TripRouteRail()
-                Spacer(Modifier.width(10.dp))
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        "${endpointText(startAddress, trip.startLatitude, trip.startLongitude, resolving)} → ${endpointText(endAddress, trip.endLatitude, trip.endLongitude, resolving)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        fontWeight = FontWeight.Medium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        formatTime(trip.startedAtEpochMillis),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    TripRouteRail()
+                    Spacer(Modifier.width(10.dp))
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Text(
+                            "${endpointText(startAddress, trip.startLatitude, trip.startLongitude, resolving)} → ${endpointText(endAddress, trip.endLatitude, trip.endLongitude, resolving)}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            formatTime(trip.startedAtEpochMillis),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.width(8.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = EVDesignTokens.Energy.green.copy(alpha = 0.10f)
+                    ) {
+                        Text(
+                            "已完成",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = EVDesignTokens.Energy.green
+                        )
+                    }
                 }
-                Spacer(Modifier.width(8.dp))
-                Surface(
-                    shape = CircleShape,
-                    color = EVDesignTokens.Energy.green.copy(alpha = 0.10f)
-                ) {
-                    Text(
-                        "已完成",
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = EVDesignTokens.Energy.green
-                    )
-                }
-            }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                TripMetric(formatDistanceValue(trip.distanceMeters), "km", Modifier.weight(0.78f))
-                MetricSeparator()
-                TripMetric(formatDuration(trip.elapsedSeconds), "时长", Modifier.weight(0.82f))
-                MetricSeparator()
-                TripMetric(formatConsumptionValue(trip.averageConsumptionKwhPer100Km), "kWh/100km", Modifier.weight(1.05f))
-                MetricSeparator()
-                TripMetric(formatSocRange(trip.startSoc, trip.endSoc), "SOC 变化", Modifier.weight(1.25f))
-                MetricSeparator()
-                TripMetric(formatMileageRange(trip.startMileageKm, trip.endMileageKm), "里程 (km)", Modifier.weight(1.55f))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TripMetric(formatDistanceValue(trip.distanceMeters), "km", Modifier.weight(0.8f))
+                    MetricSeparator()
+                    TripMetric(formatDuration(trip.elapsedSeconds), "时长", Modifier.weight(0.82f))
+                    MetricSeparator()
+                    TripMetric(formatConsumptionValue(trip.averageConsumptionKwhPer100Km), "能耗", Modifier.weight(0.9f))
+                    MetricSeparator()
+                    TripMetric(formatSocRange(trip.startSoc, trip.endSoc), "SOC", Modifier.weight(1.2f))
+                    MetricSeparator()
+                    TripMetric(formatMileageRange(trip.startMileageKm, trip.endMileageKm), "里程", Modifier.weight(1.45f))
+                }
             }
         }
     }
@@ -208,13 +218,13 @@ private fun TripRouteRail() {
 @Composable
 private fun TripMetric(value: String, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.padding(horizontal = 3.dp),
+        modifier = modifier.padding(horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
             value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
@@ -225,7 +235,7 @@ private fun TripMetric(value: String, label: String, modifier: Modifier = Modifi
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Clip
         )
     }
 }
@@ -234,7 +244,7 @@ private fun TripMetric(value: String, label: String, modifier: Modifier = Modifi
 private fun MetricSeparator() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 36.dp)
+            .size(width = 1.dp, height = 34.dp)
             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     )
 }
@@ -286,18 +296,18 @@ private fun endpointText(address: String?, latitude: Double?, longitude: Double?
 }
 
 private fun formatSocRange(start: Int?, end: Int?): String =
-    "${start?.let { "$it%" } ?: "--"} → ${end?.let { "$it%" } ?: "--"}"
+    "${start?.let { "$it%" } ?: "--"}→${end?.let { "$it%" } ?: "--"}"
 
 private fun formatMileageRange(start: Double?, end: Double?): String = when {
-    start != null && end != null -> "${formatMileage(start)} → ${formatMileage(end)}"
-    start != null -> "${formatMileage(start)} → --"
-    end != null -> "-- → ${formatMileage(end)}"
+    start != null && end != null -> "${formatMileage(start)}→${formatMileage(end)}"
+    start != null -> "${formatMileage(start)}→--"
+    end != null -> "--→${formatMileage(end)}"
     else -> "--"
 }
 
 private fun formatMileage(value: Double): String =
-    if (value % 1.0 == 0.0) String.format(Locale.US, "%,.0f", value)
-    else String.format(Locale.US, "%,.1f", value)
+    if (value % 1.0 == 0.0) String.format(Locale.US, "%.0f", value)
+    else String.format(Locale.US, "%.1f", value)
 
 private fun formatConsumptionValue(value: Double?): String =
     value?.takeIf { it.isFinite() && it >= 0.0 }
