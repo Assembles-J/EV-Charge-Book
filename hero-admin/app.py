@@ -171,6 +171,7 @@ def _write_atomic(path: Path, payload: bytes) -> None:
     try:
         with os.fdopen(fd, "wb") as handle:
             handle.write(payload)
+            os.fchmod(handle.fileno(), 0o644)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_name, path)
