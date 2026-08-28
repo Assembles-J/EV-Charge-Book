@@ -33,6 +33,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripValidityRules
+import com.evchargebook.domain.TripValidityStatus
 import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.EVDesignTokens
 import java.text.SimpleDateFormat
@@ -52,11 +54,18 @@ internal fun TripHistoryCardV06(
     onDelete: () -> Unit
 ) {
     val endpoints = rememberTripEndpointLabels(trip)
+    val validity = remember(trip) { TripValidityRules.assess(trip) }
     val accent = EVDesignTokens.Energy.green
-    val statusColor = if (trip.status == TripStatus.INTERRUPTED) {
-        MaterialTheme.colorScheme.error
-    } else {
-        accent
+    val statusLabel = when (validity.status) {
+        TripValidityStatus.INVALID -> "无效 · 不计汇总"
+        TripValidityStatus.REVIEW -> "建议检查"
+        else -> compactTripStatus(trip.status)
+    }
+    val statusColor = when {
+        validity.status == TripValidityStatus.INVALID -> MaterialTheme.colorScheme.error
+        validity.status == TripValidityStatus.REVIEW -> MaterialTheme.colorScheme.tertiary
+        trip.status == TripStatus.INTERRUPTED -> MaterialTheme.colorScheme.error
+        else -> accent
     }
 
     Surface(
@@ -98,9 +107,10 @@ internal fun TripHistoryCardV06(
                         modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = compactTripStatus(trip.status),
+                        text = statusLabel,
                         style = MaterialTheme.typography.labelSmall,
-                        color = statusColor
+                        color = statusColor,
+                        maxLines = 1
                     )
                 }
 
