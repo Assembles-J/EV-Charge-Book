@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,7 +44,7 @@ fun EnergyCockpitCard(state: MainUiState) {
         Column(
             modifier = Modifier
                 .background(surfaceBrush)
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 13.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
@@ -80,11 +81,19 @@ fun EnergyCockpitCard(state: MainUiState) {
                         )
                     }
                 }
-                Text(
-                    "${state.chargingCount} 次充电",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = EVDesignTokens.Energy.green
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "${state.chargingCount} 次充电",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = EVDesignTokens.Energy.green
+                    )
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
             }
 
             Row(
