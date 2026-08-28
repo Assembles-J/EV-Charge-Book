@@ -1,6 +1,5 @@
 package com.evchargebook.ui.trip
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,34 +13,25 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.domain.TripSpeedTrustRules
-import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
-import kotlin.math.max
 
 private const val DETAIL_TREND_LONG_GAP_MS = 120_000L
-
-private data class DetailTrendSampleV06(
-    val timestamp: Long,
-    val value: Double
-)
 
 @Composable
 internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
     val speedSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedDetailSpeedV06(point)?.let { DetailTrendSampleV06(point.capturedAtEpochMillis, it * 3.6) }
+            trustedDetailSpeedV06(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it * 3.6) }
         }
     }
     val altitudeSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedDetailAltitudeV06(point)?.let { DetailTrendSampleV06(point.capturedAtEpochMillis, it) }
+            trustedDetailAltitudeV06(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it) }
         }
     }
 
@@ -57,7 +47,7 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "仅使用可信定位样本；超过 2 分钟的缺口保持断开。",
+                    "横轴为行程时间，纵轴为可信样本值；超过 2 分钟的缺口保持断开。",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -88,11 +78,10 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
 private fun DetailTrendCardV06(
     title: String,
     unit: String,
-    samples: List<DetailTrendSampleV06>,
+    samples: List<TripTrendSampleV06>,
     modifier: Modifier,
     emptyText: String
 ) {
-    val accent = EVDesignTokens.Energy.green
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
@@ -100,52 +89,56 @@ private fun DetailTrendCardV06(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text(title, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (samples.size < 2) {
                 Text(
                     emptyText,
-                    modifier = Modifier.height(72.dp),
+                    modifier = Modifier.height(96.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
-                Text(
-                    formatDetailTrendValueV06(samples.last().value, unit),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
+                TrendSummaryV06(unit = unit, samples = samples)
+                TripTrendPlotV06(
+                    samples = samples,
+                    unit = unit,
+                    longGapMs = DETAIL_TREND_LONG_GAP_MS
                 )
-                Canvas(Modifier.fillMaxWidth().height(58.dp)) {
-                    val minValue = samples.minOf { it.value }
-                    val maxValue = samples.maxOf { it.value }
-                    val valueRange = max(1.0, maxValue - minValue)
-                    val minTime = samples.first().timestamp
-                    val maxTime = samples.last().timestamp
-                    val timeRange = max(1L, maxTime - minTime).toDouble()
-                    val padY = 4.dp.toPx()
-                    val usableHeight = (size.height - padY * 2).coerceAtLeast(1f)
-
-                    fun point(sample: DetailTrendSampleV06): Offset {
-                        val x = ((sample.timestamp - minTime) / timeRange).toFloat() * size.width
-                        val normalized = ((sample.value - minValue) / valueRange).toFloat().coerceIn(0f, 1f)
-                        return Offset(x, padY + (1f - normalized) * usableHeight)
-                    }
-
-                    samples.zipWithNext().forEach { (from, to) ->
-                        if (to.timestamp - from.timestamp <= DETAIL_TREND_LONG_GAP_MS) {
-                            drawLine(
-                                color = accent.copy(alpha = .78f),
-                                start = point(from),
-                                end = point(to),
-                                strokeWidth = 2.dp.toPx(),
-                                cap = StrokeCap.Round
-                            )
-                        }
-                    }
-                }
             }
         }
+    }
+}
+
+@Composable
+private fun TrendSummaryV06(unit: String, samples: List<TripTrendSampleV06>) {
+    val min = samples.minOf { it.value }
+    val max = samples.maxOf { it.value }
+    val average = samples.map { it.value }.average()
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        if (unit == "km/h") {
+            TrendSummaryValueV06("平均", average, unit)
+            TrendSummaryValueV06("最高", max, unit)
+        } else {
+            TrendSummaryValueV06("最低", min, unit)
+            TrendSummaryValueV06("最高", max, unit)
+        }
+    }
+}
+
+@Composable
+private fun TrendSummaryValueV06(label: String, value: Double, unit: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            formatDetailTrendValueV06(value, unit),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -172,5 +165,4 @@ private fun trustedDetailAltitudeV06(point: TripPointEntity): Double? {
 }
 
 private fun formatDetailTrendValueV06(value: Double, unit: String): String =
-    if (unit == "m") String.format(Locale.US, "%.0f %s", value, unit)
-    else String.format(Locale.US, "%.0f %s", value, unit)
+    String.format(Locale.US, "%.0f %s", value, unit)
