@@ -1,4 +1,4 @@
-name: Hero Assets Publish
+name: Hero Assets Validate
 
 on:
   pull_request:
@@ -52,102 +52,14 @@ jobs:
           artworks = manifest.get('artworks') or {}
           assert artworks, 'manifest artworks must not be empty'
 
+          prefix = 'https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/remote/'
           for key, item in artworks.items():
               version = item.get('version')
               url = item.get('url', '')
               assert isinstance(version, int) and version > 0, f'{key}: invalid version'
-              assert url.startswith('https://groupim.cn/ev-charge-book/releases/hero-assets/'), f'{key}: invalid URL'
+              assert url.startswith(prefix), f'{key}: invalid URL'
               filename = url.rsplit('/', 1)[-1]
-              assert (root / 'remote' / filename).is_file(), f'{key}: missing {filename}'
+              path = root / 'remote' / filename
+              assert path.is_file(), f'{key}: missing {filename}'
+              assert path.stat().st_size > 0, f'{key}: empty {filename}'
           PY
-
-  publish:
-    name: Publish Hero artwork
-    if: github.event_name != 'pull_request'
-    needs: validate
-    runs-on: ubuntu-latest
-    environment: production
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Prepare remote directories
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.COMMON_SERVER_HOST }}
-          username: ${{ secrets.COMMON_SERVER_USER }}
-          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
-          script: |
-            set -eu
-            mkdir -p /opt/ev-charge-book/hero-assets/remote
-            mkdir -p /opt/ev-charge-book/releases/hero-assets
-            mkdir -p /opt/ev-charge-book/release-meta
-            test -w /opt/ev-charge-book/hero-assets
-            test -w /opt/ev-charge-book/releases
-            test -w /opt/ev-charge-book/release-meta
-
-      - name: Upload Hero assets
-        uses: appleboy/scp-action@v1.0.0
-        with:
-          host: ${{ secrets.COMMON_SERVER_HOST }}
-          username: ${{ secrets.COMMON_SERVER_USER }}
-          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
-          source: hero-assets
-          target: /opt/ev-charge-book
-          overwrite: true
-
-      - name: Activate Hero assets atomically
-        uses: appleboy/ssh-action@v1.2.2
-        with:
-          host: ${{ secrets.COMMON_SERVER_HOST }}
-          username: ${{ secrets.COMMON_SERVER_USER }}
-          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
-          script: |
-            set -eu
-            SOURCE=/opt/ev-charge-book/hero-assets
-            PUBLIC_IMAGES=/opt/ev-charge-book/releases/hero-assets
-            PUBLIC_MANIFEST=/opt/ev-charge-book/release-meta/hero-assets-v1.json
-
-            test -s "$SOURCE/manifest-v1.json"
-            find "$SOURCE/remote" -maxdepth 1 -type f -name '*.webp' -exec cp -f {} "$PUBLIC_IMAGES/" \;
-            cp "$SOURCE/manifest-v1.json" "$PUBLIC_MANIFEST.tmp"
-            mv "$PUBLIC_MANIFEST.tmp" "$PUBLIC_MANIFEST"
-
-      - name: Verify public Hero delivery
-        shell: bash
-        run: |
-          set -eu
-          MANIFEST_URL=https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
-          for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error \
-              --connect-timeout 5 \
-              --max-time 15 \
-              "$MANIFEST_URL" \
-              -o /tmp/hero-manifest.json && \
-              python3 -m json.tool /tmp/hero-manifest.json >/dev/null; then
-              break
-            fi
-            if [ "$attempt" -eq 5 ]; then
-              echo "Hero manifest is not publicly reachable after upload"
-              exit 1
-            fi
-            sleep 3
-          done
-
-          python3 - <<'PY' > /tmp/hero-urls.txt
-          import json
-          data = json.load(open('/tmp/hero-manifest.json'))
-          for item in data['artworks'].values():
-              print(item['url'])
-          PY
-
-          while IFS= read -r url; do
-            curl --fail --silent --show-error \
-              --connect-timeout 5 \
-              --max-time 30 \
-              --range 0-31 \
-              "$url" \
-              -o /tmp/hero-probe.bin
-            test -s /tmp/hero-probe.bin
-          done < /tmp/hero-urls.txt
