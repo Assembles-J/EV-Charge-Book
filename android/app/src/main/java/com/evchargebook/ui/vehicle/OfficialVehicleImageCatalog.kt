@@ -4,7 +4,7 @@ import com.evchargebook.data.entity.VehicleEntity
 
 data class OfficialVehicleImage(
     val key: String,
-    val remoteFallbackUrl: String,
+    val remoteFallbackUrl: String?,
     val sourceLabel: String
 )
 
@@ -18,38 +18,25 @@ object OfficialVehicleImageCatalog {
         sourceLabel = label
     )
 
-    private val bydSeal = remote(
-        key = "byd-seal-2025",
-        fileName = "byd_seal_2025.webp",
-        label = "BYD Seal remote hero artwork"
-    )
-    private val leapmotorC16 = remote(
-        key = "leapmotor-c16-2026",
-        fileName = "leapmotor_c16_2026.webp",
-        label = "Leapmotor C16 remote hero artwork"
-    )
-    private val xiaomiSu7 = remote(
-        key = "xiaomi-su7-2024",
-        fileName = "xiaomi_su7_2024.webp",
-        label = "Xiaomi SU7 remote hero artwork"
-    )
-    private val xiaomiSu7Ultra = remote(
-        key = "xiaomi-su7-ultra-2024",
-        fileName = "xiaomi_su7_ultra_2024.webp",
-        label = "Xiaomi SU7 Ultra remote hero artwork"
-    )
-    private val xiaomiYu7 = remote(
-        key = "xiaomi-yu7-2025",
-        fileName = "xiaomi_yu7_2025.webp",
-        label = "Xiaomi YU7 remote hero artwork"
-    )
-    private val teslaModel3 = remote(
-        key = "tesla-model-3",
-        fileName = "tesla_model_3.webp",
-        label = "Tesla Model 3 remote hero artwork"
-    )
+    private val bydSeal = remote("byd-seal-2025", "byd_seal_2025.webp", "BYD Seal remote hero artwork")
+    private val leapmotorC16 = remote("leapmotor-c16-2026", "leapmotor_c16_2026.webp", "Leapmotor C16 remote hero artwork")
+    private val xiaomiSu7 = remote("xiaomi-su7-2024", "xiaomi_su7_2024.webp", "Xiaomi SU7 remote hero artwork")
+    private val xiaomiSu7Ultra = remote("xiaomi-su7-ultra-2024", "xiaomi_su7_ultra_2024.webp", "Xiaomi SU7 Ultra remote hero artwork")
+    private val xiaomiYu7 = remote("xiaomi-yu7-2025", "xiaomi_yu7_2025.webp", "Xiaomi YU7 remote hero artwork")
+    private val teslaModel3 = remote("tesla-model-3", "tesla_model_3.webp", "Tesla Model 3 remote hero artwork")
 
-    fun resolve(vehicle: VehicleEntity?): OfficialVehicleImage? {
+    private val knownByKey = listOf(bydSeal, leapmotorC16, xiaomiSu7, xiaomiSu7Ultra, xiaomiYu7, teslaModel3)
+        .associateBy { it.key }
+
+    fun resolve(vehicle: VehicleEntity?, preferredArtworkKey: String? = null): OfficialVehicleImage? {
+        preferredArtworkKey?.trim()?.lowercase()?.takeIf { it.isNotEmpty() }?.let { key ->
+            return knownByKey[key] ?: OfficialVehicleImage(
+                key = key,
+                remoteFallbackUrl = null,
+                sourceLabel = "Managed vehicle catalog Hero artwork"
+            )
+        }
+
         vehicle ?: return null
         when (vehicle.catalogVehicleId?.trim()?.lowercase()) {
             "byd-seal-2025-650" -> return bydSeal

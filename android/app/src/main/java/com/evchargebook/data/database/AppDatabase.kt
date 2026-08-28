@@ -29,7 +29,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
         TripDiagnosticEventEntity::class,
         VehicleStateEntity::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -151,6 +151,13 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN heroArtworkKey TEXT")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN isActive INTEGER NOT NULL DEFAULT 1")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -170,7 +177,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_6_7,
                         MIGRATION_7_8,
                         MIGRATION_8_9,
-                        MIGRATION_9_10
+                        MIGRATION_9_10,
+                        MIGRATION_10_11
                     )
                     .build()
                     .also { instance = it }

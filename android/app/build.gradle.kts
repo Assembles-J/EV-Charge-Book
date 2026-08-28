@@ -18,6 +18,8 @@ val updateManifestUrl = System.getenv("APP_UPDATE_MANIFEST_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/latest.json"
 val heroArtworkManifestUrl = System.getenv("HERO_ARTWORK_MANIFEST_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
+val vehicleCatalogUrl = System.getenv("VEHICLE_CATALOG_URL")
+    ?: "https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json"
 
 android {
     namespace = "com.evchargebook"
@@ -31,6 +33,7 @@ android {
         versionName = System.getenv("APP_VERSION_NAME") ?: "0.1.0-dev"
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
         buildConfigField("String", "HERO_ARTWORK_MANIFEST_URL", "\"$heroArtworkManifestUrl\"")
+        buildConfigField("String", "VEHICLE_CATALOG_URL", "\"$vehicleCatalogUrl\"")
     }
 
     signingConfigs {
@@ -90,4 +93,5 @@ dependencies {
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

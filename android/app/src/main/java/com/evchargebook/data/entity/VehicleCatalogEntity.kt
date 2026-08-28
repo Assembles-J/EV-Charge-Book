@@ -15,5 +15,7 @@ data class VehicleCatalogEntity(
     val powertrainType: String,
     val batteryCapacityKwh: Double? = null,
     val rangeKm: Int? = null,
+    val heroArtworkKey: String? = null,
+    val isActive: Boolean = true,
     val sourceUpdatedAtEpochMillis: Long = 0L
 )

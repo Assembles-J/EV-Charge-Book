@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,12 +48,14 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.LocalCockpitColors
 import com.evchargebook.ui.vehicle.HeroArtworkManifestRepository
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
+import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
 
 private const val VEHICLE_ARTWORK_TAG = "VehicleArtwork"
@@ -65,9 +68,21 @@ fun HeroVehicleCard(
     latestTrip: TripSessionEntity? = null,
     vehicles: List<VehicleEntity> = emptyList(),
     vehicleSwitchEnabled: Boolean = true,
-    onSelectVehicle: (Long) -> Unit = {}
+    onSelectVehicle: (Long) -> Unit = {},
+    artworkKey: String? = null
 ) {
     val cockpit = LocalCockpitColors.current
+    val context = LocalContext.current
+    val catalogId = vehicle?.catalogVehicleId?.trim()?.takeIf { it.isNotEmpty() }
+    val localArtworkKey by remember(catalogId, context.applicationContext) {
+        catalogId?.let {
+            AppDatabase.getInstance(context.applicationContext)
+                .vehicleCatalogDao()
+                .observeHeroArtworkKey(it)
+        } ?: flowOf(null)
+    }.collectAsState(initial = null)
+    val effectiveArtworkKey = artworkKey?.trim()?.takeIf { it.isNotEmpty() } ?: localArtworkKey
+
     val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
     val canSwitchVehicle = vehicleSwitchEnabled && selectableVehicles.size > 1
     var vehicleMenuExpanded by remember { mutableStateOf(false) }
@@ -83,7 +98,7 @@ fun HeroVehicleCard(
                     .fillMaxWidth()
                     .aspectRatio(1.46f)
             ) {
-                VehicleStage(vehicle, Modifier.fillMaxSize())
+                VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -194,9 +209,13 @@ fun HeroVehicleCard(
 }
 
 @Composable
-private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier) {
+private fun VehicleStage(
+    vehicle: VehicleEntity?,
+    artworkKey: String? = null,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
-    val artwork = OfficialVehicleImageCatalog.resolve(vehicle)
+    val artwork = OfficialVehicleImageCatalog.resolve(vehicle, artworkKey)
     var remoteArtwork by remember(artwork?.key) {
         mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
     }
@@ -208,7 +227,7 @@ private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier)
     val imageUrl = remoteArtwork?.url ?: artwork?.remoteFallbackUrl
     val cacheVersion = remoteArtwork?.version ?: 0
 
-    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artwork?.key, imageUrl) {
+    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artworkKey, artwork?.key, imageUrl) {
         Log.d(
             VEHICLE_ARTWORK_TAG,
             "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} artwork=${artwork?.key} remote=${imageUrl != null}"

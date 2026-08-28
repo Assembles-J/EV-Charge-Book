@@ -34,9 +34,10 @@ fun VehicleCatalogScreen(
     onBack: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
-    val filtered = remember(items, query) {
+    val activeItems = remember(items) { items.filter { it.isActive } }
+    val filtered = remember(activeItems, query) {
         val keyword = query.trim()
-        if (keyword.isBlank()) items else items.filter {
+        if (keyword.isBlank()) activeItems else activeItems.filter {
             "${it.brand} ${it.series} ${it.modelName} ${it.trimName.orEmpty()}".contains(keyword, ignoreCase = true)
         }
     }
@@ -81,7 +82,7 @@ fun VehicleCatalogScreen(
                             Text("VEHICLE / FIND", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         Text("找到你的车型", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                        Text("优先选择车型库，电池容量和标称续航会自动带入。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("车型库保存在本机；有网络时会后台刷新，没有网络也可以正常使用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
@@ -91,7 +92,7 @@ fun VehicleCatalogScreen(
                             singleLine = true
                         )
                         Text(
-                            if (query.isBlank()) "车型库 ${items.size} 条" else "找到 ${filtered.size} 条结果",
+                            if (query.isBlank()) "车型库 ${activeItems.size} 条" else "找到 ${filtered.size} 条结果",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -108,9 +109,7 @@ fun VehicleCatalogScreen(
                 }
             }
 
-            items(filtered, key = { it.catalogId }) { item ->
-                CatalogVehicleRow(item, onSelect)
-            }
+            items(filtered, key = { it.catalogId }) { item -> CatalogVehicleRow(item, onSelect) }
             item { Spacer(Modifier.height(16.dp)) }
         }
     }
