@@ -54,7 +54,7 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
     ) {
 //        item { DashboardBrandHeader() }
-        item { HeroVehicleCard(state.vehicle) }
+        item { HeroVehicleCard(state.vehicle, state.currentSoc, state.currentMileageKm) }
         item { EnergyCockpitCard(state) }
         item { RecentChargingHeader(onAddClick) }
 

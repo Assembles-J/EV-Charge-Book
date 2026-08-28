@@ -365,6 +365,8 @@ fun MainApp(
                     4 -> VehicleScreen(
                         vehicle = state.vehicle,
                         vehicles = state.vehicles,
+                        currentSoc = state.currentSoc,
+                        currentMileageKm = state.currentMileageKm,
                         onSelect = viewModel::selectVehicle,
                         onAdd = { selectCatalogVehicle = true },
                         onEdit = { editVehicle = true },

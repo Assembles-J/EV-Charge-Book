@@ -24,6 +24,8 @@ import java.util.Locale
 fun VehicleScreen(
     vehicle: VehicleEntity?,
     vehicles: List<VehicleEntity>,
+    currentSoc: Int? = null,
+    currentMileageKm: Double? = null,
     onSelect: (Long) -> Unit,
     onAdd: () -> Unit,
     onEdit: () -> Unit,
@@ -57,7 +59,7 @@ fun VehicleScreen(
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
             if (vehicle != null) {
-                item { HeroVehicleCard(vehicle) }
+                item { HeroVehicleCard(vehicle, currentSoc, currentMileageKm) }
                 item {
                     OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Edit, null)
