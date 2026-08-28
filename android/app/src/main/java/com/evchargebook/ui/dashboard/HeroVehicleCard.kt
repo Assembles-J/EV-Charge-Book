@@ -65,7 +65,8 @@ fun HeroVehicleCard(
     latestTrip: TripSessionEntity? = null,
     vehicles: List<VehicleEntity> = emptyList(),
     vehicleSwitchEnabled: Boolean = true,
-    onSelectVehicle: (Long) -> Unit = {}
+    onSelectVehicle: (Long) -> Unit = {},
+    artworkKey: String? = null
 ) {
     val cockpit = LocalCockpitColors.current
     val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
@@ -83,7 +84,7 @@ fun HeroVehicleCard(
                     .fillMaxWidth()
                     .aspectRatio(1.46f)
             ) {
-                VehicleStage(vehicle, Modifier.fillMaxSize())
+                VehicleStage(vehicle, artworkKey, Modifier.fillMaxSize())
                 Box(
                     Modifier
                         .fillMaxSize()
@@ -194,9 +195,13 @@ fun HeroVehicleCard(
 }
 
 @Composable
-private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier) {
+private fun VehicleStage(
+    vehicle: VehicleEntity?,
+    artworkKey: String? = null,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
-    val artwork = OfficialVehicleImageCatalog.resolve(vehicle)
+    val artwork = OfficialVehicleImageCatalog.resolve(vehicle, artworkKey)
     var remoteArtwork by remember(artwork?.key) {
         mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
     }
@@ -208,7 +213,7 @@ private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier)
     val imageUrl = remoteArtwork?.url ?: artwork?.remoteFallbackUrl
     val cacheVersion = remoteArtwork?.version ?: 0
 
-    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artwork?.key, imageUrl) {
+    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artworkKey, artwork?.key, imageUrl) {
         Log.d(
             VEHICLE_ARTWORK_TAG,
             "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} artwork=${artwork?.key} remote=${imageUrl != null}"
