@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -171,7 +173,6 @@ private fun HeroDynamicStateOverlay(
     latestTrip: TripSessionEntity?,
     modifier: Modifier = Modifier
 ) {
-    val cockpit = LocalCockpitColors.current
     val safeSoc = currentSoc?.coerceIn(0, 100)
     val targetProgress = safeSoc?.div(100f) ?: 0f
     val animatedProgress by animateFloatAsState(
@@ -180,6 +181,7 @@ private fun HeroDynamicStateOverlay(
         label = "dashboard_hero_soc"
     )
     val panelShape = MaterialTheme.shapes.large
+    val fontScale = LocalConfiguration.current.fontScale
 
     Surface(
         modifier = modifier
@@ -188,53 +190,81 @@ private fun HeroDynamicStateOverlay(
         shape = panelShape,
         color = Color(0xD9091511)
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Column(modifier = Modifier.weight(0.95f)) {
-                Text(
-                    safeSoc?.let { "$it%" } ?: "--",
-                    style = MaterialTheme.typography.headlineLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (safeSoc != null) EVDesignTokens.Energy.green else cockpit.primaryText
-                )
-                Spacer(Modifier.height(8.dp))
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(5.dp)
-                        .clip(CircleShape)
-                        .background(cockpit.secondaryText.copy(alpha = 0.24f))
+        BoxWithConstraints(Modifier.fillMaxWidth()) {
+            val compact = maxWidth < 340.dp || fontScale >= 1.3f
+            if (compact) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    if (safeSoc != null) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth(animatedProgress)
-                                .fillMaxSize()
-                                .background(EVDesignTokens.Energy.green)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        HeroSocMetric(safeSoc, animatedProgress, Modifier.weight(1f))
+                        MetricDivider()
+                        HeroMetric(
+                            label = "当前里程",
+                            value = currentMileageKm?.let(::formatMileage) ?: "--",
+                            modifier = Modifier.weight(1f)
                         )
                     }
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(1.dp)
+                            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
+                    )
+                    HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.fillMaxWidth())
+                }
+            } else {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    HeroSocMetric(safeSoc, animatedProgress, Modifier.weight(0.95f))
+                    MetricDivider()
+                    HeroMetric(
+                        label = "当前里程",
+                        value = currentMileageKm?.let(::formatMileage) ?: "--",
+                        modifier = Modifier.weight(1f)
+                    )
+                    MetricDivider()
+                    HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.weight(1.05f))
                 }
             }
+        }
+    }
+}
 
-            MetricDivider()
-
-            HeroMetric(
-                label = "当前里程",
-                value = currentMileageKm?.let(::formatMileage) ?: "--",
-                modifier = Modifier.weight(1f)
-            )
-
-            MetricDivider()
-
-            HeroRecentTripMetric(
-                trip = latestTrip,
-                modifier = Modifier.weight(1.05f)
-            )
+@Composable
+private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modifier = Modifier) {
+    val cockpit = LocalCockpitColors.current
+    Column(modifier = modifier) {
+        Text(
+            safeSoc?.let { "$it%" } ?: "--",
+            style = MaterialTheme.typography.headlineLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = if (safeSoc != null) EVDesignTokens.Energy.green else cockpit.primaryText
+        )
+        Spacer(Modifier.height(8.dp))
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(cockpit.secondaryText.copy(alpha = 0.24f))
+        ) {
+            if (safeSoc != null) {
+                Box(
+                    Modifier
+                        .fillMaxWidth(animatedProgress)
+                        .fillMaxSize()
+                        .background(EVDesignTokens.Energy.green)
+                )
+            }
         }
     }
 }
