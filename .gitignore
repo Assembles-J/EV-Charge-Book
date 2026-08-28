@@ -32,3 +32,7 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# Vehicle Hero artwork is runtime/CDN data, not repository source.
+hero-assets/**/*.webp
+hero-assets/**/*.png
