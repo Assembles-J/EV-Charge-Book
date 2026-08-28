@@ -60,6 +60,7 @@ fun VehicleScreen(
         ) {
             if (vehicle != null) {
                 item { HeroVehicleCard(vehicle, currentSoc, currentMileageKm) }
+                item { VehicleSpecificationCard(vehicle) }
                 item {
                     OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Edit, null)
@@ -98,6 +99,35 @@ fun VehicleScreen(
             confirmButton = { TextButton(onClick = { onArchive(candidate); archiveCandidate = null }) { Text("归档") } },
             dismissButton = { TextButton(onClick = { archiveCandidate = null }) { Text("取消") } }
         )
+    }
+}
+
+@Composable
+private fun VehicleSpecificationCard(vehicle: VehicleEntity) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+        SettingsSectionTitle("车辆规格", "VEHICLE SPECS")
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+            ) {
+                VehicleSpecValue("电池容量", "${one(vehicle.batteryCapacityKwh)} kWh", Modifier.weight(1f))
+                VehicleSpecValue("标称续航", "${vehicle.rangeKm} km", Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun VehicleSpecValue(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(4.dp))
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
     }
 }
 
