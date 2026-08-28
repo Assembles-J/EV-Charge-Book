@@ -56,7 +56,11 @@ object TripValidityRules {
             if (trip.endedAtEpochMillis == null) add(TripValidityReason.MISSING_END_TIME)
             if (!trip.distanceMeters.isFinite() || trip.distanceMeters < 0.0) add(TripValidityReason.INVALID_DISTANCE)
             if (trip.elapsedSeconds <= 0L) add(TripValidityReason.INVALID_DURATION)
-            if (trip.distanceMeters.isFinite() && trip.distanceMeters in 0.0..<MIN_MEANINGFUL_DISTANCE_METERS) {
+            if (
+                trip.distanceMeters.isFinite() &&
+                trip.distanceMeters >= 0.0 &&
+                trip.distanceMeters < MIN_MEANINGFUL_DISTANCE_METERS
+            ) {
                 add(TripValidityReason.NO_MEANINGFUL_MOVEMENT)
             }
             if (acceptedPointCount != null && acceptedPointCount < MIN_TRACK_POINTS) {
