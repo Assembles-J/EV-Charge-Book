@@ -3,190 +3,129 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>EV Charge Book · Hero Admin</title>
+  <title>EV Charge Book · Admin</title>
   <style>
-    :root { color-scheme: dark; --bg:#050a08; --panel:#0b1512; --line:#1d2c27; --text:#f3f7f5; --muted:#94a39d; --green:#35ef84; }
-    * { box-sizing:border-box; }
-    body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:radial-gradient(circle at 50% -20%,#123127 0,#07110d 36%,var(--bg) 72%); color:var(--text); min-height:100vh; }
-    main { width:min(920px,calc(100% - 32px)); margin:0 auto; padding:48px 0 72px; }
-    header { margin-bottom:24px; }
-    .eyebrow { color:var(--green); font-size:13px; letter-spacing:.16em; text-transform:uppercase; }
-    h1 { font-size:clamp(30px,5vw,48px); margin:8px 0 10px; font-weight:650; }
-    .intro { color:var(--muted); margin:0; line-height:1.65; }
-    .panel { background:rgba(10,22,18,.86); border:1px solid rgba(255,255,255,.09); border-radius:24px; padding:22px; box-shadow:0 20px 70px rgba(0,0,0,.32); backdrop-filter:blur(18px); }
-    .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-    label { display:block; color:#c5d0cc; font-size:14px; margin:0 0 8px; }
-    select,input,button { font:inherit; }
-    select { width:100%; padding:13px 14px; background:#07110d; color:var(--text); border:1px solid var(--line); border-radius:14px; outline:none; }
-    .drop { min-height:255px; border:1px dashed #365148; border-radius:18px; display:flex; align-items:center; justify-content:center; text-align:center; padding:18px; position:relative; overflow:hidden; cursor:pointer; background:rgba(255,255,255,.015); }
-    .drop.drag { border-color:var(--green); background:rgba(53,239,132,.05); }
-    .drop input { position:absolute; inset:0; opacity:0; cursor:pointer; }
-    .drop img { width:100%; height:100%; max-height:300px; object-fit:contain; border-radius:14px; display:none; }
-    .drop.has-preview img { display:block; }
-    .drop.has-preview .placeholder { display:none; }
-    .placeholder strong { display:block; font-size:17px; margin-bottom:6px; }
-    .placeholder span { color:var(--muted); font-size:13px; line-height:1.6; }
-    .status { margin-top:16px; padding:13px 14px; border-radius:14px; background:#07110d; border:1px solid var(--line); color:var(--muted); min-height:48px; line-height:1.55; }
-    .status.ok { color:#b8f8d0; border-color:rgba(53,239,132,.28); }
-    .status.error { color:#ffb5b5; border-color:rgba(255,90,90,.3); }
-    .actions { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; }
-    .hint { color:var(--muted); font-size:12px; line-height:1.55; }
-    button { border:0; border-radius:14px; padding:13px 22px; background:var(--green); color:#031108; font-weight:750; cursor:pointer; min-width:130px; }
-    button:disabled { opacity:.35; cursor:not-allowed; }
-    .current { margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-    .current-card { padding:13px; background:#07110d; border:1px solid var(--line); border-radius:14px; min-width:0; }
-    .current-card b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
-    .current-card span { color:var(--muted); font-size:12px; }
-    @media(max-width:720px){ .grid{grid-template-columns:1fr}.current{grid-template-columns:1fr 1fr} main{padding-top:28px}.actions{align-items:flex-end}.panel{padding:16px} }
+    :root{color-scheme:dark;--bg:#050a08;--panel:#0b1512;--panel2:#07110d;--line:#1d2c27;--text:#f3f7f5;--muted:#94a39d;--green:#35ef84;--danger:#ff8d8d}
+    *{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:radial-gradient(circle at 50% -20%,#123127 0,#07110d 36%,var(--bg) 72%);color:var(--text);min-height:100vh}
+    main{width:min(1060px,calc(100% - 32px));margin:0 auto;padding:42px 0 72px} header{margin-bottom:20px}.eyebrow{color:var(--green);font-size:13px;letter-spacing:.16em;text-transform:uppercase}h1{font-size:clamp(30px,5vw,46px);margin:8px 0 8px;font-weight:650}.intro{color:var(--muted);margin:0;line-height:1.65;max-width:820px}
+    .tabs{display:flex;gap:8px;margin:24px 0 14px}.tab{min-width:auto;background:transparent;color:var(--muted);border:1px solid var(--line);padding:10px 16px}.tab.active{background:rgba(53,239,132,.10);color:var(--green);border-color:rgba(53,239,132,.32)}
+    .panel{background:rgba(10,22,18,.86);border:1px solid rgba(255,255,255,.09);border-radius:24px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.32);backdrop-filter:blur(18px)}.hidden{display:none!important}
+    button,input,select{font:inherit}button{border:0;border-radius:12px;padding:11px 17px;background:var(--green);color:#031108;font-weight:700;cursor:pointer}button.secondary{background:transparent;color:var(--text);border:1px solid var(--line)}button.danger{background:rgba(255,90,90,.08);color:var(--danger);border:1px solid rgba(255,90,90,.2)}button:disabled{opacity:.35;cursor:not-allowed}
+    input,select{width:100%;padding:11px 12px;background:var(--panel2);color:var(--text);border:1px solid var(--line);border-radius:12px;outline:none}label{display:block;color:#c5d0cc;font-size:13px;margin:0 0 7px}.toolbar{display:flex;gap:10px;align-items:center;margin-bottom:14px}.toolbar input{flex:1}.meta{color:var(--muted);font-size:12px;line-height:1.5}
+    .vehicle-list{display:grid;gap:8px}.vehicle-row{display:grid;grid-template-columns:minmax(230px,1.6fr) minmax(160px,1fr) minmax(150px,.8fr) auto;gap:12px;align-items:center;padding:13px 14px;background:var(--panel2);border:1px solid var(--line);border-radius:16px}.vehicle-row.retired{opacity:.55}.vehicle-title{font-weight:650}.vehicle-sub,.vehicle-facts{color:var(--muted);font-size:12px;margin-top:3px;line-height:1.45}.badge{display:inline-flex;border-radius:999px;padding:4px 8px;font-size:11px;background:rgba(53,239,132,.09);color:var(--green);margin-left:6px}.badge.off{background:rgba(255,255,255,.05);color:var(--muted)}.row-actions{display:flex;gap:6px}.row-actions button{padding:8px 10px;font-size:12px;min-width:auto}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.current{margin-top:14px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.current-card{padding:12px;background:var(--panel2);border:1px solid var(--line);border-radius:12px;min-width:0}.current-card b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px}.current-card span{color:var(--muted);font-size:11px}
+    .drop{min-height:250px;border:1px dashed #365148;border-radius:18px;display:flex;align-items:center;justify-content:center;text-align:center;padding:18px;position:relative;overflow:hidden;cursor:pointer;background:rgba(255,255,255,.015)}.drop.drag{border-color:var(--green);background:rgba(53,239,132,.05)}.drop input{position:absolute;inset:0;opacity:0;cursor:pointer}.drop img{width:100%;height:100%;max-height:300px;object-fit:contain;border-radius:14px;display:none}.drop.has-preview img{display:block}.drop.has-preview .placeholder{display:none}.placeholder strong{display:block;font-size:17px;margin-bottom:6px}.placeholder span{color:var(--muted);font-size:13px;line-height:1.6}.status{margin-top:14px;padding:12px 13px;border-radius:12px;background:var(--panel2);border:1px solid var(--line);color:var(--muted);min-height:44px;line-height:1.5}.status.ok{color:#b8f8d0;border-color:rgba(53,239,132,.28)}.status.error{color:#ffb5b5;border-color:rgba(255,90,90,.3)}.actions{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:16px}
+    dialog{width:min(680px,calc(100% - 28px));border:1px solid var(--line);border-radius:20px;background:#091310;color:var(--text);padding:0;box-shadow:0 30px 100px #000}dialog::backdrop{background:rgba(0,0,0,.68)}.dialog-body{padding:20px}.dialog-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}.dialog-head h2{margin:0;font-size:22px}.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}.wide{grid-column:1/-1}.dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}
+    @media(max-width:760px){main{padding-top:26px}.grid,.form-grid{grid-template-columns:1fr}.vehicle-row{grid-template-columns:1fr}.row-actions{justify-content:flex-end}.toolbar{flex-wrap:wrap}.toolbar input{flex-basis:100%}.current{grid-template-columns:1fr 1fr}.actions{align-items:flex-end}.panel{padding:15px}}
   </style>
 </head>
 <body>
 <main>
   <header>
     <div class="eyebrow">EV Charge Book</div>
-    <h1>Hero 图片管理</h1>
-    <p class="intro">选择已有车型，拖入 PNG / WebP。服务器会校验比例、统一转换为 1600×1100 真 WebP、自动版本 +1，并原子更新 Hero manifest。</p>
+    <h1>车辆资源管理</h1>
+    <p class="intro">这里维护服务器车型目录和 Hero 图片。App 仍然以本地 Room 车型库运行；网络只用于刷新目录，断网不会影响记账、行程、车辆切换或已有车型使用。</p>
   </header>
 
-  <section class="panel">
+  <div class="tabs">
+    <button class="tab active" data-tab="catalog">车型库</button>
+    <button class="tab" data-tab="hero">Hero 图片</button>
+  </div>
+
+  <section class="panel" id="catalogPanel">
+    <div class="toolbar">
+      <input id="catalogSearch" placeholder="搜索品牌、车系、车型、catalogId" />
+      <span class="meta" id="catalogMeta">读取中…</span>
+      <button id="addVehicle">新增车型</button>
+    </div>
+    <div class="vehicle-list" id="vehicleList"></div>
+    <div class="status" id="catalogStatus">正在读取服务器车型目录…</div>
+  </section>
+
+  <section class="panel hidden" id="heroPanel">
     <div class="grid">
       <div>
-        <label for="vehicle">车型</label>
-        <select id="vehicle"></select>
-        <div class="current" id="current"></div>
+        <label for="artworkKey">Hero key</label>
+        <input id="artworkKey" list="heroKeys" placeholder="例如 leapmotor-c16-2026" autocomplete="off" />
+        <datalist id="heroKeys"></datalist>
+        <div class="current" id="heroCurrent"></div>
+        <p class="meta">可输入一个新 key。第一次发布自动生成 v1；已有 key 自动 v+1。车型库里的 <b>Hero key</b> 与这里保持一致即可。</p>
       </div>
-
       <div>
         <label>新 Hero 原图</label>
         <div class="drop" id="drop">
           <input id="file" type="file" accept="image/png,image/webp,.png,.webp" />
           <img id="preview" alt="Hero preview" />
-          <div class="placeholder">
-            <strong>拖图片到这里</strong>
-            <span>PNG / WebP · 推荐 1600×1100 · 比例约 1.45:1<br/>无需自己转换 WebP</span>
-          </div>
+          <div class="placeholder"><strong>拖图片到这里</strong><span>PNG / WebP · 推荐 1600×1100 · 比例约 1.45:1<br/>服务器自动转换成真 WebP</span></div>
         </div>
       </div>
     </div>
-
-    <div class="status" id="status">正在读取当前 Hero manifest…</div>
+    <div class="status" id="heroStatus">正在读取 Hero manifest…</div>
     <div class="actions">
-      <div class="hint">发布会生成新的 <code>_vN.webp</code>，不会覆盖旧文件。旧版本仍留在服务器，便于回退。</div>
-      <button id="publish" disabled>发布 Hero</button>
+      <div class="meta">发布生成新的 <code>_vN.webp</code>，不会覆盖旧文件。</div>
+      <button id="publishHero" disabled>发布 Hero</button>
     </div>
   </section>
 </main>
 
+<dialog id="vehicleDialog">
+  <form id="vehicleForm" class="dialog-body">
+    <div class="dialog-head"><h2 id="dialogTitle">新增车型</h2><button type="button" class="secondary" id="closeDialog">关闭</button></div>
+    <div class="form-grid">
+      <div class="wide"><label>catalogId（上线后不可改）</label><input name="catalogId" required placeholder="例如 byd-seal-2026-700" /></div>
+      <div><label>品牌</label><input name="brand" required /></div><div><label>车系</label><input name="series" required /></div>
+      <div><label>车型名称</label><input name="modelName" required /></div><div><label>配置</label><input name="trimName" /></div>
+      <div><label>年款</label><input name="modelYear" type="number" min="1990" max="2100" /></div>
+      <div><label>动力类型</label><select name="powertrainType"><option>BEV</option><option>PHEV</option><option>REEV</option></select></div>
+      <div><label>电池容量 kWh</label><input name="batteryCapacityKwh" type="number" min="0" step="0.1" /></div><div><label>标称续航 km</label><input name="rangeKm" type="number" min="0" step="1" /></div>
+      <div class="wide"><label>Hero key（可暂时留空）</label><input name="heroArtworkKey" placeholder="例如 byd-seal-2026" /></div>
+    </div>
+    <div class="status" id="formStatus">保存只更新服务器目录，不会改写用户已经添加的车辆快照。</div>
+    <div class="dialog-actions"><button type="button" class="secondary" id="cancelDialog">取消</button><button type="submit">保存车型</button></div>
+  </form>
+</dialog>
+
 <script>
-  const vehicle = document.getElementById('vehicle');
-  const fileInput = document.getElementById('file');
-  const drop = document.getElementById('drop');
-  const preview = document.getElementById('preview');
-  const publish = document.getElementById('publish');
-  const statusEl = document.getElementById('status');
-  const current = document.getElementById('current');
-  let manifest = null;
-  let chosenFile = null;
+  const adminHeaders={'X-Hero-Admin-Request':'1','Content-Type':'application/json'};
+  let catalog=null, manifest=null, chosenFile=null, editingId=null;
+  const $=id=>document.getElementById(id);
+  const esc=s=>String(s??'');
+  function setStatus(el,text,kind=''){el.className='status'+(kind?' '+kind:'');el.textContent=text}
+  function switchTab(name){document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));$('catalogPanel').classList.toggle('hidden',name!=='catalog');$('heroPanel').classList.toggle('hidden',name!=='hero')}
+  document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>switchTab(x.dataset.tab));
 
-  function setStatus(text, kind='') {
-    statusEl.className = 'status' + (kind ? ' ' + kind : '');
-    statusEl.textContent = text;
+  async function loadCatalog(){
+    try{const r=await fetch('api/catalog/state');const d=await r.json();if(!r.ok)throw new Error(d.error||'读取车型库失败');catalog=d;renderCatalog();setStatus($('catalogStatus'),`车型目录已加载 · v${d.catalogVersion} · App 将在有网络时后台同步，本地库始终可用。`,'ok')}catch(e){setStatus($('catalogStatus'),e.message,'error')}
   }
-
-  function renderCurrent() {
-    current.innerHTML = '';
-    if (!manifest) return;
-    const selected = manifest.artworks[vehicle.value];
-    if (!selected) return;
-    const values = [
-      ['当前版本', `v${selected.version}`],
-      ['目标版本', `v${selected.version + 1}`],
-      ['规格', '1600×1100'],
-    ];
-    for (const [name, value] of values) {
-      const card = document.createElement('div');
-      card.className = 'current-card';
-      card.innerHTML = `<b>${value}</b><span>${name}</span>`;
-      current.appendChild(card);
+  function renderCatalog(){
+    if(!catalog)return;const q=$('catalogSearch').value.trim().toLowerCase();const rows=catalog.vehicles.filter(v=>!q||`${v.catalogId} ${v.brand} ${v.series} ${v.modelName} ${v.trimName||''}`.toLowerCase().includes(q));
+    $('catalogMeta').textContent=`${catalog.vehicles.filter(v=>v.isActive!==false).length} 在用 / ${catalog.vehicles.length} 总计`;$('vehicleList').innerHTML='';
+    for(const v of rows){
+      const row=document.createElement('div');row.className='vehicle-row'+(v.isActive===false?' retired':'');
+      const a=document.createElement('div');const title=document.createElement('div');title.className='vehicle-title';title.textContent=`${v.brand} ${v.modelName}`;const badge=document.createElement('span');badge.className='badge'+(v.isActive===false?' off':'');badge.textContent=v.isActive===false?'已下架':'在用';title.appendChild(badge);const sub=document.createElement('div');sub.className='vehicle-sub';sub.textContent=`${v.trimName||v.series} · ${v.powertrainType} · ${v.catalogId}`;a.append(title,sub);
+      const b=document.createElement('div');b.className='vehicle-facts';b.textContent=`${v.batteryCapacityKwh??'--'} kWh · ${v.rangeKm??'--'} km`;
+      const c=document.createElement('div');c.className='vehicle-facts';c.textContent=`Hero: ${v.heroArtworkKey||'未配置'}`;
+      const acts=document.createElement('div');acts.className='row-actions';const edit=document.createElement('button');edit.className='secondary';edit.textContent='编辑';edit.onclick=()=>openVehicle(v);const status=document.createElement('button');status.className=v.isActive===false?'secondary':'danger';status.textContent=v.isActive===false?'恢复':'下架';status.onclick=()=>setVehicleStatus(v,v.isActive===false);acts.append(edit,status);row.append(a,b,c,acts);$('vehicleList').appendChild(row)
     }
   }
+  $('catalogSearch').oninput=renderCatalog;$('addVehicle').onclick=()=>openVehicle(null);
+  function openVehicle(v){editingId=v?.catalogId||null;$('dialogTitle').textContent=v?'编辑车型':'新增车型';const f=$('vehicleForm');f.reset();for(const name of ['catalogId','brand','series','modelName','trimName','modelYear','powertrainType','batteryCapacityKwh','rangeKm','heroArtworkKey']){if(v&&v[name]!=null)f.elements[name].value=v[name]}f.elements.catalogId.readOnly=!!v;setStatus($('formStatus'),'保存只更新服务器车型目录；用户已经添加的车辆参数快照不会被改写。');$('vehicleDialog').showModal()}
+  function closeVehicleDialog(){$('vehicleDialog').close();editingId=null}$('closeDialog').onclick=closeVehicleDialog;$('cancelDialog').onclick=closeVehicleDialog;
+  $('vehicleForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const fd=new FormData(f);const body=Object.fromEntries(fd.entries());for(const k of ['modelYear','batteryCapacityKwh','rangeKm'])if(body[k]==='')body[k]=null;try{setStatus($('formStatus'),'正在保存…');const r=await fetch('api/catalog/save',{method:'POST',headers:adminHeaders,body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');await loadCatalog();closeVehicleDialog()}catch(err){setStatus($('formStatus'),err.message,'error')}};
+  async function setVehicleStatus(v,isActive){const verb=isActive?'恢复':'下架';if(!confirm(`${verb} ${v.brand} ${v.modelName}？\n\n已添加到用户本地的车辆和历史记录不会被删除。`))return;try{const r=await fetch('api/catalog/status',{method:'POST',headers:adminHeaders,body:JSON.stringify({catalogId:v.catalogId,isActive})});const d=await r.json();if(!r.ok)throw new Error(d.error||`${verb}失败`);await loadCatalog()}catch(e){setStatus($('catalogStatus'),e.message,'error')}}
 
-  async function loadState() {
-    try {
-      const res = await fetch('api/state');
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '读取失败');
-      manifest = data;
-      vehicle.innerHTML = '';
-      for (const [key, item] of Object.entries(data.artworks)) {
-        const option = document.createElement('option');
-        option.value = key;
-        option.textContent = `${key} · v${item.version}`;
-        vehicle.appendChild(option);
-      }
-      renderCurrent();
-      setStatus('请选择图片。页面会先做本地预览，正式尺寸与格式由服务器再次校验。', 'ok');
-    } catch (err) {
-      setStatus(err.message, 'error');
-    }
+  async function loadHero(){
+    try{const r=await fetch('api/state');const d=await r.json();if(!r.ok)throw new Error(d.error||'读取 Hero 失败');manifest=d;renderHeroKeys();setStatus($('heroStatus'),'请选择或输入 Hero key，再拖入图片。新 key 会从 v1 开始。','ok')}catch(e){setStatus($('heroStatus'),e.message,'error')}
   }
+  function renderHeroKeys(){const keys=new Set(Object.keys(manifest?.artworks||{}));for(const v of catalog?.vehicles||[])if(v.heroArtworkKey)keys.add(v.heroArtworkKey);$('heroKeys').innerHTML='';[...keys].sort().forEach(k=>{const o=document.createElement('option');o.value=k;$('heroKeys').appendChild(o)});renderHeroCurrent()}
+  function renderHeroCurrent(){$('heroCurrent').innerHTML='';const key=$('artworkKey').value.trim().toLowerCase();const cur=manifest?.artworks?.[key];const values=[['当前版本',cur?`v${cur.version}`:'尚未发布'],['目标版本',`v${(cur?.version||0)+1}`],['规格','1600×1100']];for(const [n,v] of values){const c=document.createElement('div');c.className='current-card';const b=document.createElement('b');b.textContent=v;const s=document.createElement('span');s.textContent=n;c.append(b,s);$('heroCurrent').appendChild(c)}updatePublishEnabled()}
+  $('artworkKey').oninput=renderHeroCurrent;
+  function updatePublishEnabled(){$('publishHero').disabled=!(chosenFile&&/^[a-z0-9][a-z0-9-]{1,100}$/.test($('artworkKey').value.trim().toLowerCase()))}
+  function selectFile(file){chosenFile=file||null;if(!chosenFile){$('drop').classList.remove('has-preview');$('preview').removeAttribute('src');updatePublishEnabled();return}if(!['image/png','image/webp'].includes(chosenFile.type)&&!/\.(png|webp)$/i.test(chosenFile.name)){chosenFile=null;setStatus($('heroStatus'),'只接受 PNG 或 WebP。','error');updatePublishEnabled();return}$('preview').src=URL.createObjectURL(chosenFile);$('drop').classList.add('has-preview');setStatus($('heroStatus'),`${chosenFile.name} · ${(chosenFile.size/1024).toFixed(0)} KB · 等待发布`,'ok');updatePublishEnabled()}
+  $('file').onchange=()=>selectFile($('file').files[0]);['dragenter','dragover'].forEach(t=>$('drop').addEventListener(t,e=>{e.preventDefault();$('drop').classList.add('drag')}));['dragleave','drop'].forEach(t=>$('drop').addEventListener(t,e=>{e.preventDefault();$('drop').classList.remove('drag')}));$('drop').addEventListener('drop',e=>selectFile(e.dataTransfer.files[0]));
+  $('publishHero').onclick=async()=>{const key=$('artworkKey').value.trim().toLowerCase();if(!chosenFile||!key)return;$('publishHero').disabled=true;setStatus($('heroStatus'),'正在校验、转换并发布…');const body=new FormData();body.append('artworkKey',key);body.append('file',chosenFile);try{const r=await fetch('api/publish',{method:'POST',headers:{'X-Hero-Admin-Request':'1'},body});const d=await r.json();if(!r.ok)throw new Error(d.error||'发布失败');manifest.artworks[d.artworkKey]={version:d.version,url:d.url};chosenFile=null;$('file').value='';$('drop').classList.remove('has-preview');$('preview').removeAttribute('src');renderHeroKeys();setStatus($('heroStatus'),`发布成功：${d.artworkKey} → v${d.version} · ${d.outputWidth}×${d.outputHeight} WebP · ${(d.outputBytes/1024).toFixed(0)} KB`,'ok')}catch(e){setStatus($('heroStatus'),e.message,'error')}finally{updatePublishEnabled()}};
 
-  function selectFile(file) {
-    chosenFile = file || null;
-    publish.disabled = !chosenFile || !manifest;
-    if (!chosenFile) {
-      drop.classList.remove('has-preview');
-      preview.removeAttribute('src');
-      return;
-    }
-    if (!['image/png','image/webp'].includes(chosenFile.type) && !/\.(png|webp)$/i.test(chosenFile.name)) {
-      chosenFile = null;
-      publish.disabled = true;
-      setStatus('只接受 PNG 或 WebP。', 'error');
-      return;
-    }
-    preview.src = URL.createObjectURL(chosenFile);
-    drop.classList.add('has-preview');
-    setStatus(`${chosenFile.name} · ${(chosenFile.size / 1024).toFixed(0)} KB · 等待发布`, 'ok');
-  }
-
-  fileInput.addEventListener('change', () => selectFile(fileInput.files[0]));
-  vehicle.addEventListener('change', renderCurrent);
-  ['dragenter','dragover'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('drag'); }));
-  ['dragleave','drop'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('drag'); }));
-  drop.addEventListener('drop', e => selectFile(e.dataTransfer.files[0]));
-
-  publish.addEventListener('click', async () => {
-    if (!chosenFile || !vehicle.value) return;
-    publish.disabled = true;
-    setStatus('正在校验、转换并发布…');
-    const body = new FormData();
-    body.append('artworkKey', vehicle.value);
-    body.append('file', chosenFile);
-    try {
-      const res = await fetch('api/publish', {
-        method: 'POST',
-        headers: {'X-Hero-Admin-Request': '1'},
-        body,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || '发布失败');
-
-      manifest.artworks[data.artworkKey] = {version: data.version, url: data.url};
-      renderCurrent();
-      chosenFile = null;
-      fileInput.value = '';
-      drop.classList.remove('has-preview');
-      preview.removeAttribute('src');
-      setStatus(`发布成功：${data.artworkKey} → v${data.version} · ${data.outputWidth}×${data.outputHeight} WebP · ${(data.outputBytes/1024).toFixed(0)} KB`, 'ok');
-    } catch (err) {
-      setStatus(err.message, 'error');
-    } finally {
-      publish.disabled = !chosenFile || !manifest;
-    }
-  });
-
-  loadState();
+  Promise.all([loadCatalog(),loadHero()]).then(renderHeroKeys);
 </script>
 </body>
 </html>
