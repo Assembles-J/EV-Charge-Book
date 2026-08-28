@@ -5,6 +5,7 @@ on:
     paths:
       - 'hero-admin/**'
       - 'hero-assets/manifest-v1.json'
+      - 'vehicle-catalog/**'
       - 'scripts/deploy-hero-admin.sh'
       - '.github/workflows/hero-admin-deploy.yml'
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'hero-admin/**'
       - 'hero-assets/manifest-v1.json'
+      - 'vehicle-catalog/**'
       - 'scripts/deploy-hero-admin.sh'
       - '.github/workflows/hero-admin-deploy.yml'
   workflow_dispatch:
@@ -25,13 +27,13 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate Hero Admin deployment bundle
+    name: Validate EV resource admin deployment bundle
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate deploy script
+      - name: Validate deploy script and seeds
         shell: bash
         run: |
           set -eu
@@ -39,12 +41,23 @@ jobs:
           test -f hero-admin/Dockerfile
           test -f hero-admin/app.py
           test -f hero-assets/manifest-v1.json
+          test -f vehicle-catalog/catalog-v1.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          hero = json.loads(Path('hero-assets/manifest-v1.json').read_text())
+          catalog = json.loads(Path('vehicle-catalog/catalog-v1.json').read_text())
+          assert hero.get('schemaVersion') == 1 and hero.get('artworks')
+          assert catalog.get('schemaVersion') == 1 and catalog.get('vehicles')
+          ids = [v['catalogId'] for v in catalog['vehicles']]
+          assert len(ids) == len(set(ids))
+          PY
 
-      - name: Build Hero Admin image
+      - name: Build admin image
         run: docker build -t ev-charge-book-hero-admin:local hero-admin
 
   deploy:
-    name: Deploy Hero Admin to groupim.cn
+    name: Deploy EV resource admin to groupim.cn
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: validate
     runs-on: ubuntu-latest
@@ -54,7 +67,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build portable Hero Admin image
+      - name: Build portable admin image
         shell: bash
         run: |
           set -eu
@@ -75,13 +88,13 @@ jobs:
             mkdir -p /opt/ev-charge-book/hero-admin-deploy
             test -w /opt/ev-charge-book
 
-      - name: Upload Hero Admin deployment bundle
+      - name: Upload admin deployment bundle
         uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.COMMON_SERVER_HOST }}
           username: ${{ secrets.COMMON_SERVER_USER }}
           key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
-          source: hero-admin-image.tar.gz,hero-assets/manifest-v1.json,scripts/deploy-hero-admin.sh
+          source: hero-admin-image.tar.gz,hero-assets/manifest-v1.json,vehicle-catalog/catalog-v1.json,scripts/deploy-hero-admin.sh
           target: /opt/ev-charge-book/hero-admin-deploy
           overwrite: true
 
@@ -96,43 +109,43 @@ jobs:
             chmod +x /opt/ev-charge-book/hero-admin-deploy/scripts/deploy-hero-admin.sh
             /opt/ev-charge-book/hero-admin-deploy/scripts/deploy-hero-admin.sh
 
-      - name: Verify public Hero manifest
+      - name: Verify public runtime metadata
         shell: bash
         run: |
           set -eu
-          tmp="$(mktemp)"
-          for attempt in 1 2 3 4 5; do
-            if curl --fail --silent --show-error \
-              --location \
-              --max-time 15 \
-              https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json \
-              -o "$tmp"; then
-              if python3 - "$tmp" <<'PY'
+          for path in hero-assets-v1.json vehicle-catalog-v1.json; do
+            tmp="$(mktemp)"
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if curl --fail --silent --show-error --location --max-time 15 \
+                "https://groupim.cn/ev-charge-book/release-meta/$path" -o "$tmp"; then
+                if python3 - "$tmp" "$path" <<'PY'
           import json
           import sys
           from pathlib import Path
-
-          manifest = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
-          assert manifest.get('schemaVersion') == 1
-          artworks = manifest.get('artworks')
-          assert isinstance(artworks, dict) and artworks
+          data = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
+          assert data.get('schemaVersion') == 1
+          if sys.argv[2] == 'hero-assets-v1.json':
+              assert isinstance(data.get('artworks'), dict) and data['artworks']
+          else:
+              assert isinstance(data.get('vehicles'), list) and data['vehicles']
           PY
-              then
-                exit 0
+                then
+                  ok=1
+                  break
+                fi
               fi
-            fi
-            sleep 2
+              sleep 2
+            done
+            test "$ok" -eq 1 || { echo "Public metadata validation failed: $path" >&2; exit 1; }
           done
-          echo "Public Hero manifest validation failed" >&2
-          exit 1
 
-      - name: Verify Hero Admin authentication gate
+      - name: Verify admin authentication gate
         shell: bash
         run: |
           set -eu
           for attempt in 1 2 3 4 5; do
-            status="$(curl --silent --output /dev/null --write-out '%{http_code}' \
-              --max-time 15 \
+            status="$(curl --silent --output /dev/null --write-out '%{http_code}' --max-time 15 \
               https://groupim.cn/ev-charge-book/hero-admin/ || true)"
             if [ "$status" = "401" ]; then
               exit 0
@@ -140,7 +153,7 @@ jobs:
             echo "Attempt $attempt: expected 401, got $status"
             sleep 2
           done
-          echo "Hero Admin is not protected by the expected authentication gate" >&2
+          echo "Admin is not protected by the expected authentication gate" >&2
           exit 1
 
       - name: Deployment summary
@@ -148,11 +161,11 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## Hero Admin deployment"
+            echo "## EV resource admin deployment"
             echo ""
             echo "- Admin: https://groupim.cn/ev-charge-book/hero-admin/"
-            echo "- Manifest: https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
+            echo "- Hero manifest: https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
+            echo "- Vehicle catalog: https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json"
             echo "- Server credentials file: /opt/ev-charge-book/hero-admin.env"
             echo "- Server-side Docker/PyPI network access is not required for deployment."
-            echo "- The password is never printed into Actions logs."
           } >> "$GITHUB_STEP_SUMMARY"
