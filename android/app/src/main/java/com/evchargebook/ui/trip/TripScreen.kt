@@ -129,7 +129,7 @@ fun TripScreen(
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
                     ) {
                         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
@@ -174,9 +174,7 @@ fun TripScreen(
                                 ActiveMetric("已记录", formatActiveDuration(activeTrip.elapsedSeconds)),
                                 ActiveMetric("行驶均速", activeTrip.averageSpeedMps?.let(::formatActiveSpeed) ?: "--"),
                                 ActiveMetric("最高速度", activeTrip.maxSpeedMps?.let(::formatActiveSpeed) ?: "--"),
-                                ActiveMetric("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--"),
-                                ActiveMetric("GPS 点", selectedTripPoints.size.toString()),
-                                ActiveMetric("海拔样本", telemetry.altitudePointCount.toString())
+                                ActiveMetric("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--")
                             )
                         )
                     }

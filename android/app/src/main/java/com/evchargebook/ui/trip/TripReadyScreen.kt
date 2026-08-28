@@ -1,8 +1,6 @@
 package com.evchargebook.ui.trip
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -13,14 +11,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -67,7 +64,7 @@ fun TripReadyScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
+                    Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
                         Text("行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                         Text("TRIP READY", style = MaterialTheme.typography.labelSmall, color = accent)
                     }
@@ -88,24 +85,6 @@ fun TripReadyScreen(
                     currentSoc = currentSoc,
                     currentMileageKm = currentMileageKm
                 )
-            }
-            item { ReadyGpsCard() }
-
-            if (currentSoc == null && vehicle != null) {
-                item {
-                    Surface(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.surfaceContainerLow
-                    ) {
-                        Text(
-                            "当前 SOC 未维护：仍可记录真实行程，但不会据此虚构行驶能耗。",
-                            modifier = Modifier.padding(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
             }
 
             item {
@@ -196,18 +175,18 @@ private fun ReadyVehicleSnapshotCard(
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacing.md, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
                     Text(
                         vehicle?.let { "${it.brand} ${it.model}" } ?: "请选择车辆",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "行程起点快照",
+                        "开始时记录当前车辆状态",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -219,18 +198,13 @@ private fun ReadyVehicleSnapshotCard(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 ReadySnapshotMetric(
                     label = "当前 SOC",
                     value = currentSoc?.let { "$it%" } ?: "--",
                     modifier = Modifier.weight(1f)
-                )
-                Box(
-                    Modifier
-                        .width(1.dp)
-                        .height(38.dp)
-                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
                 )
                 ReadySnapshotMetric(
                     label = "当前里程",
@@ -239,11 +213,36 @@ private fun ReadyVehicleSnapshotCard(
                 )
             }
 
-            Text(
-                "开始时记录当前 SOC 与里程；不预设终点。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+            ) {
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(18.dp)
+                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text("GPS 实录", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
+                    Text(
+                        "开始后记录真实定位；不预设终点，也不会虚构路线。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (currentSoc == null && vehicle != null) {
+                Text(
+                    "当前 SOC 未维护：仍可记录真实行程，但不会据此估算行驶能耗。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -251,47 +250,11 @@ private fun ReadyVehicleSnapshotCard(
 @Composable
 private fun ReadySnapshotMetric(label: String, value: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.padding(horizontal = MaterialTheme.spacing.sm),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(2.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun ReadyGpsCard() {
-    val accent = EVDesignTokens.Energy.green
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-        ) {
-            Box(
-                modifier = Modifier.size(40.dp).background(accent.copy(alpha = .10f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(21.dp)
-                )
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("GPS 真实轨迹", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "开始后记录真实定位；不会预设终点或虚构路线。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 
