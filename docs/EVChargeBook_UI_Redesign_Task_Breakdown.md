@@ -129,28 +129,60 @@ Add:
 
 # Trip v0.6 Approved Follow-up
 
-The 2026-08-28 physical-device Trip review approved a denser Trip-specific refinement of the v0.5 Dark First system.
+The 2026-08-28 Trip design review approved a denser Trip-specific refinement of the v0.5 Dark First system. The 2026-08-29 device comparison then exposed concrete fidelity regressions; those are now tracked as correction slices instead of starting another redesign.
 
 Authority: `docs/TRIP_V0.6_APPROVED_UI_BASELINE.md`
 Owning issue: #145
+Documentation owner: #6
 
-Implementation slices:
+## Original implementation slices
 
-- #146 — Trip list density + endpoint hierarchy
-- #147 — READY preparation + slide-to-start
-- #148 — active Trip cockpit + speed/altitude trends
-- #149 — completed Trip overview + single endpoint card
-- #150 — route/map marker and trajectory polish
-- #151 — diagnostics summary + progressive disclosure
-- #152 — future destination selection capability; explicitly not part of current v0.6 implementation
+- [x] #146 — Trip list density + endpoint hierarchy — PR #154
+- [x] #147 — READY preparation + slide-to-start — PR #155
+- [x] #148 — active Trip cockpit + speed/altitude trends — PR #156
+- [x] #149 — completed Trip overview + single endpoint card — PR #158
+- [x] #150 — route/map marker and trajectory polish — landed with PR #158
+- [x] #151 — diagnostics summary + progressive disclosure — PR #161
+- [ ] #152 — future destination selection capability; explicitly not part of current v0.6
 
-Trip v0.6 guardrails:
+## Physical-device correction slices
+
+- [x] #168 — slider progress / trend axes / history density / inset ownership / recording endpoint semantics — PR #170
+- [x] #171 — READY information density + active cockpit metric de-duplication — PR #172
+- [x] #173 — compact Trip completion form + remove redundant intermediate confirmation — PR #174
+- [x] #175 — split Trip home/history from READY preparation — PR #176
+
+Code-side Trip v0.6 work above is in `main`. These Issues remain open only where their explicit physical-device checks are still pending.
+
+## Trip v0.6 guardrails
 
 - retain `EVDesignTokens.Energy.green` (`#32F080`) as the only primary Trip green
 - no bright glow, neon bloom or advertising-style decorative light effects
 - no voltage on Trip surfaces
 - no destination selector until the product actually owns destination planning
+- Trip home/history and READY preparation are separate interaction states
+- do not invent GPS readiness/accuracy before a real sample exists
+- slide progress keeps a rounded capsule edge at every drag position
+- slide-to-end goes directly to one explicit completion form; do not stack a redundant generic alert
 - start marker uses a compact green start/play shape
-- end marker uses a compact red flag without outer ring
+- completed end marker uses a compact red flag without outer ring
+- active latest point stays green and is not described as a completed endpoint
 - raw GPS point lists are secondary troubleshooting UI, not default detail content
-- speed and altitude trends are supporting evidence and must omit unavailable/untrustworthy data
+- speed and altitude trends include sparse axis context and omit unavailable/untrustworthy data
+- long GPS gaps remain disconnected
+- nested Trip Scaffolds must not double-apply the root system-bar inset
+
+## Current acceptance gate
+
+Remaining work is physical, not another broad code rewrite:
+
+1. Trip home/history — latest summary, 5+ rows, address truncation
+2. READY — back/start behavior, compact GPS truth, slide gesture
+3. Active — live route, current speed, trends, interrupted state
+4. Completion — keyboard/IME, 320–360dp, fontScale 1.3, continue/save safety
+5. Completed detail — endpoint card and metric hierarchy
+6. Route — real geometry, start/end/current marker semantics, LONG_GAP discontinuity
+7. Trends — X/Y references, speed/altitude truth, no interpolation
+8. Diagnostics — collapsed by default, `查看轨迹点` explicit
+
+Do not close #145 from CI alone. Use the latest Debug APK from `main` for the final physical comparison against the approved v0.6 board.
