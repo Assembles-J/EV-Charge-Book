@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import tempfile
+import urllib.request
 from functools import wraps
 from pathlib import Path
 
@@ -23,6 +24,10 @@ PUBLIC_ASSET_BASE = os.environ.get(
     "HERO_PUBLIC_ASSET_BASE",
     "https://groupim.cn/ev-charge-book/releases/hero-assets",
 ).rstrip("/")
+MANIFEST_SEED_URL = os.environ.get(
+    "HERO_MANIFEST_SEED_URL",
+    "https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/manifest-v1.json",
+)
 RELEASE_ROOT = Path(os.environ.get("HERO_RELEASE_ROOT", "/data/releases"))
 META_ROOT = Path(os.environ.get("HERO_META_ROOT", "/data/release-meta"))
 MANIFEST_PATH = META_ROOT / "hero-assets-v1.json"
@@ -80,18 +85,34 @@ def require_admin_post() -> Response | None:
     return None
 
 
-def _load_manifest() -> dict:
-    if not MANIFEST_PATH.is_file():
-        raise FileNotFoundError(
-            f"Hero manifest not found at {MANIFEST_PATH}. Seed it before using the admin page."
-        )
-    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+def _validate_manifest(manifest: dict) -> dict:
     if manifest.get("schemaVersion") != 1:
         raise ValueError("unsupported Hero manifest schemaVersion")
     artworks = manifest.get("artworks")
     if not isinstance(artworks, dict) or not artworks:
         raise ValueError("Hero manifest has no artworks")
     return manifest
+
+
+def _ensure_manifest() -> None:
+    if MANIFEST_PATH.is_file():
+        return
+    try:
+        with urllib.request.urlopen(MANIFEST_SEED_URL, timeout=10) as response:
+            seed = json.loads(response.read().decode("utf-8"))
+        _validate_manifest(seed)
+        payload = (json.dumps(seed, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+        _write_atomic(MANIFEST_PATH, payload)
+    except Exception as exc:
+        raise FileNotFoundError(
+            f"Hero manifest is missing and seed download failed: {MANIFEST_SEED_URL}"
+        ) from exc
+
+
+def _load_manifest() -> dict:
+    _ensure_manifest()
+    manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    return _validate_manifest(manifest)
 
 
 def _safe_slug(key: str) -> str:
@@ -102,7 +123,7 @@ def _decode_and_validate(upload_bytes: bytes) -> tuple[Image.Image, dict]:
     try:
         source = Image.open(io.BytesIO(upload_bytes))
         source.load()
-    except Exception as exc:  # Pillow raises several decoder-specific errors
+    except Exception as exc:
         raise ValueError("图片无法解析，请上传有效 PNG 或 WebP") from exc
 
     source_format = (source.format or "").upper()
@@ -222,7 +243,6 @@ def publish():
         if destination.exists():
             return jsonify({"error": f"目标文件已存在：{filename}；请检查 manifest 版本"}), 409
 
-        # Publish immutable bytes first. Only after the image is durable do we switch the manifest pointer.
         _write_atomic(destination, webp_bytes)
 
         public_url = f"{PUBLIC_ASSET_BASE}/{filename}"
