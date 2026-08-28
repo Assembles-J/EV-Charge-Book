@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -67,10 +68,12 @@ fun TripReadyScreen(
                 }
             }
             item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    ReadyStateMetric("当前 SOC", currentSoc?.let { "$it%" } ?: "--", Modifier.weight(1f))
-                    ReadyStateMetric("当前里程", currentMileageKm?.let { "${formatReadyMileage(it)} km" } ?: "--", Modifier.weight(1f))
-                    ReadyStateMetric("轨迹", "GPS 实录", Modifier.weight(1f))
+                ResponsiveMetricGrid(3) { index, modifier ->
+                    when (index) {
+                        0 -> ReadyStateMetric("当前 SOC", currentSoc?.let { "$it%" } ?: "--", modifier)
+                        1 -> ReadyStateMetric("当前里程", currentMileageKm?.let { "${formatReadyMileage(it)} km" } ?: "--", modifier)
+                        else -> ReadyStateMetric("轨迹", "GPS 实录", modifier)
+                    }
                 }
             }
             if (currentSoc == null) {
