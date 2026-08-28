@@ -17,7 +17,7 @@ val hasReleaseSigning = listOf(
 val updateManifestUrl = System.getenv("APP_UPDATE_MANIFEST_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/latest.json"
 val heroArtworkManifestUrl = System.getenv("HERO_ARTWORK_MANIFEST_URL")
-    ?: "https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
+    ?: "https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/manifest-v1.json"
 
 android {
     namespace = "com.evchargebook"
