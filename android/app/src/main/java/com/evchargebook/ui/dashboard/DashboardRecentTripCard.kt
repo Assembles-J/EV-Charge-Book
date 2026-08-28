@@ -197,7 +197,7 @@ private fun TripRouteRail() {
 @Composable
 private fun TripMetric(value: String, label: String, modifier: Modifier = Modifier) {
     Column(
-        modifier = modifier.padding(horizontal = 5.dp),
+        modifier = modifier.padding(horizontal = 3.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Text(
@@ -294,8 +294,7 @@ private fun formatConsumptionValue(value: Double?): String =
         ?: "--"
 
 private fun formatDistanceValue(meters: Double): String =
-    if (meters >= 1000.0) String.format(Locale.US, "%.1f", meters / 1000.0)
-    else String.format(Locale.US, "%.1f", meters / 1000.0)
+    String.format(Locale.US, "%.1f", meters / 1000.0)
 
 private fun formatDuration(seconds: Long): String {
     val hours = seconds / 3600
