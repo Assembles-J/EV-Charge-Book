@@ -21,45 +21,83 @@ concurrency:
 
 jobs:
   validate:
-    name: Validate Hero artwork package
+    name: Validate Hero CDN manifest
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Hero asset package
+      - name: Reject repository Hero binaries
+        shell: bash
+        run: |
+          set -eu
+          tracked="$(find hero-assets -type f -name '*.webp' -print)"
+          if [ -n "$tracked" ]; then
+            echo "Hero WebP files are CDN-only and must not be committed to Git:"
+            echo "$tracked"
+            exit 1
+          fi
+
+      - name: Validate manifest schema
         shell: bash
         run: |
           set -eu
           test -f hero-assets/manifest-v1.json
-          test -d hero-assets/remote
 
-          oversized="$(find hero-assets/remote -type f -name '*.webp' -size +2500k -print)"
-          if [ -n "$oversized" ]; then
-            echo "Remote Hero artwork exceeds the 2.5 MB safety ceiling:"
-            echo "$oversized"
-            exit 1
-          fi
-
-          python3 - <<'PY'
+          python3 - <<'PY' > /tmp/hero-urls.txt
           import json
           from pathlib import Path
 
-          root = Path('hero-assets')
-          manifest = json.loads((root / 'manifest-v1.json').read_text())
-          assert manifest.get('schemaVersion') == 1
+          manifest = json.loads(Path('hero-assets/manifest-v1.json').read_text())
+          assert manifest.get('schemaVersion') == 1, 'schemaVersion must be 1'
           artworks = manifest.get('artworks') or {}
           assert artworks, 'manifest artworks must not be empty'
 
-          prefix = 'https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/remote/'
+          prefix = 'https://groupim.cn/ev-charge-book/releases/hero-assets/'
+          seen_urls = set()
           for key, item in artworks.items():
+              assert key and isinstance(key, str), 'artwork key must be a non-empty string'
               version = item.get('version')
               url = item.get('url', '')
               assert isinstance(version, int) and version > 0, f'{key}: invalid version'
-              assert url.startswith(prefix), f'{key}: invalid URL'
-              filename = url.rsplit('/', 1)[-1]
-              path = root / 'remote' / filename
-              assert path.is_file(), f'{key}: missing {filename}'
-              assert path.stat().st_size > 0, f'{key}: empty {filename}'
+              assert isinstance(url, str) and url.startswith(prefix), f'{key}: invalid CDN URL'
+              assert url.lower().endswith('.webp'), f'{key}: artwork must be WebP'
+              assert url not in seen_urls, f'{key}: duplicate artwork URL'
+              seen_urls.add(url)
+              print(url)
           PY
+
+      - name: Verify public CDN artwork
+        shell: bash
+        run: |
+          set -eu
+          while IFS= read -r url; do
+            echo "Checking $url"
+            tmp="$(mktemp)"
+            curl --fail --silent --show-error --location \
+              --retry 2 \
+              --connect-timeout 5 \
+              --max-time 30 \
+              "$url" \
+              -o "$tmp"
+
+            size="$(wc -c < "$tmp")"
+            if [ "$size" -le 0 ]; then
+              echo "Empty Hero artwork: $url"
+              exit 1
+            fi
+            if [ "$size" -gt 2621440 ]; then
+              echo "Hero artwork exceeds 2.5 MiB safety ceiling ($size bytes): $url"
+              exit 1
+            fi
+
+            python3 - "$tmp" "$url" <<'PY'
+          import sys
+          path, url = sys.argv[1], sys.argv[2]
+          data = open(path, 'rb').read(12)
+          if len(data) < 12 or data[:4] != b'RIFF' or data[8:12] != b'WEBP':
+              raise SystemExit(f'Not a valid WebP header: {url}')
+          PY
+            rm -f "$tmp"
+          done < /tmp/hero-urls.txt
