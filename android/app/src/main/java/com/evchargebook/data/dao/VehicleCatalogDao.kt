@@ -18,6 +18,10 @@ interface VehicleCatalogDao {
     @Query("UPDATE vehicle_catalog SET isActive = 0 WHERE source = 'managed-v1'")
     suspend fun deactivateManagedEntries()
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    // The APK seed is a fallback only. It must never overwrite a row refreshed from the server.
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAll(items: List<VehicleCatalogEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertManaged(items: List<VehicleCatalogEntity>)
 }
