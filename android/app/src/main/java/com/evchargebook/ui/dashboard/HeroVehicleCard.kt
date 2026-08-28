@@ -29,6 +29,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,12 +48,14 @@ import androidx.compose.ui.unit.dp
 import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.LocalCockpitColors
 import com.evchargebook.ui.vehicle.HeroArtworkManifestRepository
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
+import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
 
 private const val VEHICLE_ARTWORK_TAG = "VehicleArtwork"
@@ -69,6 +72,17 @@ fun HeroVehicleCard(
     artworkKey: String? = null
 ) {
     val cockpit = LocalCockpitColors.current
+    val context = LocalContext.current
+    val catalogId = vehicle?.catalogVehicleId?.trim()?.takeIf { it.isNotEmpty() }
+    val localArtworkKey by remember(catalogId, context.applicationContext) {
+        catalogId?.let {
+            AppDatabase.getInstance(context.applicationContext)
+                .vehicleCatalogDao()
+                .observeHeroArtworkKey(it)
+        } ?: flowOf(null)
+    }.collectAsState(initial = null)
+    val effectiveArtworkKey = artworkKey?.trim()?.takeIf { it.isNotEmpty() } ?: localArtworkKey
+
     val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
     val canSwitchVehicle = vehicleSwitchEnabled && selectableVehicles.size > 1
     var vehicleMenuExpanded by remember { mutableStateOf(false) }
@@ -84,7 +98,7 @@ fun HeroVehicleCard(
                     .fillMaxWidth()
                     .aspectRatio(1.46f)
             ) {
-                VehicleStage(vehicle, artworkKey, Modifier.fillMaxSize())
+                VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
                 Box(
                     Modifier
                         .fillMaxSize()
