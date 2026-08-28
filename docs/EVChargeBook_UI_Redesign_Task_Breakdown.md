@@ -154,3 +154,29 @@ Trip v0.6 guardrails:
 - end marker uses a compact red flag without outer ring
 - raw GPS point lists are secondary troubleshooting UI, not default detail content
 - speed and altitude trends are supporting evidence and must omit unavailable/untrustworthy data
+
+---
+
+# Records & Stats v0.6 Approved Follow-up
+
+The 2026-08-29 Records / Stats review extends the same restrained v0.6 refinement to the two existing data-heavy tabs without changing product scope.
+
+Authority: `docs/RECORDS_STATS_V0.6_APPROVED_UI_BASELINE.md`  
+Owning issue: #159
+
+Implementation direction:
+
+- Records — one dominant ledger summary, denser charging timeline, compact add action
+- Add/Edit Charge — group fields by charging facts, location/type and vehicle snapshot while preserving existing business behavior
+- Stats overview — month summary first, then month comparison and clearly labeled Trip SOC estimate
+- Stats evidence — lightweight recent-month trend, charger mix, common-place ranking, lifetime totals and charge-to-charge/Trip coverage evidence
+- keep charging-record kWh facts and Trip SOC-derived energy estimates visibly separate
+
+Records & Stats v0.6 guardrails:
+
+- retain `EVDesignTokens.Energy.green` (`#32F080`) as the primary product green, used with restrained area/intensity
+- no blue primary action accent, bright glow, neon bloom or advertising-style chart effects
+- no schema, backend, cloud analytics, BMS/OBD or new business capability hidden inside visual work
+- unavailable evidence remains unavailable; do not fabricate charging efficiency, live SOC or BMS energy
+- prefer small Compose-native trend/bar primitives over a heavy chart dependency
+- keep #70 as physical v0.5 visual closeout, #42 as accessibility/state-safety acceptance and #22 as global spacing/inset polish
