@@ -1,7 +1,6 @@
 package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Flag
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -146,15 +147,13 @@ fun DashboardRecentTripCard(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    TripMetric(formatDistanceValue(trip.distanceMeters), "km", Modifier.weight(0.72f))
+                    TripMetric(formatDistanceValue(trip.distanceMeters), "km", Modifier.weight(1f))
                     MetricSeparator()
-                    TripMetric(formatDuration(trip.elapsedSeconds), "时长", Modifier.weight(0.74f))
+                    TripMetric(formatDuration(trip.elapsedSeconds), "时长", Modifier.weight(1f))
                     MetricSeparator()
-                    TripMetric(formatConsumptionValue(trip.averageConsumptionKwhPer100Km), "能耗", Modifier.weight(0.74f))
+                    TripMetric(formatConsumptionValue(trip.averageConsumptionKwhPer100Km), "kWh/100km", Modifier.weight(1.15f))
                     MetricSeparator()
-                    TripMetric(formatSocRange(trip.startSoc, trip.endSoc), "SOC", Modifier.weight(1.0f))
-                    MetricSeparator()
-                    TripMetric(formatMileageRange(trip.startMileageKm, trip.endMileageKm), "里程", Modifier.weight(1.8f))
+                    TripMetric(formatSocConsumed(trip.startSoc, trip.endSoc), "SOC", Modifier.weight(1f))
                 }
             }
         }
@@ -232,21 +231,22 @@ private fun TripEndpointRow(address: String) {
 private fun TripRouteRail() {
     val markerColor = MaterialTheme.colorScheme.onSurfaceVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier
-                .size(9.dp)
-                .border(1.4.dp, markerColor.copy(alpha = 0.88f), CircleShape)
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = "起点",
+            tint = markerColor.copy(alpha = 0.92f),
+            modifier = Modifier.size(16.dp)
         )
         Box(
             Modifier
-                .size(width = 1.dp, height = 36.dp)
-                .background(markerColor.copy(alpha = 0.40f))
+                .size(width = 1.dp, height = 28.dp)
+                .background(markerColor.copy(alpha = 0.38f))
         )
-        Box(
-            Modifier
-                .size(9.dp)
-                .background(markerColor.copy(alpha = 0.66f), CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f), CircleShape)
+        Icon(
+            imageVector = Icons.Default.Flag,
+            contentDescription = "终点",
+            tint = markerColor.copy(alpha = 0.82f),
+            modifier = Modifier.size(15.dp)
         )
     }
 }
@@ -305,7 +305,7 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "完成第一段行程后，这里会显示距离、SOC、里程与可信的能耗估算。",
+                        "完成第一段行程后，这里会显示距离、SOC 与可信的能耗估算。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -331,19 +331,11 @@ private fun endpointText(address: String?, latitude: Double?, longitude: Double?
     else -> "地点信息不可用"
 }
 
-private fun formatSocRange(start: Int?, end: Int?): String =
-    "${start?.let { "$it%" } ?: "--"}→${end?.let { "$it%" } ?: "--"}"
-
-private fun formatMileageRange(start: Double?, end: Double?): String = when {
-    start != null && end != null -> "${formatMileage(start)}→${formatMileage(end)}"
-    start != null -> "${formatMileage(start)}→--"
-    end != null -> "--→${formatMileage(end)}"
-    else -> "--"
+private fun formatSocConsumed(start: Int?, end: Int?): String = when {
+    start == null || end == null -> "--"
+    end > start -> "--"
+    else -> "消耗 ${start - end}%"
 }
-
-private fun formatMileage(value: Double): String =
-    if (value % 1.0 == 0.0) String.format(Locale.US, "%,.0f", value)
-    else String.format(Locale.US, "%,.1f", value)
 
 private fun formatConsumptionValue(value: Double?): String =
     value?.takeIf { it.isFinite() && it >= 0.0 }
