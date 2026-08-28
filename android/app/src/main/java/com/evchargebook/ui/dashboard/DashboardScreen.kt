@@ -29,6 +29,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
@@ -43,6 +44,12 @@ fun DashboardScreen(
     onAddClick: () -> Unit,
     onSelectVehicle: (Long) -> Unit
 ) {
+    val selectedVehicleId = state.vehicle?.id
+    val latestCompletedTrip = state.trips
+        .asSequence()
+        .filter { it.vehicleId == selectedVehicleId && it.status == TripStatus.COMPLETED }
+        .maxByOrNull { it.endedAtEpochMillis ?: it.startedAtEpochMillis }
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -54,7 +61,14 @@ fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
     ) {
 //        item { DashboardBrandHeader() }
-        item { HeroVehicleCard(state.vehicle, state.currentSoc, state.currentMileageKm) }
+        item {
+            HeroVehicleCard(
+                vehicle = state.vehicle,
+                currentSoc = state.currentSoc,
+                currentMileageKm = state.currentMileageKm,
+                latestTrip = latestCompletedTrip
+            )
+        }
         item { EnergyCockpitCard(state) }
         item { RecentChargingHeader(onAddClick) }
 
