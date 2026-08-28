@@ -30,7 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
-import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripValidityRules
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
@@ -52,7 +52,7 @@ fun DashboardScreen(
     val selectedVehicleId = state.vehicle?.id
     val latestCompletedTrip = state.trips
         .asSequence()
-        .filter { it.vehicleId == selectedVehicleId && it.status == TripStatus.COMPLETED }
+        .filter { it.vehicleId == selectedVehicleId && TripValidityRules.isEligibleForAnalytics(it) }
         .maxByOrNull { it.endedAtEpochMillis ?: it.startedAtEpochMillis }
 
     LazyColumn(

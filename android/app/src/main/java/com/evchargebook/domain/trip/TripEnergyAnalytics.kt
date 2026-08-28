@@ -1,7 +1,7 @@
 package com.evchargebook.domain.trip
 
 import com.evchargebook.data.entity.TripSessionEntity
-import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripValidityRules
 
 data class TripEnergySummary(
     val completedTripCount: Int,
@@ -19,7 +19,7 @@ object TripEnergyAnalytics {
         endExclusiveEpochMillis: Long? = null
     ): TripEnergySummary {
         val completed = trips.filter { trip ->
-            if (trip.status != TripStatus.COMPLETED) return@filter false
+            if (!TripValidityRules.isEligibleForAnalytics(trip)) return@filter false
             val occurredAt = trip.endedAtEpochMillis ?: trip.startedAtEpochMillis
             (startInclusiveEpochMillis == null || occurredAt >= startInclusiveEpochMillis) &&
                 (endExclusiveEpochMillis == null || occurredAt < endExclusiveEpochMillis)

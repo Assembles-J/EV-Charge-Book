@@ -19,6 +19,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.TripValidityRules
+import com.evchargebook.domain.TripValidityStatus
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
@@ -115,7 +117,7 @@ fun TripReadyScreen(
             item {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("全部行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("TRIP HISTORY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("短途只提示检查；明确空行程不会进入汇总统计", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             if (orderedTrips.isEmpty()) {
@@ -217,6 +219,7 @@ private fun ReadyRecentTripRow(
     onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val validity = remember(trip) { TripValidityRules.assess(trip) }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -231,16 +234,28 @@ private fun ReadyRecentTripRow(
         }
         Spacer(Modifier.width(MaterialTheme.spacing.md))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                SimpleDateFormat("MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(trip.startedAtEpochMillis)),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                Text(
+                    SimpleDateFormat("MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(trip.startedAtEpochMillis)),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+                when (validity.status) {
+                    TripValidityStatus.INVALID -> TripValidityBadge("无效", true)
+                    TripValidityStatus.REVIEW -> TripValidityBadge("建议检查", false)
+                    else -> Unit
+                }
+            }
             Text(
                 "${String.format(Locale.US, "%.1f", trip.distanceMeters / 1000.0)} km · ${formatReadyDuration(trip.elapsedSeconds)}",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (validity.status == TripValidityStatus.INVALID) {
+                Text("明确空/异常行程已从 Dashboard 与汇总统计排除，可确认后删除。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            } else if (validity.status == TripValidityStatus.REVIEW) {
+                Text("距离和时长都很短，仅提示检查，不自动排除或删除。", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             trip.averageConsumptionKwhPer100Km?.let {
@@ -256,6 +271,19 @@ private fun ReadyRecentTripRow(
                 modifier = Modifier.size(19.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun TripValidityBadge(text: String, invalid: Boolean) {
+    val color = if (invalid) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary
+    Surface(shape = CircleShape, color = color.copy(alpha = .12f)) {
+        Text(
+            text,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
     }
 }
 

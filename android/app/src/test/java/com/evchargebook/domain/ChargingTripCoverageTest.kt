@@ -57,12 +57,30 @@ class ChargingTripCoverageTest {
             startedAtEpochMillis = 2_000,
             endedAtEpochMillis = 4_000,
             distanceMeters = 80_000.0,
+            elapsedSeconds = 2,
             status = TripStatus.INTERRUPTED
         )
 
         val summary = ChargingTripCoverage.summarize(records, listOf(trip))
 
         assertEquals(0, summary.intervals.size)
+    }
+
+    @Test
+    fun `clearly empty completed trip does not inflate coverage count`() {
+        val records = listOf(
+            charge(1, 1_000, 10_000.0),
+            charge(2, 10_000, 10_100.0)
+        )
+        val trips = listOf(
+            trip(1, 2_000, 4_000, 40_000.0),
+            trip(2, 5_000, 8_000, 0.0)
+        )
+
+        val summary = ChargingTripCoverage.summarize(records, trips)
+
+        assertEquals(1, summary.intervals.single().completedTripCount)
+        assertEquals(40.0, summary.completedTripDistanceKm, 0.0001)
     }
 
     private fun charge(id: Long, time: Long, odometer: Double) = ChargingRecordEntity(
@@ -82,6 +100,7 @@ class ChargingTripCoverageTest {
         startedAtEpochMillis = start,
         endedAtEpochMillis = end,
         distanceMeters = distanceMeters,
+        elapsedSeconds = ((end - start) / 1_000).coerceAtLeast(1),
         status = TripStatus.COMPLETED
     )
 }
