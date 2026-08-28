@@ -7,6 +7,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,12 +19,22 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsCar
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -32,6 +43,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,9 +62,13 @@ fun HeroVehicleCard(
     vehicle: VehicleEntity?,
     currentSoc: Int? = null,
     currentMileageKm: Double? = null,
-    latestTrip: TripSessionEntity? = null
+    latestTrip: TripSessionEntity? = null,
+    vehicles: List<VehicleEntity> = emptyList(),
+    onSelectVehicle: (Long) -> Unit = {}
 ) {
     val cockpit = LocalCockpitColors.current
+    val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
+    var vehicleMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
@@ -64,8 +80,6 @@ fun HeroVehicleCard(
         Box(Modifier.fillMaxSize()) {
             VehicleStage(vehicle, Modifier.fillMaxSize())
 
-            // Keep the Hero as one continuous artwork surface. This scrim only protects
-            // text contrast; it must not read as a separate title block.
             Box(
                 Modifier
                     .fillMaxSize()
@@ -111,6 +125,66 @@ fun HeroVehicleCard(
             }
 
             if (vehicle != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 14.dp, end = 14.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .size(width = 54.dp, height = 48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x8F07110F))
+                            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
+                            .clickable(enabled = selectableVehicles.isNotEmpty()) {
+                                vehicleMenuExpanded = true
+                            }
+                            .padding(horizontal = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = "切换车辆",
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = 0.92f),
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = vehicleMenuExpanded,
+                        onDismissRequest = { vehicleMenuExpanded = false }
+                    ) {
+                        selectableVehicles.forEach { candidate ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            candidate.model,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            candidate.brand,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    vehicleMenuExpanded = false
+                                    onSelectVehicle(candidate.id)
+                                }
+                            )
+                        }
+                    }
+                }
+
                 HeroDynamicStateOverlay(
                     currentSoc = currentSoc,
                     currentMileageKm = currentMileageKm,
@@ -197,8 +271,10 @@ private fun HeroDynamicStateOverlay(
             )
             MetricDivider()
             HeroMetric(
+                icon = Icons.Default.Speed,
                 label = "当前里程",
                 value = currentMileageKm?.let(::formatMileage) ?: "--",
+                unit = if (currentMileageKm != null) "km" else null,
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 12.dp)
@@ -218,12 +294,30 @@ private fun HeroDynamicStateOverlay(
 private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modifier = Modifier) {
     val cockpit = LocalCockpitColors.current
     Column(modifier = modifier.padding(end = 12.dp)) {
-        Text(
-            safeSoc?.let { "$it%" } ?: "--",
-            style = MaterialTheme.typography.headlineLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = if (safeSoc != null) EVDesignTokens.Energy.green else cockpit.primaryText
-        )
+        if (safeSoc != null) {
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    safeSoc.toString(),
+                    style = MaterialTheme.typography.headlineLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = EVDesignTokens.Energy.green
+                )
+                Text(
+                    "%",
+                    modifier = Modifier.padding(bottom = 2.dp),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = cockpit.primaryText
+                )
+            }
+        } else {
+            Text(
+                "--",
+                style = MaterialTheme.typography.headlineLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = cockpit.primaryText
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Box(
             Modifier
@@ -245,17 +339,42 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
 }
 
 @Composable
-private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifier) {
+private fun HeroMetric(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    unit: String? = null,
+    modifier: Modifier = Modifier
+) {
     val cockpit = LocalCockpitColors.current
     Column(modifier = modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = cockpit.secondaryText,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+        }
         Spacer(Modifier.height(4.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-            color = cockpit.primaryText
-        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = cockpit.primaryText
+            )
+            if (unit != null) {
+                Spacer(Modifier.size(3.dp))
+                Text(
+                    unit,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = cockpit.primaryText.copy(alpha = 0.86f)
+                )
+            }
+        }
     }
 }
 
@@ -265,29 +384,53 @@ private fun HeroRecentTripMetric(trip: TripSessionEntity?, modifier: Modifier = 
     val distance = trip
         ?.distanceMeters
         ?.takeIf { it.isFinite() && it > 0.0 }
-        ?.let(::formatTripDistance)
-        ?: "--"
     val consumption = trip
         ?.averageConsumptionKwhPer100Km
         ?.takeIf { it.isFinite() && it >= 0.0 }
-        ?.let { String.format(Locale.US, "%.1f kWh/100km", it) }
 
     Column(modifier = modifier) {
-        Text("最近行程", style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = Icons.Default.Route,
+                contentDescription = null,
+                tint = cockpit.secondaryText,
+                modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.size(4.dp))
+            Text("最近行程", style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+        }
         Spacer(Modifier.height(4.dp))
-        Text(
-            distance,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Medium,
-            color = cockpit.primaryText
-        )
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                distance?.let(::formatTripDistance) ?: "--",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Medium,
+                color = cockpit.primaryText
+            )
+            if (distance != null) {
+                Spacer(Modifier.size(3.dp))
+                Text(
+                    if (distance >= 1000.0) "km" else "m",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = cockpit.primaryText.copy(alpha = 0.86f)
+                )
+            }
+        }
         if (consumption != null) {
             Spacer(Modifier.height(2.dp))
-            Text(
-                consumption,
-                style = MaterialTheme.typography.labelSmall,
-                color = EVDesignTokens.Energy.green
-            )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Text(
+                    String.format(Locale.US, "%.1f", consumption),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = EVDesignTokens.Energy.green
+                )
+                Spacer(Modifier.size(3.dp))
+                Text(
+                    "kWh/100km",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = cockpit.secondaryText
+                )
+            }
         }
     }
 }
@@ -348,14 +491,14 @@ private fun VehicleSilhouetteFallback(modifier: Modifier = Modifier) {
 
 private fun formatMileage(value: Double): String =
     if (value % 1.0 == 0.0) {
-        String.format(Locale.US, "%,.0f km", value)
+        String.format(Locale.US, "%,.0f", value)
     } else {
-        String.format(Locale.US, "%,.1f km", value)
+        String.format(Locale.US, "%,.1f", value)
     }
 
 private fun formatTripDistance(meters: Double): String =
     if (meters >= 1000.0) {
-        String.format(Locale.US, "%.1f km", meters / 1000.0)
+        String.format(Locale.US, "%.1f", meters / 1000.0)
     } else {
-        String.format(Locale.US, "%.0f m", meters)
+        String.format(Locale.US, "%.0f", meters)
     }

@@ -63,9 +63,11 @@ fun DashboardScreen(
         item {
             HeroVehicleCard(
                 vehicle = state.vehicle,
+                vehicles = state.vehicles,
                 currentSoc = state.currentSoc,
                 currentMileageKm = state.currentMileageKm,
-                latestTrip = latestCompletedTrip
+                latestTrip = latestCompletedTrip,
+                onSelectVehicle = onSelectVehicle
             )
         }
         item { DashboardRecentTripCard(latestCompletedTrip) }
