@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.matchParentSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -215,7 +214,7 @@ fun HeroVehicleCard(
                     latestTrip = latestTrip,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(horizontal = 12.dp, bottom = 12.dp)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                 )
             }
         }
@@ -341,7 +340,7 @@ private fun HeroDynamicStatePanel(
         // so the frost is created with controlled translucency and edge highlights.
         Box(
             Modifier
-                .matchParentSize()
+                .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
                         listOf(
