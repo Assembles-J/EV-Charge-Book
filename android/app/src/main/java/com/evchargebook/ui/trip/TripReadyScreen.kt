@@ -144,7 +144,11 @@ fun TripReadyScreen(
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("删除这条行程？") },
-            text = { Text("行程及关联轨迹点会一并删除，删除后无法恢复。") },
+            text = {
+                Text(
+                    "行程及关联轨迹点会一并删除，删除后无法恢复。若这条行程提供了最新 SOC 或里程，车辆当前状态会根据剩余记录重新计算。"
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
