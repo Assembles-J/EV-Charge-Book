@@ -9,13 +9,16 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
@@ -37,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -69,7 +73,8 @@ fun HeroVehicleCard(
     vehicles: List<VehicleEntity> = emptyList(),
     vehicleSwitchEnabled: Boolean = true,
     onSelectVehicle: (Long) -> Unit = {},
-    artworkKey: String? = null
+    artworkKey: String? = null,
+    edgeToEdgeTop: Boolean = false
 ) {
     val cockpit = LocalCockpitColors.current
     val context = LocalContext.current
@@ -82,6 +87,11 @@ fun HeroVehicleCard(
         } ?: flowOf(null)
     }.collectAsState(initial = null)
     val effectiveArtworkKey = artworkKey?.trim()?.takeIf { it.isNotEmpty() } ?: localArtworkKey
+    val topSystemInset = if (edgeToEdgeTop) {
+        WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+    } else {
+        0.dp
+    }
 
     val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
     val canSwitchVehicle = vehicleSwitchEnabled && selectableVehicles.size > 1
@@ -92,116 +102,119 @@ fun HeroVehicleCard(
         shape = MaterialTheme.shapes.large,
         color = Color(0xFF06100C)
     ) {
-        Column {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1.46f)
+        ) {
+            VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(1.46f)
-            ) {
-                VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
-                Box(
-                    Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color(0x7A020806),
-                                    Color(0x16020806),
-                                    Color.Transparent,
-                                    Color(0x12020806)
-                                )
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xA8020806),
+                                Color(0x28020806),
+                                Color.Transparent,
+                                Color(0x26020806),
+                                Color(0x9806100C)
                             )
                         )
-                )
+                    )
+            )
 
-                Column(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(start = 16.dp, top = 14.dp, end = 72.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
-                        Spacer(Modifier.size(8.dp))
-                        Text(
-                            "MY EV",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Medium,
-                            color = cockpit.primaryText
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(
+                        start = 16.dp,
+                        top = topSystemInset + 14.dp,
+                        end = 72.dp
+                    )
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
+                    Spacer(Modifier.size(8.dp))
                     Text(
-                        vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
-                        style = MaterialTheme.typography.titleLarge,
+                        "MY EV",
+                        style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.Medium,
-                        color = cockpit.primaryText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        color = cockpit.primaryText
                     )
                 }
-
-                if (vehicle != null) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(top = 12.dp, end = 12.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(CircleShape)
-                                .background(Color(0x8F07110F))
-                                .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                                .clickable(enabled = canSwitchVehicle) {
-                                    vehicleMenuExpanded = true
-                                },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
-                                tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 1f else 0.45f),
-                                modifier = Modifier.size(23.dp)
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = vehicleMenuExpanded && canSwitchVehicle,
-                            onDismissRequest = { vehicleMenuExpanded = false }
-                        ) {
-                            selectableVehicles.forEach { candidate ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Column {
-                                            Text(
-                                                candidate.model,
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
-                                            )
-                                            Text(
-                                                candidate.brand,
-                                                style = MaterialTheme.typography.labelMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    },
-                                    onClick = {
-                                        vehicleMenuExpanded = false
-                                        onSelectVehicle(candidate.id)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Medium,
+                    color = cockpit.primaryText,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
 
             if (vehicle != null) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = topSystemInset + 12.dp, end = 12.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x7207110F))
+                            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                            .clickable(enabled = canSwitchVehicle) {
+                                vehicleMenuExpanded = true
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
+                            tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 1f else 0.45f),
+                            modifier = Modifier.size(23.dp)
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = vehicleMenuExpanded && canSwitchVehicle,
+                        onDismissRequest = { vehicleMenuExpanded = false }
+                    ) {
+                        selectableVehicles.forEach { candidate ->
+                            DropdownMenuItem(
+                                text = {
+                                    Column {
+                                        Text(
+                                            candidate.model,
+                                            style = MaterialTheme.typography.bodyLarge,
+                                            fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                        )
+                                        Text(
+                                            candidate.brand,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    vehicleMenuExpanded = false
+                                    onSelectVehicle(candidate.id)
+                                }
+                            )
+                        }
+                    }
+                }
+
                 HeroDynamicStatePanel(
                     currentSoc = currentSoc,
                     currentMileageKm = currentMileageKm,
                     latestTrip = latestTrip,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 12.dp)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
                 )
             }
         }
@@ -290,13 +303,54 @@ private fun HeroDynamicStatePanel(
     )
     val panelShape = MaterialTheme.shapes.large
 
-    Surface(
+    Box(
         modifier = modifier
             .fillMaxWidth()
-            .border(1.dp, Color.White.copy(alpha = 0.12f), panelShape),
-        shape = panelShape,
-        color = Color(0xFF091511)
+            .shadow(
+                elevation = 18.dp,
+                shape = panelShape,
+                ambientColor = Color.Black.copy(alpha = 0.38f),
+                spotColor = Color.Black.copy(alpha = 0.50f)
+            )
+            .clip(panelShape)
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.10f),
+                        Color(0xB013211C),
+                        Color(0xD00A1512)
+                    )
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.linearGradient(
+                    listOf(
+                        Color.White.copy(alpha = 0.30f),
+                        Color.White.copy(alpha = 0.10f),
+                        EVDesignTokens.Energy.green.copy(alpha = 0.16f)
+                    )
+                ),
+                shape = panelShape
+            )
     ) {
+        // The panel now sits on top of the artwork. The translucent smoke/highlight layers
+        // intentionally preserve some of the underlying image so the surface reads as glass
+        // instead of a second opaque card. Compose has no true arbitrary backdrop blur here,
+        // so the frost is created with controlled translucency and edge highlights.
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color(0x381D6D49),
+                            Color.Transparent,
+                            Color(0x24174634)
+                        )
+                    )
+                )
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -61,8 +61,10 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(
-            horizontal = 8.dp,
-            vertical = 8.dp
+            start = 8.dp,
+            top = 0.dp,
+            end = 8.dp,
+            bottom = 8.dp
         ),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -73,6 +75,7 @@ fun DashboardScreen(
                 currentSoc = state.currentSoc,
                 currentMileageKm = state.currentMileageKm,
                 latestTrip = latestCompletedTrip,
+                edgeToEdgeTop = true,
                 vehicleSwitchEnabled = state.activeTrip == null,
                 onSelectVehicle = onSelectVehicle
             )

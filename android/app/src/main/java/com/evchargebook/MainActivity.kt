@@ -1,6 +1,7 @@
 package com.evchargebook
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -26,6 +27,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
 import com.evchargebook.bluetooth.BluetoothConnectionStateChecker
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
@@ -40,6 +42,7 @@ import com.evchargebook.ui.records.RecordEditScreen
 import com.evchargebook.ui.records.RecordsScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
+import com.evchargebook.ui.theme.LocalAppThemeController
 import com.evchargebook.ui.trip.TripReadyScreen
 import com.evchargebook.ui.trip.TripScreen
 import com.evchargebook.ui.vehicle.BluetoothPromptScreen
@@ -289,6 +292,16 @@ fun MainApp(
     }
 
     val hasOverlayPage = editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || editingRecord != null || state.selectedTripId != null
+    val themeController = LocalAppThemeController.current
+    SideEffect {
+        (context as? Activity)?.window?.let { window ->
+            WindowCompat.getInsetsController(window, window.decorView).apply {
+                // Dashboard is always visually dark because the Hero artwork reaches the system bar.
+                isAppearanceLightStatusBars = if (!hasOverlayPage && tab == 0) false else !themeController.darkTheme
+                isAppearanceLightNavigationBars = !themeController.darkTheme
+            }
+        }
+    }
     BackHandler(enabled = hasOverlayPage) {
         when {
             state.selectedTripId != null -> viewModel.closeTripDetail()
@@ -304,6 +317,13 @@ fun MainApp(
     AppUpdatePrompt()
 
     Scaffold(
+        // Only the Dashboard owns the top system-bar backdrop. Other screens keep the
+        // existing Scaffold safe-drawing insets and therefore retain their current layout.
+        contentWindowInsets = if (!hasOverlayPage && tab == 0) {
+            WindowInsets(0, 0, 0, 0)
+        } else {
+            ScaffoldDefaults.contentWindowInsets
+        },
         containerColor = MaterialTheme.colorScheme.background,
         snackbarHost = {
             SnackbarHost(snackbarHostState) { data ->
