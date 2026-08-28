@@ -12,6 +12,9 @@ interface VehicleCatalogDao {
     @Query("SELECT * FROM vehicle_catalog ORDER BY brand, series, modelYear DESC, trimName")
     fun observeAll(): Flow<List<VehicleCatalogEntity>>
 
+    @Query("SELECT heroArtworkKey FROM vehicle_catalog WHERE catalogId = :catalogId LIMIT 1")
+    fun observeHeroArtworkKey(catalogId: String): Flow<String?>
+
     @Query("SELECT COUNT(*) FROM vehicle_catalog")
     suspend fun count(): Int
 
