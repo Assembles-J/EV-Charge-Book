@@ -45,6 +45,7 @@ import com.evchargebook.ui.vehicle.BluetoothPromptScreen
 import com.evchargebook.ui.vehicle.VehicleCatalogScreen
 import com.evchargebook.ui.vehicle.VehicleEditScreen
 import com.evchargebook.ui.vehicle.VehicleScreen
+import com.evchargebook.update.AppUpdatePrompt
 import com.evchargebook.viewmodel.MainViewModel
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -245,6 +246,8 @@ fun MainApp(
             editVehicle -> editVehicle = false
         }
     }
+
+    AppUpdatePrompt()
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
