@@ -21,16 +21,10 @@ The app always has a local fallback. A first successful network load is cached o
 Default endpoint:
 
 ```text
-https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
+https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/manifest-v1.json
 ```
 
-The endpoint can be overridden at build time with `HERO_ARTWORK_MANIFEST_URL`.
-
-The public path deliberately reuses the same `release-meta` route already used by the Android updater. Hero binaries reuse the existing public `releases` route:
-
-```text
-https://groupim.cn/ev-charge-book/releases/hero-assets/<file>.webp
-```
+The endpoint can be overridden at build time with `HERO_ARTWORK_MANIFEST_URL`, so a CDN or first-party object store can replace GitHub Raw later without changing the runtime architecture.
 
 Each artwork entry has a stable key, version, and HTTPS URL. Increment the version whenever the remote visual changes so the app gets a new Coil cache key without deleting the old cache globally.
 
@@ -48,7 +42,7 @@ hero-assets/
     xiaomi_yu7_2025.webp
 ```
 
-Files under `hero-assets/remote` are repository/deployment assets only. They are outside `android/app/src/main/res`, so Gradle does not package them into the APK.
+Files under `hero-assets/remote` are network-delivery assets only. They are outside `android/app/src/main/res`, so Gradle does not package them into the APK.
 
 ## APK size effect
 
@@ -59,49 +53,47 @@ The packaged fallback is the existing Compose vehicle icon/gradient and therefor
 ## Caching and offline behavior
 
 1. Resolve the selected vehicle to a stable Hero key.
-2. Read the versioned manifest from the public endpoint.
+2. Read the versioned manifest from GitHub Raw (or a build-time override).
 3. Persist the last valid manifest in app preferences.
 4. Load the resolved artwork with Coil.
 5. Enable Coil memory cache and disk cache with a key containing `vehicleKey + version`.
-6. If the manifest is unavailable, try the repository raw URL as a secondary source.
+6. If the manifest is unavailable, use the catalog's direct GitHub Raw URL for the known vehicle.
 7. If no network/cached image is available, keep the lightweight Compose fallback visible.
 
-No screen should block waiting for artwork.
+No screen blocks waiting for artwork.
 
-## Publishing
+## Updating Hero artwork
 
-`.github/workflows/hero-assets-publish.yml` publishes `hero-assets/**` independently of an APK release. A Hero image can therefore be replaced without rebuilding or releasing the Android app.
+A Hero image can change without rebuilding or releasing the APK:
 
-The workflow first uploads the repository asset package, then activates it into the public directories already used by releases:
+1. replace the matching file under `hero-assets/remote/`;
+2. increment that artwork's `version` in `manifest-v1.json`;
+3. merge the asset change to `main`.
 
-```text
-/opt/ev-charge-book/release-meta/hero-assets-v1.json
-/opt/ev-charge-book/releases/hero-assets/*.webp
-```
+GitHub Raw then serves the new file and the version change creates a fresh Coil disk-cache key on the next manifest refresh.
 
-The manifest is copied last so clients never discover URLs before the corresponding images are present.
+`.github/workflows/hero-assets-publish.yml` is intentionally validation-only. It checks:
 
-The workflow validates:
+- manifest schema version;
+- HTTPS GitHub Raw URLs;
+- manifest/file consistency;
+- non-empty artwork files;
+- remote WebP hard ceiling of 2.5 MB per file.
 
-- manifest schema version
-- HTTPS production URLs
-- manifest/file consistency
-- remote WebP hard ceiling of 2.5 MB per file
-- public manifest reachability after upload
-- every manifest image URL is publicly readable
+A previous first-party-server publishing experiment was not retained because the current public web routing does not expose arbitrary Hero asset paths reliably. The runtime remains ready for a future CDN through `HERO_ARTWORK_MANIFEST_URL`.
 
 ## Local APK budget
 
 Android CI rejects WebP files larger than 350 KB under `android/app/src/main/res/drawable-nodpi`.
 
-Use remote Hero assets for large photographic artwork. Keep only small icons or intentional lightweight fallback assets in APK resources.
+Use remote Hero assets for photographic artwork. Keep only small icons or intentional lightweight fallback assets in APK resources.
 
 ## Recommended future artwork target
 
 Remote artwork should normally be optimized to:
 
-- 1200x900 or 1440x1080
-- WebP lossy
-- roughly 100-350 KB when visual quality allows
+- 1200x900 or 1440x1080;
+- WebP lossy;
+- roughly 100-350 KB when visual quality allows.
 
 The 2.5 MB workflow limit is a safety ceiling, not the target size.
