@@ -36,3 +36,4 @@ google-services.json
 # Vehicle Hero artwork is delivered from the first-party CDN.
 # Keep only the tiny manifest/configuration in Git.
 hero-assets/**/*.webp
+hero-assets/**/*.png
