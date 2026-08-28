@@ -60,19 +60,21 @@ fun AppUpdatePrompt() {
     LaunchedEffect(Unit) {
         runCatching { manager.checkForUpdate() }
             .onSuccess { info ->
-                update = info
-                if (info != null) phase = UpdatePhase.DISCOVERED
+                if (info != null) {
+                    // Move out of IDLE before publishing the update payload so the dialog is
+                    // created only once. IDLE itself never renders a dialog.
+                    phase = UpdatePhase.DISCOVERED
+                    update = info
+                }
             }
             .onFailure { error ->
                 Log.w(TAG, "Update discovery failed for ${BuildConfig.UPDATE_MANIFEST_URL}", error)
             }
     }
 
-    val info = update ?: return
-
     LaunchedEffect(downloadToken) {
         if (downloadToken <= 0) return@LaunchedEffect
-        phase = UpdatePhase.DOWNLOADING
+        val info = update ?: return@LaunchedEffect
         errorMessage = null
         downloadedUri = null
         runCatching { manager.downloadAndVerify(info) }
@@ -87,8 +89,20 @@ fun AppUpdatePrompt() {
             }
     }
 
+    val info = update
+
     fun deferOptionalUpdate() {
-        if (!info.mandatory) update = null
+        if (info?.mandatory != true) {
+            phase = UpdatePhase.IDLE
+            update = null
+        }
+    }
+
+    fun startDownload() {
+        if (info == null) return
+        // Hide the decision dialog synchronously before starting background work.
+        phase = UpdatePhase.DOWNLOADING
+        downloadToken += 1
     }
 
     fun continueInstall() {
@@ -103,61 +117,73 @@ fun AppUpdatePrompt() {
 
     when (phase) {
         UpdatePhase.IDLE,
-        UpdatePhase.DISCOVERED -> UpdateDecisionDialog(
-            icon = Icons.Rounded.SystemUpdateAlt,
-            accent = EVDesignTokens.Energy.green,
-            title = "发现新版本 ${info.versionName}",
-            lines = listOf(
-                "是否现在下载更新？",
-                "确认后由 Android 下载管理器在后台下载并校验，进度会显示在系统通知栏。",
-                "下载期间总览、记录、统计、行程和车辆页面都可以正常使用。"
-            ),
-            confirmText = "更新",
-            dismissText = if (info.mandatory) null else "稍后",
-            onConfirm = { downloadToken += 1 },
-            onDismiss = ::deferOptionalUpdate
-        )
-
         UpdatePhase.DOWNLOADING -> Unit
 
-        UpdatePhase.READY -> UpdateDecisionDialog(
-            icon = Icons.Rounded.CheckCircle,
-            accent = EVDesignTokens.Energy.success,
-            title = "${info.versionName} 已准备好",
-            lines = listOf(
-                "更新包已下载并通过 SHA-256 完整性校验。",
-                "点击安装后会进入 Android 系统安装界面；安装前不会退出当前应用。"
-            ),
-            confirmText = "安装",
-            dismissText = if (info.mandatory) null else "稍后",
-            onConfirm = ::continueInstall,
-            onDismiss = ::deferOptionalUpdate
-        )
+        UpdatePhase.DISCOVERED -> {
+            val current = info ?: return
+            UpdateDecisionDialog(
+                icon = Icons.Rounded.SystemUpdateAlt,
+                accent = EVDesignTokens.Energy.green,
+                title = "发现新版本 ${current.versionName}",
+                lines = listOf(
+                    "是否现在下载更新？",
+                    "确认后由 Android 下载管理器在后台下载并校验，进度会显示在系统通知栏。",
+                    "下载期间总览、记录、统计、行程和车辆页面都可以正常使用。"
+                ),
+                confirmText = "更新",
+                dismissText = if (current.mandatory) null else "稍后",
+                onConfirm = ::startDownload,
+                onDismiss = ::deferOptionalUpdate
+            )
+        }
 
-        UpdatePhase.PERMISSION_REQUIRED -> UpdateDecisionDialog(
-            icon = Icons.Rounded.CheckCircle,
-            accent = EVDesignTokens.Energy.warning,
-            title = "允许安装此来源应用",
-            lines = listOf(
-                "Android 需要先允许 EV Charge Book 安装下载的更新包。",
-                "完成系统授权后返回这里，再点击继续安装。"
-            ),
-            confirmText = "继续安装",
-            dismissText = if (info.mandatory) null else "稍后",
-            onConfirm = ::continueInstall,
-            onDismiss = ::deferOptionalUpdate
-        )
+        UpdatePhase.READY -> {
+            val current = info ?: return
+            UpdateDecisionDialog(
+                icon = Icons.Rounded.CheckCircle,
+                accent = EVDesignTokens.Energy.success,
+                title = "${current.versionName} 已准备好",
+                lines = listOf(
+                    "更新包已下载并通过 SHA-256 完整性校验。",
+                    "点击安装后会进入 Android 系统安装界面；安装前不会退出当前应用。"
+                ),
+                confirmText = "安装",
+                dismissText = if (current.mandatory) null else "稍后",
+                onConfirm = ::continueInstall,
+                onDismiss = ::deferOptionalUpdate
+            )
+        }
 
-        UpdatePhase.FAILED -> UpdateDecisionDialog(
-            icon = Icons.Rounded.ErrorOutline,
-            accent = EVDesignTokens.Energy.danger,
-            title = "更新失败",
-            lines = listOf(errorMessage ?: "更新包下载失败，请稍后重试"),
-            confirmText = "重试",
-            dismissText = if (info.mandatory) null else "稍后",
-            onConfirm = { downloadToken += 1 },
-            onDismiss = ::deferOptionalUpdate
-        )
+        UpdatePhase.PERMISSION_REQUIRED -> {
+            val current = info ?: return
+            UpdateDecisionDialog(
+                icon = Icons.Rounded.CheckCircle,
+                accent = EVDesignTokens.Energy.warning,
+                title = "允许安装此来源应用",
+                lines = listOf(
+                    "Android 需要先允许 EV Charge Book 安装下载的更新包。",
+                    "完成系统授权后返回这里，再点击继续安装。"
+                ),
+                confirmText = "继续安装",
+                dismissText = if (current.mandatory) null else "稍后",
+                onConfirm = ::continueInstall,
+                onDismiss = ::deferOptionalUpdate
+            )
+        }
+
+        UpdatePhase.FAILED -> {
+            val current = info ?: return
+            UpdateDecisionDialog(
+                icon = Icons.Rounded.ErrorOutline,
+                accent = EVDesignTokens.Energy.danger,
+                title = "更新失败",
+                lines = listOf(errorMessage ?: "更新包下载失败，请稍后重试"),
+                confirmText = "重试",
+                dismissText = if (current.mandatory) null else "稍后",
+                onConfirm = ::startDownload,
+                onDismiss = ::deferOptionalUpdate
+            )
+        }
     }
 }
 
