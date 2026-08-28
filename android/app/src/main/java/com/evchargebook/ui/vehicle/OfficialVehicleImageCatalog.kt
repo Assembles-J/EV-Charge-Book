@@ -9,12 +9,12 @@ data class OfficialVehicleImage(
 )
 
 object OfficialVehicleImageCatalog {
-    private const val RAW_HERO_BASE =
-        "https://raw.githubusercontent.com/Assembles-J/EV-Charge-Book/main/hero-assets/remote"
+    private const val REMOTE_HERO_BASE =
+        "https://groupim.cn/ev-charge-book/releases/hero-assets"
 
     private fun remote(key: String, fileName: String, label: String) = OfficialVehicleImage(
         key = key,
-        remoteFallbackUrl = "$RAW_HERO_BASE/$fileName",
+        remoteFallbackUrl = "$REMOTE_HERO_BASE/$fileName",
         sourceLabel = label
     )
 
