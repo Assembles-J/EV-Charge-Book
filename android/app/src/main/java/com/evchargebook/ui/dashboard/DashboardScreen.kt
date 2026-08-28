@@ -130,7 +130,7 @@ private fun RecentChargingHeader(onAddClick: () -> Unit) {
         }
         Box(
             modifier = Modifier
-                .size(42.dp)
+                .size(48.dp)
                 .clip(CircleShape)
                 .background(EVDesignTokens.Energy.green)
                 .clickable(onClick = onAddClick),
