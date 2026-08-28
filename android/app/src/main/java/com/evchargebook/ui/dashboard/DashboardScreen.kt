@@ -55,12 +55,11 @@ fun DashboardScreen(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(
-            horizontal = MaterialTheme.spacing.md,
-            vertical = MaterialTheme.spacing.md
+            horizontal = 8.dp,
+            vertical = 8.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-//        item { DashboardBrandHeader() }
         item {
             HeroVehicleCard(
                 vehicle = state.vehicle,
@@ -80,51 +79,7 @@ fun DashboardScreen(
                 ChargingTimelineRow(record)
             }
         }
-        item { Spacer(Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun DashboardBrandHeader() {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    "EV Charge Book",
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                Spacer(Modifier.size(MaterialTheme.spacing.xs))
-                Text(
-                    "v0.5",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = EVDesignTokens.Energy.green
-                )
-            }
-            Text(
-                "DRIVE · CHARGE · REVIEW",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        Box(
-            modifier = Modifier
-                .size(38.dp)
-                .background(EVDesignTokens.Energy.green.copy(alpha = 0.10f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Bolt,
-                contentDescription = null,
-                tint = EVDesignTokens.Energy.green,
-                modifier = Modifier.size(20.dp)
-            )
-        }
+        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 

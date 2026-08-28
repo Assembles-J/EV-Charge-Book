@@ -7,12 +7,11 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,7 +33,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -42,7 +40,6 @@ import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.LocalCockpitColors
-import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
 import java.util.Locale
 
@@ -56,38 +53,54 @@ fun HeroVehicleCard(
     latestTrip: TripSessionEntity? = null
 ) {
     val cockpit = LocalCockpitColors.current
-    val background = Brush.linearGradient(
-        listOf(
-            Color(0xFF06100C),
-            Color(0xFF0A2116),
-            Color(0xFF07110D)
-        )
-    )
 
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.20f),
         shape = MaterialTheme.shapes.large,
         color = Color.Transparent
     ) {
-        Column(modifier = Modifier.background(background)) {
+        Box(Modifier.fillMaxSize()) {
+            VehicleStage(vehicle, Modifier.fillMaxSize())
+
+            // Keep the Hero as one continuous artwork surface. This scrim only protects
+            // text contrast; it must not read as a separate title block.
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0x72020806),
+                                Color(0x18020806),
+                                Color.Transparent,
+                                Color(0x3D020806)
+                            )
+                        )
+                    )
+            )
+
             Column(
-                modifier = Modifier.padding(
-                    start = MaterialTheme.spacing.lg,
-                    end = MaterialTheme.spacing.lg,
-                    top = MaterialTheme.spacing.lg,
-                    bottom = MaterialTheme.spacing.sm
-                )
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 18.dp, top = 16.dp, end = 18.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(7.dp).background(EVDesignTokens.Energy.green, CircleShape))
-                    Spacer(Modifier.size(MaterialTheme.spacing.xs))
-                    Text("MY EV", style = MaterialTheme.typography.labelLarge, color = cockpit.secondaryText)
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "MY EV",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = cockpit.primaryText
+                    )
                 }
-                Spacer(Modifier.height(MaterialTheme.spacing.lg))
+                Spacer(Modifier.height(18.dp))
                 Text(
                     vehicle?.brand ?: "EV Charge Book",
                     style = MaterialTheme.typography.bodyLarge,
-                    color = cockpit.secondaryText
+                    color = cockpit.primaryText.copy(alpha = 0.88f)
                 )
                 Text(
                     vehicle?.model ?: "添加你的第一辆车",
@@ -97,18 +110,15 @@ fun HeroVehicleCard(
                 )
             }
 
-            Box(modifier = Modifier.fillMaxWidth().height(304.dp)) {
-                VehicleStage(vehicle, Modifier.fillMaxSize())
-                if (vehicle != null) {
-                    HeroDynamicStateOverlay(
-                        currentSoc = currentSoc,
-                        currentMileageKm = currentMileageKm,
-                        latestTrip = latestTrip,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(horizontal = 12.dp, vertical = 12.dp)
-                    )
-                }
+            if (vehicle != null) {
+                HeroDynamicStateOverlay(
+                    currentSoc = currentSoc,
+                    currentMileageKm = currentMileageKm,
+                    latestTrip = latestTrip,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                )
             }
         }
     }
@@ -148,18 +158,6 @@ private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier)
         } else {
             VehicleSilhouetteFallback(Modifier.fillMaxSize())
         }
-
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0x2206100C),
-                        Color.Transparent,
-                        Color(0x5506100C)
-                    )
-                )
-            )
-        )
     }
 }
 
@@ -178,7 +176,6 @@ private fun HeroDynamicStateOverlay(
         label = "dashboard_hero_soc"
     )
     val panelShape = MaterialTheme.shapes.large
-    val fontScale = LocalConfiguration.current.fontScale
 
     Surface(
         modifier = modifier
@@ -187,55 +184,32 @@ private fun HeroDynamicStateOverlay(
         shape = panelShape,
         color = Color(0xD9091511)
     ) {
-        BoxWithConstraints(Modifier.fillMaxWidth()) {
-            val compact = maxWidth < 340.dp || fontScale >= 1.3f
-            if (compact) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        HeroSocMetric(safeSoc, animatedProgress, Modifier.weight(1f))
-                        MetricDivider()
-                        HeroMetric(
-                            label = "当前里程",
-                            value = currentMileageKm?.let(::formatMileage) ?: "--",
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (latestTrip != null) {
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .height(1.dp)
-                                .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
-                        )
-                        HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.fillMaxWidth())
-                    }
-                }
-            } else {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
-                ) {
-                    HeroSocMetric(safeSoc, animatedProgress, Modifier.weight(0.95f))
-                    MetricDivider()
-                    HeroMetric(
-                        label = "当前里程",
-                        value = currentMileageKm?.let(::formatMileage) ?: "--",
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (latestTrip != null) {
-                        MetricDivider()
-                        HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.weight(1.05f))
-                    }
-                }
-            }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            HeroSocMetric(
+                safeSoc = safeSoc,
+                animatedProgress = animatedProgress,
+                modifier = Modifier.weight(0.92f)
+            )
+            MetricDivider()
+            HeroMetric(
+                label = "当前里程",
+                value = currentMileageKm?.let(::formatMileage) ?: "--",
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            )
+            MetricDivider()
+            HeroRecentTripMetric(
+                trip = latestTrip,
+                modifier = Modifier
+                    .weight(1.08f)
+                    .padding(start = 12.dp)
+            )
         }
     }
 }
@@ -243,7 +217,7 @@ private fun HeroDynamicStateOverlay(
 @Composable
 private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modifier = Modifier) {
     val cockpit = LocalCockpitColors.current
-    Column(modifier = modifier) {
+    Column(modifier = modifier.padding(end = 12.dp)) {
         Text(
             safeSoc?.let { "$it%" } ?: "--",
             style = MaterialTheme.typography.headlineLarge,
@@ -278,7 +252,7 @@ private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifi
         Spacer(Modifier.height(4.dp))
         Text(
             value,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
             color = cockpit.primaryText
         )
@@ -286,13 +260,15 @@ private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun HeroRecentTripMetric(trip: TripSessionEntity, modifier: Modifier = Modifier) {
+private fun HeroRecentTripMetric(trip: TripSessionEntity?, modifier: Modifier = Modifier) {
     val cockpit = LocalCockpitColors.current
-    val distance = trip.distanceMeters
-        .takeIf { it.isFinite() && it > 0.0 }
+    val distance = trip
+        ?.distanceMeters
+        ?.takeIf { it.isFinite() && it > 0.0 }
         ?.let(::formatTripDistance)
         ?: "--"
-    val consumption = trip.averageConsumptionKwhPer100Km
+    val consumption = trip
+        ?.averageConsumptionKwhPer100Km
         ?.takeIf { it.isFinite() && it >= 0.0 }
         ?.let { String.format(Locale.US, "%.1f kWh/100km", it) }
 
@@ -301,7 +277,7 @@ private fun HeroRecentTripMetric(trip: TripSessionEntity, modifier: Modifier = M
         Spacer(Modifier.height(4.dp))
         Text(
             distance,
-            style = MaterialTheme.typography.titleLarge,
+            style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Medium,
             color = cockpit.primaryText
         )
@@ -309,7 +285,7 @@ private fun HeroRecentTripMetric(trip: TripSessionEntity, modifier: Modifier = M
             Spacer(Modifier.height(2.dp))
             Text(
                 consumption,
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelSmall,
                 color = EVDesignTokens.Energy.green
             )
         }
@@ -320,7 +296,7 @@ private fun HeroRecentTripMetric(trip: TripSessionEntity, modifier: Modifier = M
 private fun MetricDivider() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 54.dp)
+            .size(width = 1.dp, height = 56.dp)
             .background(LocalCockpitColors.current.secondaryText.copy(alpha = .24f))
     )
 }

@@ -20,20 +20,19 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.evchargebook.domain.MonthlyChargingBucket
 import com.evchargebook.ui.theme.EVDesignTokens
-import com.evchargebook.ui.theme.spacing
 import com.evchargebook.viewmodel.MainUiState
 import java.util.Locale
 
 @Composable
 fun EnergyCockpitCard(state: MainUiState) {
     val surfaceBrush = Brush.verticalGradient(
-        listOf(Color(0xFF0D1512), Color(0xFF0A100E))
+        listOf(Color(0xFF0D1512), Color(0xFF09100E))
     )
 
     Surface(
@@ -44,8 +43,8 @@ fun EnergyCockpitCard(state: MainUiState) {
         Column(
             modifier = Modifier
                 .background(surfaceBrush)
-                .padding(MaterialTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -55,7 +54,7 @@ fun EnergyCockpitCard(state: MainUiState) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(34.dp)
+                            .size(36.dp)
                             .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -63,25 +62,26 @@ fun EnergyCockpitCard(state: MainUiState) {
                             Icons.Default.Bolt,
                             contentDescription = null,
                             tint = EVDesignTokens.Energy.green,
-                            modifier = Modifier.size(19.dp)
+                            modifier = Modifier.size(20.dp)
                         )
                     }
-                    Spacer(Modifier.size(MaterialTheme.spacing.sm))
+                    Spacer(Modifier.size(10.dp))
                     Column {
                         Text(
                             "ENERGY FLOW",
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             "本月能源",
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 }
                 Text(
-                    "${state.chargingCount} 次",
+                    "${state.chargingCount} 次充电",
                     style = MaterialTheme.typography.bodyMedium,
                     color = EVDesignTokens.Energy.green
                 )
@@ -89,132 +89,100 @@ fun EnergyCockpitCard(state: MainUiState) {
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Bottom
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text(
-                        "本月用电",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Row(verticalAlignment = Alignment.Bottom) {
-                        Text(
-                            one(state.monthEnergy),
-                            style = MaterialTheme.typography.headlineMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Spacer(Modifier.size(MaterialTheme.spacing.xs))
-                        Text(
-                            "kWh",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = EVDesignTokens.Energy.green
-                        )
-                    }
-                }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "本月费用",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        "¥ ${two(state.monthCost)}",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-            }
-
-            MonthlyEnergyBars(state.monthlyTrend)
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                FlatMetric("平均电价", "¥ ${two(state.averagePrice)}/kWh")
-                FlatMetric(
-                    "区间电耗",
-                    state.intervalEnergyPer100Km?.let { "${one(it)} kWh/100km" } ?: "--"
+                EnergyMetric(
+                    label = "本月用电",
+                    value = one(state.monthEnergy),
+                    unit = "kWh",
+                    highlightUnit = true,
+                    modifier = Modifier.weight(1.18f)
                 )
-                FlatMetric("充电次数", "${state.chargingCount} 次")
+                EnergyDivider()
+                EnergyMetric(
+                    label = "本月费用",
+                    value = "¥ ${two(state.monthCost)}",
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp)
+                )
+                EnergyDivider()
+                EnergyMetric(
+                    label = "平均电价",
+                    value = "¥ ${two(state.averagePrice)}",
+                    unit = "/kWh",
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                )
             }
+
+            MonthlyEnergyProgress(state.monthEnergy)
         }
     }
 }
 
 @Composable
-private fun MonthlyEnergyBars(months: List<MonthlyChargingBucket>) {
-    val values = if (months.isEmpty()) List(6) { 0.0 } else months.takeLast(6).map { it.energyKwh }
-    val max = (values.maxOrNull() ?: 0.0).coerceAtLeast(1.0)
-    val labels = if (months.isEmpty()) List(6) { "--" } else months.takeLast(6).map { "${it.month}月" }
-
-    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
-        Text(
-            "近 6 个月",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(74.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.Bottom
-        ) {
-            values.forEachIndexed { index, value ->
-                val ratio = (value / max).toFloat().coerceIn(0f, 1f)
-                val barHeight = (6 + 50 * ratio).dp
-                Column(
-                    modifier = Modifier.weight(1f),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Bottom
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(barHeight)
-                            .background(
-                                if (index == values.lastIndex) {
-                                    Brush.verticalGradient(
-                                        listOf(EVDesignTokens.Energy.green, EVDesignTokens.Energy.green.copy(alpha = 0.28f))
-                                    )
-                                } else {
-                                    Brush.verticalGradient(
-                                        listOf(Color(0xFF355347), Color(0xFF18231F))
-                                    )
-                                },
-                                MaterialTheme.shapes.small
-                            )
-                    )
-                    Spacer(Modifier.height(5.dp))
-                    Text(
-                        labels.getOrElse(index) { "--" },
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun FlatMetric(label: String, value: String) {
-    Column {
+private fun EnergyMetric(
+    label: String,
+    value: String,
+    unit: String? = null,
+    highlightUnit: Boolean = false,
+    modifier: Modifier = Modifier
+) {
+    Column(modifier = modifier) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Spacer(Modifier.height(2.dp))
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+        Spacer(Modifier.height(4.dp))
+        Row(verticalAlignment = Alignment.Bottom) {
+            Text(
+                value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (unit != null) {
+                Spacer(Modifier.size(3.dp))
+                Text(
+                    unit,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (highlightUnit) EVDesignTokens.Energy.green else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EnergyDivider() {
+    Box(
+        Modifier
+            .size(width = 1.dp, height = 52.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+    )
+}
+
+@Composable
+private fun MonthlyEnergyProgress(monthEnergy: Double) {
+    val normalized = (monthEnergy / 100.0).toFloat().coerceIn(0f, 1f)
+    val visibleProgress = if (normalized <= 0f) 0.012f else normalized.coerceAtLeast(0.03f)
+
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f))
+    ) {
+        Box(
+            Modifier
+                .fillMaxWidth(visibleProgress)
+                .height(5.dp)
+                .clip(CircleShape)
+                .background(EVDesignTokens.Energy.green)
         )
     }
 }
