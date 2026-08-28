@@ -80,6 +80,8 @@ internal fun TripSlideAction(
                 }
             }
     ) {
+        val trackWidthPx = with(density) { maxWidth.toPx() }
+        val thumbSizePx = with(density) { thumbSize.toPx() }
         val maxOffsetPx = with(density) {
             (maxWidth - thumbSize - horizontalPadding * 2).coerceAtLeast(0.dp).toPx()
         }
@@ -106,13 +108,12 @@ internal fun TripSlideAction(
                         else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.04f)
                     )
             ) {
-                if (enabled && maxOffsetPx > 0f) {
+                if (enabled && maxOffsetPx > 0f && trackWidthPx > 0f) {
                     Box(
                         modifier = Modifier
                             .height(trackHeight)
                             .fillMaxWidth(
-                                ((displayedOffsetPx + with(density) { thumbSize.toPx() }) /
-                                    with(density) { maxWidth.toPx() }).coerceIn(0f, 1f)
+                                ((displayedOffsetPx + thumbSizePx) / trackWidthPx).coerceIn(0f, 1f)
                             )
                             .background(accent.copy(alpha = 0.10f))
                     )
