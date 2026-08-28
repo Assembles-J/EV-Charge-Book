@@ -95,7 +95,7 @@ fun DashboardRecentTripCard(trip: TripSessionEntity?) {
                 Text("RECENT TRIP", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                formatTime(trip.endedAtEpochMillis ?: trip.startedAtEpochMillis),
+                formatTime(trip.startedAtEpochMillis),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -139,12 +139,6 @@ fun DashboardRecentTripCard(trip: TripSessionEntity?) {
                         modifier = Modifier.weight(1f)
                     )
                 }
-
-                Text(
-                    "能耗来自已保存 Trip 的 SOC 估算结果；地址仅在系统反向地理解析可用时展示，失败时保留坐标或未知状态。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }
