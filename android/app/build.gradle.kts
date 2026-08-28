@@ -16,6 +16,8 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 val updateManifestUrl = System.getenv("APP_UPDATE_MANIFEST_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/latest.json"
+val heroArtworkManifestUrl = System.getenv("HERO_ARTWORK_MANIFEST_URL")
+    ?: "https://groupim.cn/ev-charge-book/hero-assets/manifest-v1.json"
 
 android {
     namespace = "com.evchargebook"
@@ -28,6 +30,7 @@ android {
         versionCode = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: 1
         versionName = System.getenv("APP_VERSION_NAME") ?: "0.1.0-dev"
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
+        buildConfigField("String", "HERO_ARTWORK_MANIFEST_URL", "\"$heroArtworkManifestUrl\"")
     }
 
     signingConfigs {
@@ -81,6 +84,8 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
+    implementation("io.coil-kt.coil3:coil-compose:3.5.0")
+    implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0")
     ksp("androidx.room:room-compiler:2.8.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")

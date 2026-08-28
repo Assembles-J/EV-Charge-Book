@@ -1,0 +1,98 @@
+name: Hero Assets Publish
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'hero-assets/**'
+      - '.github/workflows/hero-assets-publish.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ev-charge-book-hero-assets
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Validate and publish Hero artwork
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Hero asset package
+        shell: bash
+        run: |
+          set -eu
+          test -f hero-assets/manifest-v1.json
+          test -d hero-assets/remote
+
+          oversized="$(find hero-assets/remote -type f -name '*.webp' -size +2500k -print)"
+          if [ -n "$oversized" ]; then
+            echo "Remote Hero artwork exceeds the 2.5 MB safety ceiling:"
+            echo "$oversized"
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path('hero-assets')
+          manifest = json.loads((root / 'manifest-v1.json').read_text())
+          assert manifest.get('schemaVersion') == 1
+          artworks = manifest.get('artworks') or {}
+          assert artworks, 'manifest artworks must not be empty'
+
+          for key, item in artworks.items():
+              version = item.get('version')
+              url = item.get('url', '')
+              assert isinstance(version, int) and version > 0, f'{key}: invalid version'
+              assert url.startswith('https://groupim.cn/ev-charge-book/hero-assets/remote/'), f'{key}: invalid URL'
+              filename = url.rsplit('/', 1)[-1]
+              assert (root / 'remote' / filename).is_file(), f'{key}: missing {filename}'
+          PY
+
+      - name: Prepare remote directory
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
+          script: |
+            set -eu
+            mkdir -p /opt/ev-charge-book/hero-assets/remote
+            test -w /opt/ev-charge-book/hero-assets
+
+      - name: Upload Hero assets
+        uses: appleboy/scp-action@v1.0.0
+        with:
+          host: ${{ secrets.COMMON_SERVER_HOST }}
+          username: ${{ secrets.COMMON_SERVER_USER }}
+          key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
+          source: hero-assets
+          target: /opt/ev-charge-book
+          overwrite: true
+
+      - name: Verify public manifest
+        shell: bash
+        run: |
+          set -eu
+          for attempt in 1 2 3 4 5; do
+            if curl --fail --silent --show-error \
+              --connect-timeout 5 \
+              --max-time 15 \
+              https://groupim.cn/ev-charge-book/hero-assets/manifest-v1.json \
+              -o /tmp/hero-manifest.json; then
+              python3 -m json.tool /tmp/hero-manifest.json >/dev/null
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "Hero manifest is not publicly reachable after upload"
+          exit 1

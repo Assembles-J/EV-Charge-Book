@@ -3,7 +3,6 @@ package com.evchargebook.ui.dashboard
 import android.util.Log
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -29,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,14 +40,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.LocalCockpitColors
+import com.evchargebook.ui.vehicle.HeroArtworkManifestRepository
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
 import java.util.Locale
 
@@ -191,11 +195,23 @@ fun HeroVehicleCard(
 
 @Composable
 private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
     val artwork = OfficialVehicleImageCatalog.resolve(vehicle)
-    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artwork?.drawableRes) {
+    var remoteArtwork by remember(artwork?.key) {
+        mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
+    }
+
+    LaunchedEffect(artwork?.key) {
+        remoteArtwork = artwork?.let { HeroArtworkManifestRepository.resolve(context, it.key) }
+    }
+
+    val imageUrl = remoteArtwork?.url ?: artwork?.remoteFallbackUrl
+    val cacheVersion = remoteArtwork?.version ?: 0
+
+    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artwork?.key, imageUrl) {
         Log.d(
             VEHICLE_ARTWORK_TAG,
-            "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} drawable=${artwork?.drawableRes}"
+            "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} artwork=${artwork?.key} remote=${imageUrl != null}"
         )
         true
     }
@@ -212,20 +228,28 @@ private fun VehicleStage(vehicle: VehicleEntity?, modifier: Modifier = Modifier)
         ),
         contentAlignment = Alignment.Center
     ) {
-        if (artwork != null) {
-            Image(
-                painter = painterResource(artwork.drawableRes),
+        Icon(
+            imageVector = Icons.Default.DirectionsCar,
+            contentDescription = null,
+            tint = EVDesignTokens.Energy.green.copy(alpha = 0.42f),
+            modifier = Modifier.size(72.dp)
+        )
+
+        if (artwork != null && imageUrl != null) {
+            val cacheKey = "vehicle-hero:${artwork.key}:v$cacheVersion"
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(imageUrl)
+                    .memoryCacheKey(cacheKey)
+                    .diskCacheKey(cacheKey)
+                    .memoryCachePolicy(CachePolicy.ENABLED)
+                    .diskCachePolicy(CachePolicy.ENABLED)
+                    .networkCachePolicy(CachePolicy.ENABLED)
+                    .build(),
                 contentDescription = "${vehicle?.brand.orEmpty()} ${vehicle?.model.orEmpty()} 车型图",
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
                 alignment = Alignment.Center
-            )
-        } else {
-            Icon(
-                imageVector = Icons.Default.DirectionsCar,
-                contentDescription = null,
-                tint = EVDesignTokens.Energy.green.copy(alpha = 0.65f),
-                modifier = Modifier.size(72.dp)
             )
         }
     }
