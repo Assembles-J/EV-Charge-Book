@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Route
@@ -105,6 +106,7 @@ fun HeroVehicleCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
+                // Production Hero assets are 1600x1100 (~1.455:1); 1.46 keeps crop negligible.
                 .aspectRatio(1.46f)
         ) {
             VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
@@ -114,11 +116,11 @@ fun HeroVehicleCard(
                     .background(
                         Brush.verticalGradient(
                             listOf(
-                                Color(0xA8020806),
-                                Color(0x28020806),
+                                Color(0x98020806),
+                                Color(0x20020806),
                                 Color.Transparent,
-                                Color(0x26020806),
-                                Color(0x9806100C)
+                                Color(0x18020806),
+                                Color(0x7606100C)
                             )
                         )
                     )
@@ -130,7 +132,7 @@ fun HeroVehicleCard(
                     .align(Alignment.TopStart)
                     .padding(
                         start = 16.dp,
-                        top = topSystemInset + 16.dp,
+                        top = topSystemInset + 14.dp,
                         end = 72.dp
                     ),
                 style = MaterialTheme.typography.titleLarge,
@@ -144,14 +146,14 @@ fun HeroVehicleCard(
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = topSystemInset + 12.dp, end = 12.dp)
+                        .padding(top = topSystemInset + 10.dp, end = 12.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
-                            .background(Color(0x7207110F))
-                            .border(1.dp, Color.White.copy(alpha = 0.18f), CircleShape)
+                            .background(Color(0x6607110F))
+                            .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
                             .clickable(enabled = canSwitchVehicle) {
                                 vehicleMenuExpanded = true
                             },
@@ -160,8 +162,8 @@ fun HeroVehicleCard(
                         Icon(
                             imageVector = Icons.Default.DirectionsCar,
                             contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
-                            tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 1f else 0.45f),
-                            modifier = Modifier.size(23.dp)
+                            tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 0.94f else 0.45f),
+                            modifier = Modifier.size(22.dp)
                         )
                     }
 
@@ -200,7 +202,7 @@ fun HeroVehicleCard(
                     latestTrip = latestTrip,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(start = 12.dp, end = 12.dp, bottom = 12.dp)
+                        .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
                 )
             }
         }
@@ -287,24 +289,25 @@ private fun HeroDynamicStatePanel(
         animationSpec = tween(durationMillis = 650),
         label = "dashboard_hero_soc"
     )
-    val panelShape = MaterialTheme.shapes.large
+    val panelShape = RoundedCornerShape(22.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .height(92.dp)
             .shadow(
-                elevation = 18.dp,
+                elevation = 8.dp,
                 shape = panelShape,
-                ambientColor = Color.Black.copy(alpha = 0.38f),
-                spotColor = Color.Black.copy(alpha = 0.50f)
+                ambientColor = Color.Black.copy(alpha = 0.24f),
+                spotColor = Color.Black.copy(alpha = 0.30f)
             )
             .clip(panelShape)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.10f),
-                        Color(0xB013211C),
-                        Color(0xD00A1512)
+                        Color.White.copy(alpha = 0.055f),
+                        Color(0x9413211C),
+                        Color(0xB80A1512)
                     )
                 )
             )
@@ -312,27 +315,23 @@ private fun HeroDynamicStatePanel(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.30f),
-                        Color.White.copy(alpha = 0.10f),
-                        EVDesignTokens.Energy.green.copy(alpha = 0.16f)
+                        Color.White.copy(alpha = 0.18f),
+                        Color.White.copy(alpha = 0.055f),
+                        EVDesignTokens.Energy.green.copy(alpha = 0.10f)
                     )
                 ),
                 shape = panelShape
             )
     ) {
-        // The panel now sits on top of the artwork. The translucent smoke/highlight layers
-        // intentionally preserve some of the underlying image so the surface reads as glass
-        // instead of a second opaque card. Compose has no true arbitrary backdrop blur here,
-        // so the frost is created with controlled translucency and edge highlights.
         Box(
             Modifier
                 .fillMaxSize()
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            Color(0x381D6D49),
+                            Color(0x241D6D49),
                             Color.Transparent,
-                            Color(0x24174634)
+                            Color(0x12174634)
                         )
                     )
                 )
@@ -340,7 +339,7 @@ private fun HeroDynamicStatePanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 12.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             HeroSocMetric(
@@ -397,13 +396,13 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
                 color = cockpit.primaryText
             )
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(6.dp))
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(5.dp)
+                .height(4.dp)
                 .clip(CircleShape)
-                .background(cockpit.secondaryText.copy(alpha = 0.24f))
+                .background(cockpit.secondaryText.copy(alpha = 0.22f))
         ) {
             if (safeSoc != null) {
                 Box(
@@ -526,8 +525,8 @@ private fun HeroRecentTripMetric(trip: TripSessionEntity?, modifier: Modifier = 
 private fun MetricDivider() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 56.dp)
-            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .24f))
+            .size(width = 1.dp, height = 52.dp)
+            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .22f))
     )
 }
 

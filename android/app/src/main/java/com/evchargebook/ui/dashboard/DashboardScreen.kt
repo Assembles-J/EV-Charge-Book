@@ -18,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.Icon
@@ -88,7 +87,7 @@ fun DashboardScreen(
             )
         }
         item { EnergyCockpitCard(state, onOpenChargingRecords) }
-        item { RecentChargingHeader(onOpenChargingRecords, onAddClick) }
+        item { RecentChargingHeader(onOpenChargingRecords) }
 
         if (state.chargingRecords.isEmpty()) {
             item { EmptyChargingTimeline(onAddClick) }
@@ -102,10 +101,7 @@ fun DashboardScreen(
 }
 
 @Composable
-private fun RecentChargingHeader(
-    onViewAll: () -> Unit,
-    onAddClick: () -> Unit
-) {
+private fun RecentChargingHeader(onViewAll: () -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -119,42 +115,25 @@ private fun RecentChargingHeader(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                modifier = Modifier
-                    .heightIn(min = 48.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onViewAll)
-                    .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "查看全部",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = EVDesignTokens.Energy.green
-                )
-                Icon(
-                    Icons.Default.ChevronRight,
-                    contentDescription = "查看全部充电记录",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(Modifier.size(4.dp))
-            Box(
-                modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(EVDesignTokens.Energy.green)
-                    .clickable(onClick = onAddClick),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "记录充电",
-                    tint = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+        Row(
+            modifier = Modifier
+                .heightIn(min = 48.dp)
+                .clip(CircleShape)
+                .clickable(onClick = onViewAll)
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                "查看全部",
+                style = MaterialTheme.typography.bodyMedium,
+                color = EVDesignTokens.Energy.green
+            )
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = "查看全部充电记录",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
         }
     }
 }
