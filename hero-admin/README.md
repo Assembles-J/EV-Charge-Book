@@ -135,12 +135,15 @@ The admin URL should return `401` without credentials. That is expected.
 
 The first time the server manifest is missing, the service seeds it from the small GitHub `hero-assets/manifest-v1.json`. This lets existing artwork continue working while individual vehicles are migrated to first-party CDN URLs through the admin page.
 
-## Android runtime
+## Android runtime follow-up
 
-The Android app default becomes:
+This PR deliberately does **not** switch Android to the first-party manifest yet. Keep the current GitHub Raw manifest endpoint until the server setup above is deployed and verified.
+
+After both checks are green:
 
 ```text
 https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
+https://groupim.cn/ev-charge-book/hero-admin/
 ```
 
-The app still keeps its normal artwork/cache fallback behavior if the manifest is temporarily unavailable.
+make a separate one-line Android PR changing the default `HERO_ARTWORK_MANIFEST_URL` to the first-party manifest. This keeps deployment order explicit and prevents a partially configured server from becoming a runtime dependency.
