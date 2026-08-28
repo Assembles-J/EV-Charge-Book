@@ -124,3 +124,33 @@ Add:
 - Unsupported vehicle models degrade gracefully to a local fallback graphic
 - Trip becomes a first-class feature
 - Theme switching works consistently
+
+---
+
+# Trip v0.6 Approved Follow-up
+
+The 2026-08-28 physical-device Trip review approved a denser Trip-specific refinement of the v0.5 Dark First system.
+
+Authority: `docs/TRIP_V0.6_APPROVED_UI_BASELINE.md`
+Owning issue: #145
+
+Implementation slices:
+
+- #146 — Trip list density + endpoint hierarchy
+- #147 — READY preparation + slide-to-start
+- #148 — active Trip cockpit + speed/altitude trends
+- #149 — completed Trip overview + single endpoint card
+- #150 — route/map marker and trajectory polish
+- #151 — diagnostics summary + progressive disclosure
+- #152 — future destination selection capability; explicitly not part of current v0.6 implementation
+
+Trip v0.6 guardrails:
+
+- retain `EVDesignTokens.Energy.green` (`#32F080`) as the only primary Trip green
+- no bright glow, neon bloom or advertising-style decorative light effects
+- no voltage on Trip surfaces
+- no destination selector until the product actually owns destination planning
+- start marker uses a compact green start/play shape
+- end marker uses a compact red flag without outer ring
+- raw GPS point lists are secondary troubleshooting UI, not default detail content
+- speed and altitude trends are supporting evidence and must omit unavailable/untrustworthy data
