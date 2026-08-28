@@ -84,6 +84,36 @@ class TripSpeedTrustRulesTest {
     }
 
     @Test
+    fun `extreme gps peak without speed accuracy cannot update max speed`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 34.005,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 140.0,
+                continuityAllowsSpeed = true,
+                provider = "gps",
+                horizontalAccuracyMeters = 8.0,
+                speedAccuracyMps = null
+            )
+        )
+    }
+
+    @Test
+    fun `moderate gps speed without speed accuracy remains usable`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 20.0,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 80.0,
+                continuityAllowsSpeed = true,
+                provider = "gps",
+                horizontalAccuracyMeters = 8.0,
+                speedAccuracyMps = null
+            )
+        )
+    }
+
+    @Test
     fun `coarse gps point cannot update max speed`() {
         assertFalse(
             TripSpeedTrustRules.eligibleForMaxSpeed(
