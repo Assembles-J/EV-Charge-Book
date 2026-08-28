@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -26,6 +25,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.viewmodel.MainUiState
@@ -49,7 +49,7 @@ fun EnergyCockpitCard(
             modifier = Modifier
                 .background(surfaceBrush)
                 .padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -95,7 +95,8 @@ fun EnergyCockpitCard(
                     Text(
                         "${state.chargingCount} 次充电",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = EVDesignTokens.Energy.green
+                        color = EVDesignTokens.Energy.green,
+                        maxLines = 1
                     )
                     Icon(
                         Icons.Default.ChevronRight,
@@ -115,7 +116,7 @@ fun EnergyCockpitCard(
                     value = one(state.monthEnergy),
                     unit = "kWh",
                     highlightUnit = true,
-                    modifier = Modifier.weight(1.18f)
+                    modifier = Modifier.weight(1.15f)
                 )
                 EnergyDivider()
                 EnergyMetric(
@@ -123,20 +124,19 @@ fun EnergyCockpitCard(
                     value = "¥ ${two(state.monthCost)}",
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 12.dp)
+                        .padding(horizontal = 10.dp)
                 )
                 EnergyDivider()
                 EnergyMetric(
                     label = "平均电价",
                     value = "¥ ${two(state.averagePrice)}",
                     unit = "/kWh",
+                    compact = true,
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp)
+                        .weight(1.08f)
+                        .padding(start = 10.dp)
                 )
             }
-
-            MonthlyEnergyProgress(state.monthEnergy)
         }
     }
 }
@@ -147,28 +147,34 @@ private fun EnergyMetric(
     value: String,
     unit: String? = null,
     highlightUnit: Boolean = false,
+    compact: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
         Text(
             label,
             style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
         )
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.size(4.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 value,
-                style = MaterialTheme.typography.titleLarge,
+                style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Clip
             )
             if (unit != null) {
                 Spacer(Modifier.size(3.dp))
                 Text(
                     unit,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (highlightUnit) EVDesignTokens.Energy.green else MaterialTheme.colorScheme.onSurfaceVariant
+                    style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodyMedium,
+                    color = if (highlightUnit) EVDesignTokens.Energy.green else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Clip
                 )
             }
         }
@@ -182,28 +188,6 @@ private fun EnergyDivider() {
             .size(width = 1.dp, height = 52.dp)
             .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
     )
-}
-
-@Composable
-private fun MonthlyEnergyProgress(monthEnergy: Double) {
-    val normalized = (monthEnergy / 100.0).toFloat().coerceIn(0f, 1f)
-    val visibleProgress = if (normalized <= 0f) 0.012f else normalized.coerceAtLeast(0.03f)
-
-    Box(
-        Modifier
-            .fillMaxWidth()
-            .height(5.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.22f))
-    ) {
-        Box(
-            Modifier
-                .fillMaxWidth(visibleProgress)
-                .height(5.dp)
-                .clip(CircleShape)
-                .background(EVDesignTokens.Energy.green)
-        )
-    }
 }
 
 private fun one(value: Double) = String.format(Locale.US, "%.1f", value)
