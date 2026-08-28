@@ -50,6 +50,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
@@ -108,8 +109,9 @@ fun HeroVehicleCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // The artwork stage stays matched to the 1600x1100 production assets.
-                        .aspectRatio(1.46f)
+                        // Keep the 1600x1100 source asset; use a slightly taller viewport so the
+                        // vehicle has more presence. Crop remains modest and symmetric.
+                        .aspectRatio(1.38f)
                 ) {
                     VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
                     Box(
@@ -133,11 +135,12 @@ fun HeroVehicleCard(
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(
-                                start = 16.dp,
-                                top = topSystemInset + 14.dp,
-                                end = 72.dp
+                                start = 14.dp,
+                                top = topSystemInset + 6.dp,
+                                end = 64.dp
                             ),
-                        style = MaterialTheme.typography.titleLarge,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
                         color = cockpit.primaryText,
                         maxLines = 1,
@@ -148,14 +151,14 @@ fun HeroVehicleCard(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(top = topSystemInset + 10.dp, end = 12.dp)
+                                .padding(top = topSystemInset + 6.dp, end = 12.dp)
                         ) {
                             Box(
                                 modifier = Modifier
-                                    .size(46.dp)
+                                    .size(42.dp)
                                     .clip(CircleShape)
                                     .background(Color(0x6607110F))
-                                    .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                                    .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape)
                                     .clickable(enabled = canSwitchVehicle) {
                                         vehicleMenuExpanded = true
                                     },
@@ -165,7 +168,7 @@ fun HeroVehicleCard(
                                     imageVector = Icons.Default.DirectionsCar,
                                     contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
                                     tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 0.94f else 0.45f),
-                                    modifier = Modifier.size(22.dp)
+                                    modifier = Modifier.size(20.dp)
                                 )
                             }
 
@@ -200,8 +203,6 @@ fun HeroVehicleCard(
                     }
                 }
 
-                // Reserve real layout space below the 1600x1100 artwork stage. The panel is then
-                // bottom-aligned across this total height, overlapping only 28dp of the artwork.
                 if (vehicle != null) {
                     Spacer(modifier = Modifier.height(52.dp))
                 }
