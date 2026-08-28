@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -83,7 +82,6 @@ fun TripScreen(
     }
 
     if (activeTrip == null) {
-        // MainActivity routes this state to TripReadyScreen. Keep a truthful fallback for state races.
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("暂无进行中的行程", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
