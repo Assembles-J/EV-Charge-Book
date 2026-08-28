@@ -81,7 +81,7 @@ fun TripScreen(
     var deleteTarget by remember { mutableStateOf<TripSessionEntity?>(null) }
     var confirmStop by remember { mutableStateOf(false) }
     val activeVehicle = activeTrip?.let { trip -> vehicles.firstOrNull { it.id == trip.vehicleId } }
-    val savedTrips = trips.filter { it.id != activeTrip?.id }
+    val savedTrips = trips.filter { it.id != activeTrip?.id }.sortedByDescending { it.startedAtEpochMillis }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -100,7 +100,7 @@ fun TripScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             item {
                 ActiveTripPanel(
@@ -115,15 +115,15 @@ fun TripScreen(
             }
             item {
                 SectionHeading(
-                    "历史行程",
-                    if (savedTrips.isEmpty()) "真实行程会按时间顺序沉淀在这里" else "${savedTrips.size} 条已保存行程"
+                    "全部行程",
+                    if (savedTrips.isEmpty()) "真实行程会按时间顺序沉淀在这里" else "共 ${savedTrips.size} 条 · 点击查看轨迹与明细"
                 )
             }
             if (savedTrips.isEmpty()) {
                 item { EmptyTripTimeline() }
             } else {
                 items(savedTrips, key = { it.id }) { trip ->
-                    TripHistoryRow(
+                    TripHistoryCardV06(
                         trip = trip,
                         onClick = { onOpenDetail(trip.id) },
                         onDelete = { deleteTarget = trip }
