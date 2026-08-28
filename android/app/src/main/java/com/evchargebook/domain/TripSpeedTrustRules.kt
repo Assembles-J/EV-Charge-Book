@@ -5,6 +5,7 @@ object TripSpeedTrustRules {
     private const val MIN_EXPECTED_DISTANCE_RATIO = 0.25
     private const val MAX_TRUSTED_HORIZONTAL_ACCURACY_METERS = 25.0
     private const val MAX_TRUSTED_SPEED_ACCURACY_MPS = 3.0
+    private const val EXTREME_SPEED_REQUIRES_ACCURACY_MPS = 25.0
 
     fun eligibleForAggregate(
         reportedSpeedMps: Double?,
@@ -38,6 +39,7 @@ object TripSpeedTrustRules {
             return false
         }
 
+        if (reportedSpeedMps >= EXTREME_SPEED_REQUIRES_ACCURACY_MPS && speedAccuracyMps == null) return false
         if (speedAccuracyMps != null &&
             (!speedAccuracyMps.isFinite() || speedAccuracyMps < 0.0 || speedAccuracyMps > MAX_TRUSTED_SPEED_ACCURACY_MPS)
         ) {
