@@ -6,13 +6,13 @@ STAGING_ROOT="${ROOT}/hero-admin-deploy"
 APP_ROOT="/opt/app"
 NGINX_CONF="${APP_ROOT}/nginx.conf"
 NGINX_CONTAINER="nginx"
-NETWORK="app-network"
+NETWORK="${HERO_ADMIN_DOCKER_NETWORK:-app_gateway}"
 IMAGE="ev-charge-book-hero-admin:local"
+IMAGE_ARCHIVE="${STAGING_ROOT}/hero-admin-image.tar.gz"
 CONTAINER="ev-charge-book-hero-admin"
 ENV_FILE="${ROOT}/hero-admin.env"
 MANIFEST="${ROOT}/release-meta/hero-assets-v1.json"
 SEED_MANIFEST="${STAGING_ROOT}/hero-assets/manifest-v1.json"
-HERO_SOURCE="${STAGING_ROOT}/hero-admin"
 
 log() {
   printf '[hero-admin-deploy] %s\n' "$*"
@@ -25,10 +25,11 @@ require_file() {
   fi
 }
 
-require_file "${HERO_SOURCE}/Dockerfile"
-require_file "${HERO_SOURCE}/app.py"
+require_file "${IMAGE_ARCHIVE}"
 require_file "${SEED_MANIFEST}"
 require_file "${NGINX_CONF}"
+
+docker network inspect "${NETWORK}" >/dev/null
 
 mkdir -p "${ROOT}/releases/hero-assets" "${ROOT}/release-meta"
 chmod 755 "${ROOT}/releases" "${ROOT}/releases/hero-assets" "${ROOT}/release-meta"
@@ -52,10 +53,16 @@ if [ ! -f "${MANIFEST}" ]; then
   chmod 644 "${MANIFEST}"
 fi
 
-log "Building Hero Admin image"
-docker build --pull -t "${IMAGE}" "${HERO_SOURCE}"
+log "Loading prebuilt Hero Admin image"
+gzip -t "${IMAGE_ARCHIVE}"
+gzip -dc "${IMAGE_ARCHIVE}" | docker load >/dev/null
 
-log "Starting Hero Admin container"
+if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
+  echo "Expected image tag was not loaded: ${IMAGE}" >&2
+  exit 1
+fi
+
+log "Starting Hero Admin container on ${NETWORK}"
 docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
 docker run -d \
   --name "${CONTAINER}" \
