@@ -32,6 +32,7 @@ import com.evchargebook.domain.TripGpsHealthSnapshot
 import com.evchargebook.domain.TripGpsHealthStatus
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
+import com.evchargebook.domain.TripServiceLifecycleRules
 import com.evchargebook.domain.TripSpeedTrustRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -91,10 +92,19 @@ class TripTrackingService : Service() {
     override fun onDestroy() {
         currentTripId?.let { tripId ->
             runCatching {
-                AppDatabase.getInstance(applicationContext).openHelper.writableDatabase.execSQL(
-                    "INSERT INTO trip_diagnostic_events (tripId, occurredAtEpochMillis, type, provider, detail) VALUES (?, ?, ?, NULL, ?)",
-                    arrayOf<Any?>(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
-                )
+                val database = AppDatabase.getInstance(applicationContext).openHelper.writableDatabase
+                val persistedStatus = database.query(
+                    "SELECT status FROM trip_sessions WHERE id = ? LIMIT 1",
+                    arrayOf<Any?>(tripId)
+                ).use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+                if (TripServiceLifecycleRules.shouldRecordUnexpectedDestroy(persistedStatus)) {
+                    database.execSQL(
+                        "INSERT INTO trip_diagnostic_events (tripId, occurredAtEpochMillis, type, provider, detail) VALUES (?, ?, ?, NULL, ?)",
+                        arrayOf<Any?>(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
+                    )
+                }
             }
         }
         healthMonitorJob?.cancel()
