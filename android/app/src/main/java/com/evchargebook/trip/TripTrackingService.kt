@@ -30,6 +30,7 @@ import com.evchargebook.domain.TripDiagnosticSamplingRules
 import com.evchargebook.domain.TripGpsHealth
 import com.evchargebook.domain.TripGpsHealthSnapshot
 import com.evchargebook.domain.TripGpsHealthStatus
+import com.evchargebook.domain.TripNotificationProgress
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
 import com.evchargebook.domain.TripServiceLifecycleRules
@@ -57,6 +58,8 @@ class TripTrackingService : Service() {
     private var healthMonitorJob: Job? = null
 
     @Volatile private var trackingStartedAtEpochMillis: Long = 0L
+    @Volatile private var tripStartedAtEpochMillis: Long = 0L
+    @Volatile private var currentDistanceMeters: Double = 0.0
     @Volatile private var lastCallbackAtEpochMillis: Long? = null
     @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
     @Volatile private var lastAcceptedProvider: String? = null
@@ -117,6 +120,8 @@ class TripTrackingService : Service() {
         if (currentTripId == tripId) return
         currentTripId = tripId
         trackingStartedAtEpochMillis = System.currentTimeMillis()
+        tripStartedAtEpochMillis = 0L
+        currentDistanceMeters = 0.0
         lastCallbackAtEpochMillis = null
         lastAcceptedPointAtEpochMillis = null
         lastAcceptedProvider = null
@@ -146,6 +151,8 @@ class TripTrackingService : Service() {
                 stopTrackingAndSelf()
                 return@launch
             }
+            tripStartedAtEpochMillis = session.startedAtEpochMillis
+            currentDistanceMeters = session.distanceMeters
             recordEvent(
                 tripId,
                 if (redelivered) TripDiagnosticEventType.SERVICE_REDELIVERED else TripDiagnosticEventType.SERVICE_START,
@@ -156,6 +163,7 @@ class TripTrackingService : Service() {
                 lastAcceptedPointAtEpochMillis = it.capturedAtEpochMillis
                 lastAcceptedProvider = it.provider
             }
+            updateNotification()
             requestLocationUpdatesOrInterrupt(tripId)
             startHealthMonitor()
         }
@@ -335,6 +343,7 @@ class TripTrackingService : Service() {
                 maxAltitudeMeters = mergeMax(session.maxAltitudeMeters, altitude)
             )
         )
+        currentDistanceMeters = newDistance
         updateNotification()
     }
 
@@ -395,6 +404,8 @@ class TripTrackingService : Service() {
         healthMonitorJob = null
         runCatching { locationManager.removeUpdates(locationListener) }
         currentTripId = null
+        tripStartedAtEpochMillis = 0L
+        currentDistanceMeters = 0.0
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
@@ -430,18 +441,22 @@ class TripTrackingService : Service() {
         .setContentText(notificationText(snapshot))
         .setOngoing(true)
         .setOnlyAlertOnce(true)
-        .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+        .setContentIntent(openActiveTripPendingIntent(0))
         .addAction(
             android.R.drawable.ic_menu_view,
             "打开行程",
-            PendingIntent.getActivity(
-                this,
-                1,
-                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            )
+            openActiveTripPendingIntent(1)
         )
         .build()
+
+    private fun openActiveTripPendingIntent(requestCode: Int): PendingIntent = PendingIntent.getActivity(
+        this,
+        requestCode,
+        Intent(this, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN_ACTIVE_TRIP, true)
+            .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 
     private fun notificationTitle(status: TripGpsHealthStatus): String = when (status) {
         TripGpsHealthStatus.WAITING, TripGpsHealthStatus.GOOD -> "EV Charge Book 正在记录行程"
@@ -451,6 +466,10 @@ class TripTrackingService : Service() {
     }
 
     private fun notificationText(snapshot: TripGpsHealthSnapshot): String {
+        val progressText = tripStartedAtEpochMillis.takeIf { it > 0L }?.let { startedAt ->
+            val elapsedSeconds = ((System.currentTimeMillis() - startedAt) / 1000).coerceAtLeast(0L)
+            TripNotificationProgress.format(elapsedSeconds, currentDistanceMeters)
+        }
         val ageText = snapshot.secondsSinceLastAcceptedPoint?.let { "最近有效定位 ${formatAge(it)}前" } ?: snapshot.message
         val providerText = when (lastAcceptedProvider) {
             LocationManager.GPS_PROVIDER -> "GPS"
@@ -458,7 +477,12 @@ class TripTrackingService : Service() {
             null -> null
             else -> lastAcceptedProvider
         }
-        return listOfNotNull(ageText, providerText, rejectedPointCount.takeIf { it > 0 }?.let { "已过滤 $it 点" }).joinToString(" · ")
+        return listOfNotNull(
+            progressText,
+            ageText,
+            providerText,
+            rejectedPointCount.takeIf { it > 0 }?.let { "已过滤 $it 点" }
+        ).joinToString(" · ")
     }
 
     private fun formatAge(seconds: Long): String = if (seconds < 60) "${seconds}秒" else "${seconds / 60}分${seconds % 60}秒"
