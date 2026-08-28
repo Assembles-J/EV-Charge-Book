@@ -32,6 +32,7 @@ import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.export.ChargingCsvExporter
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.domain.TripNotificationPermissionPolicy
 import com.evchargebook.domain.trip.TripEnergyCalculator
 import com.evchargebook.ui.dashboard.DashboardScreen
 import com.evchargebook.ui.records.AddRecordScreen
@@ -51,6 +52,9 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+private const val TRIP_PERMISSION_PREFS = "trip_permission_prompts"
+private const val KEY_TRIP_NOTIFICATION_PERMISSION_REQUESTED = "notification_requested"
 
 class MainActivity : ComponentActivity() {
     private val vm: MainViewModel by viewModels {
@@ -104,6 +108,9 @@ fun MainApp(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
+    val tripPermissionPrefs = remember(context) {
+        context.getSharedPreferences(TRIP_PERMISSION_PREFS, android.content.Context.MODE_PRIVATE)
+    }
     var tab by remember { mutableIntStateOf(0) }
     var editVehicle by remember { mutableStateOf(false) }
     var addVehicle by remember { mutableStateOf(false) }
@@ -191,6 +198,30 @@ fun MainApp(
             bluetoothPrompt = true
         }
     }
+    val tripNotificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (!granted) {
+            scope.launch {
+                snackbarHostState.showSnackbar("行程会继续记录；通知权限未开启，锁屏可能看不到持续状态。可稍后在系统设置中开启。")
+            }
+        }
+    }
+
+    fun maybeRequestTripNotificationPermission() {
+        val permissionGranted = Build.VERSION.SDK_INT < TripNotificationPermissionPolicy.NOTIFICATION_RUNTIME_PERMISSION_API ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val alreadyRequested = tripPermissionPrefs.getBoolean(KEY_TRIP_NOTIFICATION_PERMISSION_REQUESTED, false)
+        if (
+            TripNotificationPermissionPolicy.shouldRequest(
+                apiLevel = Build.VERSION.SDK_INT,
+                permissionGranted = permissionGranted,
+                alreadyRequestedForTrip = alreadyRequested
+            )
+        ) {
+            tripPermissionPrefs.edit().putBoolean(KEY_TRIP_NOTIFICATION_PERMISSION_REQUESTED, true).apply()
+            tripNotificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
     val bluetoothPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
             if (Build.VERSION.SDK_INT >= 33 && ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
@@ -208,6 +239,7 @@ fun MainApp(
             val resumeId = pendingResumeTripId
             pendingResumeTripId = null
             if (resumeId != null) viewModel.resumeTrip(resumeId) else viewModel.startTrip()
+            maybeRequestTripNotificationPermission()
         } else {
             pendingResumeTripId = null
             scope.launch { snackbarHostState.showSnackbar("需要定位权限才能记录真实行程轨迹") }
@@ -227,13 +259,19 @@ fun MainApp(
 
     fun startTripWithPermission() {
         pendingResumeTripId = null
-        if (hasLocationPermission()) viewModel.startTrip()
-        else tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        if (hasLocationPermission()) {
+            viewModel.startTrip()
+            maybeRequestTripNotificationPermission()
+        } else {
+            tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        }
     }
 
     fun resumeTripWithPermission(tripId: Long) {
-        if (hasLocationPermission()) viewModel.resumeTrip(tripId)
-        else {
+        if (hasLocationPermission()) {
+            viewModel.resumeTrip(tripId)
+            maybeRequestTripNotificationPermission()
+        } else {
             pendingResumeTripId = tripId
             tripLocationPermissionLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
         }
