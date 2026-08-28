@@ -8,11 +8,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -306,7 +308,19 @@ private fun ReadyMetric(label: String, value: String, modifier: Modifier) {
 private fun StatusPill(text: String, warning: Boolean) {
     val color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Surface(shape = CircleShape, color = color.copy(alpha = .12f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = color)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = if (warning) Icons.Default.WarningAmber else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+        }
     }
 }
 
@@ -333,7 +347,7 @@ private fun TripHistoryRow(trip: TripSessionEntity, onClick: () -> Unit, onDelet
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatTime(trip.startedAtEpochMillis), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (trip.status == TripStatus.COMPLETED) {
-                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                             Icon(Icons.Default.Delete, "删除行程", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                     }
