@@ -77,7 +77,7 @@ fun TripScreen(
         trips.firstOrNull { it.id == id } ?: activeTrip?.takeIf { it.id == id }
     }
     if (selectedTrip != null) {
-        TripDetailScreenV05(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
+        TripDetailScreenV06(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
         return
     }
 
