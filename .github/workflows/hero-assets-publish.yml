@@ -1,6 +1,10 @@
 name: Hero Assets Publish
 
 on:
+  pull_request:
+    paths:
+      - 'hero-assets/**'
+      - '.github/workflows/hero-assets-publish.yml'
   push:
     branches: [main]
     paths:
@@ -12,14 +16,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: ev-charge-book-hero-assets
+  group: ev-charge-book-hero-assets-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  publish:
-    name: Validate and publish Hero artwork
+  validate:
+    name: Validate Hero artwork package
     runs-on: ubuntu-latest
-    environment: production
 
     steps:
       - name: Checkout
@@ -57,6 +60,17 @@ jobs:
               filename = url.rsplit('/', 1)[-1]
               assert (root / 'remote' / filename).is_file(), f'{key}: missing {filename}'
           PY
+
+  publish:
+    name: Publish Hero artwork
+    if: github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Prepare remote directory
         uses: appleboy/ssh-action@v1.2.2
