@@ -26,25 +26,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate admin browser script
+      - name: Validate admin browser assets
         shell: bash
         run: |
           set -eu
+          node --check hero-admin/static/admin.js
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('hero-admin/templates/index.html', 'utf8');
-          const match = html.match(/<script>([\s\S]*?)<\/script>/);
-          if (!match) throw new Error('admin script block not found');
-          new Function(match[1]);
+          const js = fs.readFileSync('hero-admin/static/admin.js', 'utf8');
+          const css = fs.readFileSync('hero-admin/static/admin.css', 'utf8');
           for (const marker of [
             'data-tab="tools"',
+            'static/admin.css',
+            'static/admin.js',
+            'Hero 1600×1100 居中裁切'
+          ]) {
+            if (!html.includes(marker)) throw new Error(`missing admin HTML marker: ${marker}`);
+          }
+          for (const marker of [
             'downloadRemoteArtwork',
             'createImageBitmap',
             "'image/webp'",
-            'Hero 1600×1100 居中裁切'
+            'renderArtworkHistory',
+            'rollbackArtworkVersion',
+            '回滚到此版'
           ]) {
-            if (!html.includes(marker)) throw new Error(`missing admin image-tool marker: ${marker}`);
+            if (!js.includes(marker)) throw new Error(`missing admin JS marker: ${marker}`);
           }
+          if (!css.includes('.history-list')) throw new Error('missing Hero history styles');
           NODE
 
       - name: Build admin container
@@ -79,6 +89,13 @@ jobs:
           done
           docker logs ev-charge-book-hero-admin-test
           exit 1
+
+      - name: Verify browser assets are served
+        shell: bash
+        run: |
+          set -eu
+          curl --fail --silent --show-error http://127.0.0.1:18080/static/admin.js | grep -q 'rollbackArtworkVersion'
+          curl --fail --silent --show-error http://127.0.0.1:18080/static/admin.css | grep -q 'history-list'
 
       - name: Exercise vehicle catalog lifecycle
         shell: bash
