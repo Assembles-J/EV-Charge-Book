@@ -167,7 +167,7 @@ private fun RecordTimelineItem(record: ChargingRecordEntity, onEdit: () -> Unit,
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Text("SOC ${record.startSoc}% → ${record.endSoc}%", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
                 Text("¥ ${two(record.pricePerKwh)}/kWh", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                IconButton(onClick = onDelete, modifier = Modifier.size(34.dp)) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.DeleteOutline, "删除此记录", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                 }
             }
