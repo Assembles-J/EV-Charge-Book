@@ -8,28 +8,36 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
+import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -38,6 +46,12 @@ import java.util.Locale
 private val TripHeroBrush = Brush.linearGradient(
     listOf(Color(0xFF06100B), Color(0xFF0A2116), Color(0xFF07120D))
 )
+private val SpeedDeepRed = Color(0xFF8E1919)
+private val SpeedRed = Color(0xFFE44545)
+private val SpeedYellow = Color(0xFFF2C94C)
+private val SpeedGreen = Color(0xFF35C46A)
+private val SpeedBlue = Color(0xFF3B82F6)
+private val SpeedDeepBlue = Color(0xFF2457C5)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -239,9 +253,15 @@ private fun ActiveTripPanel(
             ResponsiveCockpitMetrics(
                 listOf(
                     CockpitMetricData("耗时", formatDuration(activeTrip.elapsedSeconds)),
+                    CockpitMetricData("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--"),
                     CockpitMetricData("行驶均速", activeTrip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
                     CockpitMetricData("最高速度", activeTrip.maxSpeedMps?.let(::formatSpeed) ?: "--")
                 )
+            )
+            Text(
+                "行程进行中没有实时车辆 SOC 数据，因此这里只显示出发时快照，不推算当前 SOC 或实时能耗。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             if (interrupted) {
@@ -288,7 +308,19 @@ private fun ReadyMetric(label: String, value: String, modifier: Modifier) {
 private fun StatusPill(text: String, warning: Boolean) {
     val color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     Surface(shape = CircleShape, color = color.copy(alpha = .12f)) {
-        Text(text, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), style = MaterialTheme.typography.labelMedium, color = color)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = if (warning) Icons.Default.WarningAmber else Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(14.dp)
+            )
+            Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+        }
     }
 }
 
@@ -315,7 +347,7 @@ private fun TripHistoryRow(trip: TripSessionEntity, onClick: () -> Unit, onDelet
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Text(formatTime(trip.startedAtEpochMillis), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
                     if (trip.status == TripStatus.COMPLETED) {
-                        IconButton(onClick = onDelete, modifier = Modifier.size(32.dp)) {
+                        IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
                             Icon(Icons.Default.Delete, "删除行程", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
                         }
                     }
@@ -326,6 +358,9 @@ private fun TripHistoryRow(trip: TripSessionEntity, onClick: () -> Unit, onDelet
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                formatTripEnergyLine(trip)?.let {
+                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text(statusText(trip.status), style = MaterialTheme.typography.labelMedium, color = if (trip.status == TripStatus.INTERRUPTED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
             }
         }
@@ -354,8 +389,44 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
     val firstPoint = points.firstOrNull()
     val lastPoint = points.lastOrNull()
     val wholeTripAverageMps = if (trip.elapsedSeconds > 0) trip.distanceMeters / trip.elapsedSeconds else null
+    val context = LocalContext.current
+    val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context) }
+    var startAddress by remember(trip.id) { mutableStateOf<String?>(null) }
+    var endAddress by remember(trip.id) { mutableStateOf<String?>(null) }
+    var resolvingAddresses by remember(trip.id) { mutableStateOf(false) }
+    val hasAltitude = listOf(
+        trip.startAltitudeMeters,
+        trip.endAltitudeMeters,
+        trip.minAltitudeMeters,
+        trip.maxAltitudeMeters
+    ).any { it != null }
+    val hasVehicleStateData = listOf(
+        trip.startSoc,
+        trip.endSoc,
+        trip.startMileageKm,
+        trip.endMileageKm,
+        trip.consumedEnergyKwh,
+        trip.averageConsumptionKwhPer100Km
+    ).any { it != null }
     val geometry = remember(points) {
-        if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) }) else null
+        if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() }) else null
+    }
+
+    LaunchedEffect(trip.id, trip.status, firstPoint?.id, lastPoint?.id) {
+        if (trip.status == TripStatus.RECORDING || (firstPoint == null && lastPoint == null)) {
+            startAddress = null
+            endAddress = null
+            resolvingAddresses = false
+            return@LaunchedEffect
+        }
+        resolvingAddresses = true
+        startAddress = firstPoint?.let { addressResolver.reverse(it.latitude, it.longitude) }
+        endAddress = when {
+            lastPoint == null -> null
+            firstPoint != null && firstPoint.latitude == lastPoint.latitude && firstPoint.longitude == lastPoint.longitude -> startAddress
+            else -> addressResolver.reverse(lastPoint.latitude, lastPoint.longitude)
+        }
+        resolvingAddresses = false
     }
 
     Scaffold(
@@ -401,14 +472,52 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
                 }
             }
 
+            if (hasVehicleStateData) {
+                item {
+                    SectionHeading("能耗与车辆状态", "SOC 能耗基于配置电池容量和整数 SOC 变化估算，不冒充 BMS 实测值")
+                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                    ResponsiveCockpitMetrics(
+                        listOf(
+                            CockpitMetricData("SOC", formatSocRange(trip.startSoc, trip.endSoc)),
+                            CockpitMetricData("估算消耗", formatEnergyKwh(trip.consumedEnergyKwh)),
+                            CockpitMetricData("估算能耗", formatConsumption(trip.averageConsumptionKwhPer100Km)),
+                            CockpitMetricData("总里程", formatMileageRange(trip.startMileageKm, trip.endMileageKm))
+                        )
+                    )
+                    if (trip.startSoc != null && trip.endSoc != null && trip.endSoc >= trip.startSoc && trip.consumedEnergyKwh == null) {
+                        Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                        Text(
+                            "SOC 未下降或出现回升，本次不强行推算行驶能耗；可能来自整数取整、能量回收或中途补能。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
             geometry?.let { if (it.isDrawable) item { TripRoutePreview(points) } }
+
+            if (hasAltitude) {
+                item {
+                    SectionHeading("海拔", "来自设备定位海拔；暂不根据原始噪声推算累计爬升")
+                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                    ResponsiveCockpitMetrics(
+                        listOf(
+                            CockpitMetricData("起点海拔", formatAltitude(trip.startAltitudeMeters)),
+                            CockpitMetricData("终点海拔", formatAltitude(trip.endAltitudeMeters)),
+                            CockpitMetricData("最低海拔", formatAltitude(trip.minAltitudeMeters)),
+                            CockpitMetricData("最高海拔", formatAltitude(trip.maxAltitudeMeters))
+                        )
+                    )
+                }
+            }
 
             item {
                 SectionHeading("轨迹可信度", if ((geometry?.gapCount ?: 0) > 0) "存在长时间 GPS 缺口，缺失区间保持断开" else "当前轨迹未检测到超过 2 分钟的长缺口")
                 Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                CoordinateRow("起点", firstPoint)
-                Spacer(Modifier.height(MaterialTheme.spacing.xs))
-                CoordinateRow("终点", lastPoint)
+                EndpointRow("起点", firstPoint, startAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
+                Spacer(Modifier.height(MaterialTheme.spacing.md))
+                EndpointRow("终点", lastPoint, endAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
                 if (points.isEmpty()) Text("本次没有保存有效 GPS 轨迹点。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
@@ -429,10 +538,33 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
 }
 
 @Composable
-private fun CoordinateRow(label: String, point: TripPointEntity?) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+private fun EndpointRow(
+    label: String,
+    point: TripPointEntity?,
+    address: String?,
+    resolving: Boolean,
+    tripRecording: Boolean
+) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
         Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(point?.let { "${formatCoordinate(it.latitude)}, ${formatCoordinate(it.longitude)}" } ?: "--", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            when {
+                point == null -> "--"
+                tripRecording -> "行程进行中，结束后解析地址"
+                resolving -> "地址解析中…"
+                !address.isNullOrBlank() -> address
+                else -> "地址暂不可用"
+            },
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (point != null) {
+            Text(
+                "坐标 · ${formatCoordinate(point.latitude)}, ${formatCoordinate(point.longitude)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 
@@ -473,10 +605,10 @@ private fun SectionHeading(title: String, subtitle: String) {
 @Composable
 private fun TripRoutePreview(points: List<TripPointEntity>) {
     val geometry = remember(points) {
-        TripRouteGeometryBuilder.build(points.map { TripGeoPoint(it.latitude, it.longitude, it.capturedAtEpochMillis) })
+        TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() })
     }
     if (geometry == null || !geometry.isDrawable) return
-    val routeColor = MaterialTheme.colorScheme.primary
+    val fallbackRouteColor = MaterialTheme.colorScheme.outline.copy(alpha = .72f)
     val startColor = MaterialTheme.colorScheme.tertiary
     val endColor = MaterialTheme.colorScheme.error
 
@@ -490,23 +622,67 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
                 StatusPill(if (geometry.gapCount > 0) "${geometry.gapCount} 个长缺口" else "轨迹连续", geometry.gapCount > 0)
             }
 
-            Canvas(Modifier.fillMaxWidth().height(240.dp)) {
+            Canvas(
+                Modifier
+                    .fillMaxWidth()
+                    .height(240.dp)
+                    .semantics { contentDescription = "真实行程轨迹；轨迹颜色表示本车速度，圆形标记为起点，方形标记为终点" }
+            ) {
                 val p = 16.dp.toPx()
                 val w = (size.width - p * 2).coerceAtLeast(1f)
                 val h = (size.height - p * 2).coerceAtLeast(1f)
                 fun offset(point: com.evchargebook.domain.trip.TripRoutePoint) = Offset(p + point.x * w, p + point.y * h)
                 geometry.segments.forEach { segment ->
-                    segment.map(::offset).zipWithNext().forEach { (from, to) ->
-                        drawLine(routeColor, from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
+                    segment.zipWithNext().forEach { (fromPoint, toPoint) ->
+                        val from = offset(fromPoint)
+                        val to = offset(toPoint)
+                        val segmentSpeed = averageSpeed(fromPoint.speedMps, toPoint.speedMps)
+                        drawLine(speedRouteColor(segmentSpeed, fallbackRouteColor), from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
                     }
                 }
-                drawCircle(startColor, 6.dp.toPx(), offset(geometry.points.first()))
-                drawCircle(endColor, 6.dp.toPx(), offset(geometry.points.last()))
+                val start = offset(geometry.points.first())
+                val end = offset(geometry.points.last())
+                drawCircle(startColor, 8.dp.toPx(), start)
+                val endSize = 14.dp.toPx()
+                drawRect(
+                    color = endColor,
+                    topLeft = Offset(end.x - endSize / 2, end.y - endSize / 2),
+                    size = Size(endSize, endSize)
+                )
             }
 
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("起点", style = MaterialTheme.typography.labelMedium, color = startColor)
-                Text("终点", style = MaterialTheme.typography.labelMedium, color = endColor)
+            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
+                Text("车辆速度分布", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(8.dp)
+                        .background(
+                            Brush.horizontalGradient(listOf(SpeedDeepRed, SpeedRed, SpeedYellow, SpeedGreen, SpeedBlue, SpeedDeepBlue)),
+                            CircleShape
+                        )
+                )
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("15", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("30", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("70", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("90+ km/h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text("颜色仅表示本车可信 GPS 速度，不代表道路拥堵或交通状态。灰色线段表示速度数据不足。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(startColor, CircleShape))
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text("起点 · 圆形", style = MaterialTheme.typography.labelMedium)
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(Modifier.size(10.dp).background(endColor))
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text("终点 · 方形", style = MaterialTheme.typography.labelMedium)
+                }
             }
             if (geometry.gapCount > 0) {
                 Text("检测到 ${geometry.gapCount} 处超过 2 分钟的 GPS 缺口。断点保持断开，不使用实线伪装连续。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
@@ -515,6 +691,81 @@ private fun TripRoutePreview(points: List<TripPointEntity>) {
         }
     }
 }
+
+private fun TripPointEntity.toRouteGeoPoint(): TripGeoPoint {
+    val trustedSpeed = speedMps.takeIf {
+        TripSpeedTrustRules.eligibleForMeasuredSpeed(
+            reportedSpeedMps = speedMps,
+            provider = provider,
+            horizontalAccuracyMeters = horizontalAccuracyMeters,
+            speedAccuracyMps = speedAccuracyMps
+        )
+    }
+    return TripGeoPoint(
+        latitude = latitude,
+        longitude = longitude,
+        capturedAtEpochMillis = capturedAtEpochMillis,
+        speedMps = trustedSpeed
+    )
+}
+
+private fun averageSpeed(first: Double?, second: Double?): Double? =
+    if (first != null && second != null) (first + second) / 2.0 else null
+
+private fun speedRouteColor(speedMps: Double?, fallback: Color): Color {
+    val kmh = speedMps?.times(3.6)?.takeIf { it.isFinite() && it >= 0.0 } ?: return fallback
+    return when {
+        kmh <= 5.0 -> SpeedDeepRed
+        kmh <= 15.0 -> SpeedRed
+        kmh <= 30.0 -> blendColor(SpeedRed, SpeedYellow, ((kmh - 15.0) / 15.0).toFloat())
+        kmh <= 50.0 -> blendColor(SpeedYellow, SpeedGreen, ((kmh - 30.0) / 20.0).toFloat())
+        kmh <= 70.0 -> SpeedGreen
+        kmh <= 90.0 -> blendColor(SpeedGreen, SpeedBlue, ((kmh - 70.0) / 20.0).toFloat())
+        else -> blendColor(SpeedBlue, SpeedDeepBlue, ((kmh - 90.0) / 40.0).toFloat().coerceIn(0f, 1f))
+    }
+}
+
+private fun blendColor(from: Color, to: Color, fraction: Float): Color {
+    val value = fraction.coerceIn(0f, 1f)
+    return Color(
+        red = from.red + (to.red - from.red) * value,
+        green = from.green + (to.green - from.green) * value,
+        blue = from.blue + (to.blue - from.blue) * value,
+        alpha = from.alpha + (to.alpha - from.alpha) * value
+    )
+}
+
+private fun formatTripEnergyLine(trip: TripSessionEntity): String? {
+    val parts = mutableListOf<String>()
+    if (trip.startSoc != null || trip.endSoc != null) {
+        parts += "SOC ${formatSocRange(trip.startSoc, trip.endSoc)}"
+    }
+    when {
+        trip.averageConsumptionKwhPer100Km != null -> parts += "估算 ${formatConsumption(trip.averageConsumptionKwhPer100Km)}"
+        trip.consumedEnergyKwh != null -> parts += "估算 ${formatEnergyKwh(trip.consumedEnergyKwh)}"
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
+}
+
+private fun formatSocRange(start: Int?, end: Int?): String =
+    "${start?.let { "$it%" } ?: "--"} → ${end?.let { "$it%" } ?: "--"}"
+
+private fun formatEnergyKwh(value: Double?): String =
+    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--"
+
+private fun formatConsumption(value: Double?): String =
+    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh/100km", it) } ?: "--"
+
+private fun formatMileageRange(start: Double?, end: Double?): String =
+    when {
+        start != null && end != null -> "${formatMileage(start)} → ${formatMileage(end)} km"
+        start != null -> "${formatMileage(start)} → -- km"
+        end != null -> "-- → ${formatMileage(end)} km"
+        else -> "--"
+    }
+
+private fun formatMileage(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 
 private fun formatTime(epochMillis: Long) = SimpleDateFormat("M月d日 HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
 private fun formatDuration(seconds: Long): String {
@@ -525,6 +776,7 @@ private fun formatDuration(seconds: Long): String {
 }
 private fun formatDistance(meters: Double) = if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0) else String.format(Locale.US, "%.0f m", meters)
 private fun formatSpeed(mps: Double) = String.format(Locale.US, "%.1f km/h", mps * 3.6)
+private fun formatAltitude(meters: Double?) = meters?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.0f m", it) } ?: "--"
 private fun formatCoordinate(value: Double) = String.format(Locale.US, "%.6f", value)
 private fun statusText(status: String) = when (status) {
     TripStatus.RECORDING -> "进行中"

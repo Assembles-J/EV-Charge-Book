@@ -1,6 +1,6 @@
 # EV Charge Book Location / Map / Trip Tracking Design
 
-版本: v1.3.0
+版本: v1.4.0
 更新时间: 2026-08-27
 状态: Authority Subdocument
 
@@ -73,28 +73,48 @@ MapLibre 本身开源免费，但瓦片/地图数据服务不是天然无限免�
 
 ## 4. 采样策略
 
-当前目标:
+### 4.1 callback 与持久化必须分层
 
-- 行驶中目标间隔: 2-5 秒
-- 最小位移参考: 5-10 米
-- 低速/停车时自适应降低频率
-- accuracy 过差点不参与距离聚合
+2026-08-27 真机数据证明，不能同时在 Android LocationManager 层和业务层使用较大的位移门槛，否则停车时可能没有 callback，业务层也就无法证明“定位仍健康但车辆静止”。
 
-禁止默认 1 秒永久高频采样。
+当前实现明确分为两层：
+
+**系统 callback 层：**
+
+- `TripTrackingService` 请求间隔约 4 秒。
+- `SAMPLE_DISTANCE_METERS = 0f`，不再要求至少移动 8m 才允许 callback。
+- 目标是保持时间维度的定位活性与可诊断性，不代表每 4 秒都必须写 Room。
+
+**业务采样 / 写库层：**
+
+- `TripSamplingRules` 继续负责 accuracy、跳点、移动/静止判断与写库节流。
+- 移动判定当前以约 `1 m/s` 报告速度或约 `5m` 位移作为基础条件。
+- 静止状态默认约 15 秒保留一个 heartbeat，避免 4 秒一次永久高频写库。
+- accuracy 过差或不可信跳点不参与可信统计。
+
+因此当前设计不是“0m 高频永久采样”，而是：
+
+```text
+Location callback 保活
+  -> 业务质量过滤
+  -> 移动点正常记录 / 静止 heartbeat 降频
+  -> Room
+```
 
 目的:
 
-- 降低定位耗电
-- 控制 Room 数据量
-- 降低 GPS 抖动造成的假距离
+- 让红灯/停车仍能证明 tracking callback 健康；
+- 降低定位耗电和 Room 数据量；
+- 降低 GPS 抖动造成的假距离；
+- 为后台 callback starvation 提供可诊断证据。
 
 结束行程后可增加轨迹简化用于地图展示；原始点是否长期保留由数据保留策略决定。
 
-### GPS gap 不是普通降频
+### 4.2 GPS gap 不是普通降频
 
-静止降频只能解释短间隔缺点，不能解释十分钟级位置空洞。
+静止降频只能解释正常 heartbeat 间隔，不能解释十分钟级位置空洞。
 
-真实行程已经观察到 12 分钟和 15 分钟级 GPS gap，因此必须逐步补齐：
+真实行程已经观察到 12 分钟、15 分钟，以及 2026-08-27 第二轮实机中的约 10 分 43 秒 / 7 分 45 秒移动空洞。因此必须继续区分：
 
 - lastLocationCallbackAt
 - lastAcceptedPointAt
@@ -103,7 +123,9 @@ MapLibre 本身开源免费，但瓦片/地图数据服务不是天然无限免�
 - longest gap
 - service lifecycle / re-delivery evidence
 
-PR #36 第一阶段已经实现运行时 GPS health 与 ongoing notification，并在长 gap 时把轨迹拆成多个可信 segment。
+PR #36 已实现运行时 GPS health 与 ongoing notification，并在长 gap 时把轨迹拆成多个可信 segment。
+
+PR #80 进一步移除 LocationManager 的 8m callback 位移门槛，让现有 15s stationary heartbeat 有机会在停车状态真正执行。该代码已进入 `main`；“切换其他 App 后是否持续回调”仍属于 #77 真机验收项，不能由 CI 代替。
 
 ---
 
@@ -115,40 +137,43 @@ Trip 至少区分:
 - moving time: 有效移动时间
 - stopped time: 停车/静止时间
 
-首版停车识别可以采用简单规则:
-
-- speed 低于约 1-2 km/h
-- 持续达到阈值后计为 stopped
-
-阈值需要真机数据调优，不写死成产品事实。
+首版停车识别采用简单可信规则，不把阈值写成不可变产品事实。当前静止 heartbeat 会把可信静止区间累积到 `stoppedSeconds`；后续仍需用城市道路真机数据继续校准。
 
 ### 5.1 当前距离如何计算
 
-当前 `distanceMeters` 来自连续 accepted GPS point 之间的地理直线距离累计。
+当前 `distanceMeters` 来自连续 accepted point 之间的可信地理直线距离累计。
 
-因此它不是道路里程，也不是车辆轮速里程；在以下场景会存在偏差：
+因此它不是道路里程，也不是车辆轮速里程；在以下场景仍会存在偏差：
 
 - 道路连续弯曲但采样点较稀
 - GPS 漂移
 - GPS / Network provider 切换
-- 长时间 GPS gap 后直接把 gap 两端连接
+- 长时间 GPS callback/usable-location 缺失
 
-产品规则：长时间 gap 两端不能继续作为“可信连续距离”直接累计。该规则属于 P0 reliability follow-up；在落地前，平均速度必须被视为基于已记录 GPS 距离的派生值，而不是车辆仪表级事实。
+`TripContinuityRules` 当前已对 `>=120s` 的长 gap 建立 baseline：恢复后的点可以作为新的轨迹起点，但 gap 两端 **不计可信距离、不计该段 moving/stopped duration，也不允许该 gap 直接贡献速度统计**。
+
+因此“长 gap 两端不得直接累计直线距离”的 P0 规则已经落地，不再是 future follow-up。
+
+平均速度仍必须被理解为基于“已记录可信 GPS 距离”的派生值，而不是车辆仪表级道路里程事实。
 
 ### 5.2 当前速度到底来自哪里
 
-当前存在两个完全不同的概念：
+当前存在不同层次的速度概念：
 
-1. `Location.speed`：Android Location 提供的定位时刻速度，当前用于 TripPoint `speedMps`，也是最高速度的主要来源。
-2. `point-to-point distance / time`：可作为轨迹区段速度的派生/校验证据，但不应该冒充瞬时速度。
+1. `Location.speed`：Android Location 提供的定位时刻速度，原始值保存在 TripPoint `speedMps`。
+2. point-to-point distance / time：用于连续性、距离和速度可信度校验证据，不冒充车辆瞬时速度。
+3. route visualization speed：首版使用相邻两端都通过可信 GPS 质量门的 `Location.speed` 做显示派生。
 
-因此：
+PR #82 后，“最高已记录速度”不再允许任意 provider 的原始 `Location.speed` 直接刷新。当前 max-speed candidate 必须满足：
 
-- 当前“最高速度”不是简单用两点直线距离除时间得到的。
-- 当前“全程均速 / 行驶均速”依赖累计 `distanceMeters`，所以会受到 GPS 距离质量影响。
-- 未来“分段速度”不能只用一个单点 `Location.speed`，也不能只用两点直线距离；应结合连续可信点、speed accuracy、provider 与 gap 状态。
+- provider = GPS；
+- horizontal accuracy <= 25m；
+- Android 提供 speed accuracy 时，speed accuracy <= 3 m/s；
+- 同时通过现有连续距离/时间 corroboration。
 
-短时速度峰值存在漏采可能。例如真实峰值只持续约 4 秒，而采样目标同样是 2-5 秒，则可能在峰值时没有产生有效 Location fix。产品上应区分“最高已记录 GNSS 速度”和“车辆真实最高速度”，不能把未采到的峰值推算出来。
+Network fallback 原始速度仍保存在 TripPoint 便于审计，但不能制造新的 `maxSpeedMps`。这正是 2026-08-27 真机中约 122.4 km/h / 142.6 km/h network 粗定位峰值后的修正。
+
+短时速度峰值仍存在漏采可能。例如真实峰值只持续约 4 秒，而定位 callback/accepted point 没有覆盖峰值，则产品不能自行推算。UI 应理解为“最高已记录可信 GNSS 速度”，不是车辆真实最高速度的绝对证明。
 
 ### 5.3 速度 UI
 
@@ -156,22 +181,31 @@ Trip 至少区分:
 
 1. 全程平均速度：total recorded distance / elapsed time
 2. 行驶平均速度：total recorded distance / moving time
-3. 分段平均速度：可信 segment 内的综合速度
-4. 最高已记录速度：经异常过滤后的 Location.speed 峰值
+3. 分段/轨迹速度：可信 route segment 的显示派生
+4. 最高已记录速度：经异常过滤后的可信 GPS `Location.speed` 峰值
 
 PR #36 已把详情页原先模糊的“平均速度”拆成全程均速 / 行驶均速 / 最高速度 / 移动时间。
 
-后续新增 `TripSpeedSegment` 派生模型，不新增 Room 表即可完成首版。
+PR #85 已实现第一版彩色 route preview，不新增 Room 表：
 
-分段速度颜色采用连续渐变，语义为本车速度分布：
+- 只有相邻两点的速度都通过可信 measured-speed 质量门时，该线段才按速度上色；
+- 任一端速度缺失或不可信时保持中性灰色，不把未知速度当成 0 km/h；
+- 长 GPS gap 继续保持断开；
+- 颜色连续映射为深红 -> 红 -> 黄 -> 绿 -> 蓝。
 
-- 深红：极低速
-- 红：低速
-- 黄：较慢
-- 绿：正常/快速
-- 蓝：高速
+当前颜色语义只代表本车可信 GPS 速度分布：
+
+- 0-5 km/h：深红
+- 5-15 km/h：红
+- 15-30 km/h：红 -> 黄
+- 30-50 km/h：黄 -> 绿
+- 50-70 km/h：绿
+- 70-90 km/h：绿 -> 蓝
+- 90+ km/h：蓝 / 深蓝
 
 在未接道路类型 / 限速 / map matching / 实时交通数据前，不展示“严重拥堵 / 拥堵 / 畅通”等交通事实标签。
+
+更长窗口的 `TripSpeedSegmentBuilder`（例如 20-30 秒 / 200-300m 综合 segment）仍属于后续分析能力，不能把 #85 的相邻可信点颜色渲染误写成已经完成完整分段统计模型。
 
 ---
 
@@ -227,6 +261,7 @@ OBD-II 作为 P3 可选增强方向，优先只验证标准 Vehicle Speed 数据
 - 地库/隧道无 GPS
 - foreground service 异常退出
 - foreground service 仍存活但 LocationManager 长时间无 callback
+- foreground service 存活但切换其他 App 后 ROM / 系统限制导致 callback starvation
 
 TripSession 使用 `RECORDING / INTERRUPTED / COMPLETED` 状态。
 
@@ -247,23 +282,24 @@ App 启动时发现未正常结束的 Trip:
 
 ## 8. GPS / Network Provider 质量
 
-当前允许 GPS + Network provider fallback。
+当前允许 GPS + Network provider fallback，但不同 provider 不具备同等统计权限。
 
-后续原则：
+当前原则与已实现基线：
 
-- GPS 高质量点优先作为主轨迹事实
-- Network point 作为 fallback / continuity evidence
-- 不默认将 GPS 与 Network 视为同等质量
-- provider switch 必须可观察
-- 时间非常接近的 GPS / Network point 需要去重/择优，避免重复计距离
-- network 漂移点不能制造假距离或假速度
+- GPS 高质量点优先作为主轨迹事实。
+- Network point 可作为 fallback / continuity evidence。
+- 时间非常接近的 GPS / Network point 通过 continuity rule 做去重/择优基线，避免重复计距离。
+- Network / coarse speed 不允许刷新最高速度。
+- PR #85 后，Network / coarse speed 也不允许给 route speed segment 上色。
+- provider switch 与 rejected point 继续保留诊断价值。
+- 原始 TripPoint 不因派生统计过滤而被重写。
 
 GPS 海拔:
 
-- 保存 raw altitude + vertical accuracy（有则保存）
-- UI 标注“GPS 海拔”
-- 累计爬升/下降必须经过平滑后计算
-- 不宣称测绘级精度
+- 保存 raw altitude + vertical accuracy（有则保存）。
+- PR #83 已在 Trip 详情展示起点 / 终点 / 最低 / 最高海拔。
+- 累计爬升/下降仍必须经过平滑后计算，当前未实现。
+- 不宣称测绘级精度。
 
 ---
 
@@ -280,13 +316,22 @@ PR #36 已增加：
 - 同一条通知周期刷新，不刷屏
 - 不显示经纬度或精确地址
 
-后续继续补：
+PR #80 已增加 callback-liveness 修正：
 
-- service restart / re-delivery evidence
+- LocationManager `minDistance` 从 8m 调整为 0m；
+- 系统 callback 与业务写库节流解耦；
+- 业务层继续使用 stationary heartbeat 控制 Room 写入。
+
+诊断事件已经覆盖 service start / START_REDELIVER_INTENT redelivery / destroy / provider disabled / permission missing / location registration failure 等核心生命周期证据。
+
+仍需继续补或真机确认：
+
 - provider counters
 - longest gap / cumulative gap summary
+- 切换其他 App 5-10 分钟后的真实 callback continuity
+- Android 厂商后台限制/电池优化导致 starvation 时的修复引导
 
-该方向与 Issue #26 的后台活动可见性方案保持一致。
+该方向由 #77 与 #26 分别承担数据可靠性和后台修复 UX。
 
 ---
 
@@ -294,16 +339,16 @@ PR #36 已增加：
 
 禁止将长时间缺失的两个 GPS 点直接画成可信实线。
 
-PR #36 已按 `>=120s` gap 将路线几何拆成多个可信 segment；预览只绘制 segment 内部连续轨迹。
+当前按 `>=120s` gap 将路线几何拆成多个可信 segment；预览只绘制 segment 内部连续轨迹。
 
 ```text
 已知轨迹 ━━━━━     ━━━━━ 已知轨迹
              GPS 缺失
 ```
 
-无 basemap 阶段即可做断开表达；MapLibre 后续只负责更好的 renderer，不负责补造缺失事实。
+同时，距离统计已与该语义对齐：长 gap 两端不再直接累计可信直线距离，也不计算该 gap 的移动/静止时长和 aggregate speed。
 
-下一步必须让距离聚合与可视化语义一致：长 gap 两端不能继续直接累计直线距离。
+无 basemap 阶段即可做断开表达；MapLibre 后续只负责更好的 renderer，不负责补造缺失事实。
 
 ---
 
@@ -321,7 +366,7 @@ v0.2 不默认实现“检测开车后自动偷偷开始记录”。
 
 ---
 
-## 12. 地点与充电记录
+## 12. 地点与地址展示
 
 新增充电记录支持:
 
@@ -330,6 +375,14 @@ v0.2 不默认实现“检测开车后自动偷偷开始记录”。
 - 地点名称人工编辑
 
 逆地理编码属于独立 provider，不成为保存记录的硬依赖。
+
+PR #83 已把相同的 coordinate-first 原则应用到 Trip 详情：
+
+- WGS84 起终点坐标仍是权威事实；
+- 已完成/中断 Trip 可通过现有 `AndroidGeocoderAddressResolver` 解析起终点地址用于展示；
+- 地址作为主阅读文本，坐标作为技术参数保留；
+- geocoder 失败显示“地址暂不可用”，不得阻止 Trip 完成或虚构地点；
+- RECORDING 中不反复解析实时 endpoint 地址。
 
 后续 ChargingPlace 设计见 `DATA_QUALITY_BACKUP.md`。
 
@@ -359,29 +412,40 @@ Core 已完成：
 - [x] 充电记录可绑定当前位置
 - [x] 用户手动开始/结束行程
 - [x] 经纬度 / GPS 海拔 / 速度 / 精度 / 时间
-- [x] elapsed / moving / stopped time
+- [x] elapsed / moving / stopped time 数据结构与基础累计
 - [x] 距离 / 平均速度 / 最高速度
 - [x] Trip 绑定具体 Vehicle
 - [x] 中断行程恢复
 - [x] 删除 Trip 同步处理 TripPoint
+- [x] Trip 起终点地址展示 + 坐标技术参数
+- [x] Trip 起点圆形 / 终点方形语义标记
+- [x] Trip 起点 / 终点 / 最低 / 最高海拔展示
 
-P0 reliability follow-up：
+P0 reliability：
 
 - [x] 运行时 GPS health / accepted point heartbeat
 - [x] GPS LOST / LONG_GAP ongoing notification
 - [x] long gap 路线断开，不画可信实线
-- [ ] 长 gap 两端不参与可信距离累计
-- [ ] GPS/Network 去重与择优
+- [x] 长 gap 两端不参与可信距离/时长/aggregate speed
+- [x] GPS/Network 时间邻近去重/择优基线
+- [x] service start / destroy / re-delivery 等诊断事件
+- [x] Network / coarse point 不得制造最高速度峰值
 - [ ] longest gap / provider counters / rejected reason 持久摘要
-- [ ] service restart / re-delivery evidence
-- [ ] 锁屏长行程真机复验
+- [ ] 切换其他 App 后后台 callback / 距离连续性真机复验（#77）
+- [ ] 2-3 分钟红灯 stationary heartbeat / stoppedSeconds 真机复验（#77）
+- [ ] 最高已记录速度与车辆实际峰值真机复验（#78）
 
 P1 speed visualization：
 
-- [x] 全程平均 / 行驶平均明确区分
-- [ ] TripSpeedSegment 派生模型
-- [ ] 连续速度颜色映射
-- [ ] 短时峰值与 segment speed 分开展示
+- [x] 全程平均 / 行驶平均 / 最高速度明确区分
+- [x] 可信 GPS 速度连续颜色 route preview
+- [x] 不可信/未知速度 segment 保持中性灰色
+- [x] 长 GPS gap 不跨缺口上色或画可信实线
+- [x] UI 明确“本车速度分布”，不宣称真实道路拥堵
+- [ ] `TripSpeedSegmentBuilder` 长窗口派生模型
+- [ ] 20-30s / 200-300m 等综合 segment 平均速度与 JVM tests
+- [ ] 短时峰值与综合 segment speed 的进一步分析展示
+- [ ] 彩色 route dark/light 真机视觉验收（#67）
 
 P3 optional vehicle data：
 
@@ -396,6 +460,16 @@ Optional：
 ---
 
 ## 15. 变更记录
+
+### v1.4.0
+
+- 同步 2026-08-27 第二轮真机 Trip 证据与 #77/#78 新 P0 reliability ownership。
+- 同步 PR #80：LocationManager 取消 8m callback 位移门槛，系统 callback 与 15s stationary heartbeat 写库节流解耦。
+- 修正长 gap 状态：`>=120s` 已不计可信距离、duration 与 aggregate speed，不再是 future follow-up。
+- 同步 PR #82：最高已记录速度只允许通过可信 GPS 质量门的 candidate，Network 粗速度保留原始事实但不更新 max。
+- 同步 PR #83：Trip 详情展示起/终/最低/最高海拔，起终点地址作为派生展示、坐标保持权威技术参数，起点圆形/终点方形避免只靠颜色区分。
+- 同步 PR #85：相邻两端都可信时按本车 GPS 速度连续着色；未知/不可信段保持灰色；交通拥堵语义继续禁止。
+- 明确上述 CI/代码完成不等于后台连续性、最高速或彩色轨迹的最终真机验收。
 
 ### v1.3.0
 

@@ -34,5 +34,11 @@ data class TripSessionEntity(
     val endAltitudeMeters: Double? = null,
     val minAltitudeMeters: Double? = null,
     val maxAltitudeMeters: Double? = null,
+    val startSoc: Int? = null,
+    val endSoc: Int? = null,
+    val startMileageKm: Double? = null,
+    val endMileageKm: Double? = null,
+    val consumedEnergyKwh: Double? = null,
+    val averageConsumptionKwhPer100Km: Double? = null,
     val status: String = TripStatus.RECORDING
 )

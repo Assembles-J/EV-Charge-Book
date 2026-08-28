@@ -32,6 +32,7 @@ import com.evchargebook.domain.TripGpsHealthSnapshot
 import com.evchargebook.domain.TripGpsHealthStatus
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.TripSamplingRules
+import com.evchargebook.domain.TripServiceLifecycleRules
 import com.evchargebook.domain.TripSpeedTrustRules
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -75,7 +76,8 @@ class TripTrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            ACTION_STOP -> stopFromNotification()
+            // Legacy/stale notification PendingIntents must never bypass the end-SOC completion flow.
+            ACTION_STOP -> Unit
             ACTION_START -> {
                 val tripId = intent.getLongExtra(EXTRA_TRIP_ID, 0L)
                 if (tripId > 0L) beginTracking(tripId, flags and START_FLAG_REDELIVERY != 0) else stopSelf()
@@ -90,10 +92,19 @@ class TripTrackingService : Service() {
     override fun onDestroy() {
         currentTripId?.let { tripId ->
             runCatching {
-                AppDatabase.getInstance(applicationContext).openHelper.writableDatabase.execSQL(
-                    "INSERT INTO trip_diagnostic_events (tripId, occurredAtEpochMillis, type, provider, detail) VALUES (?, ?, ?, NULL, ?)",
-                    arrayOf<Any?>(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
-                )
+                val database = AppDatabase.getInstance(applicationContext).openHelper.writableDatabase
+                val persistedStatus = database.query(
+                    "SELECT status FROM trip_sessions WHERE id = ? LIMIT 1",
+                    arrayOf<Any?>(tripId)
+                ).use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+                if (TripServiceLifecycleRules.shouldRecordUnexpectedDestroy(persistedStatus)) {
+                    database.execSQL(
+                        "INSERT INTO trip_diagnostic_events (tripId, occurredAtEpochMillis, type, provider, detail) VALUES (?, ?, ?, NULL, ?)",
+                        arrayOf<Any?>(tripId, System.currentTimeMillis(), TripDiagnosticEventType.SERVICE_DESTROY, "service destroyed while trip active")
+                    )
+                }
             }
         }
         healthMonitorJob?.cancel()
@@ -251,6 +262,12 @@ class TripTrackingService : Service() {
         val trustedSegmentDistance = if (continuity.countDistance) rawSegmentDistance else 0.0
         val statsDeltaSeconds = if (continuity.countDuration) rawDeltaSeconds ?: 0 else 0
         val rawSpeed = location.speed.takeIf { location.hasSpeed() }?.toDouble()
+        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
+        val speedAccuracy = if (Build.VERSION.SDK_INT >= 26 && location.hasSpeedAccuracy()) {
+            location.speedAccuracyMetersPerSecond.toDouble()
+        } else {
+            null
+        }
         val aggregateSpeed = if (
             TripSpeedTrustRules.eligibleForAggregate(
                 reportedSpeedMps = rawSpeed,
@@ -259,7 +276,17 @@ class TripTrackingService : Service() {
                 continuityAllowsSpeed = continuity.speedEligibleForAggregate
             )
         ) rawSpeed else null
-        val accuracy = location.accuracy.takeIf { location.hasAccuracy() }?.toDouble()
+        val maxSpeedCandidate = if (
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = rawSpeed,
+                deltaSeconds = statsDeltaSeconds,
+                trustedDistanceMeters = trustedSegmentDistance,
+                continuityAllowsSpeed = continuity.speedEligibleForAggregate,
+                provider = location.provider,
+                horizontalAccuracyMeters = accuracy,
+                speedAccuracyMps = speedAccuracy
+            )
+        ) rawSpeed else null
         val decision = TripSamplingRules.decide(statsDeltaSeconds, trustedSegmentDistance, aggregateSpeed, accuracy)
         if (!decision.accept) {
             rejectLocation(tripId, location.provider, "sampling_rejected")
@@ -281,7 +308,7 @@ class TripTrackingService : Service() {
             bearingDegrees = location.bearing.takeIf { location.hasBearing() }?.toDouble(),
             horizontalAccuracyMeters = accuracy,
             verticalAccuracyMeters = if (Build.VERSION.SDK_INT >= 26 && location.hasVerticalAccuracy()) location.verticalAccuracyMeters.toDouble() else null,
-            speedAccuracyMps = if (Build.VERSION.SDK_INT >= 26 && location.hasSpeedAccuracy()) location.speedAccuracyMetersPerSecond.toDouble() else null,
+            speedAccuracyMps = speedAccuracy,
             provider = location.provider
         )
         val pointId = tripDao.insertPoint(point)
@@ -297,7 +324,7 @@ class TripTrackingService : Service() {
                 movingSeconds = newMovingSeconds,
                 stoppedSeconds = newStoppedSeconds,
                 averageSpeedMps = if (newMovingSeconds > 0) newDistance / newMovingSeconds else null,
-                maxSpeedMps = listOfNotNull(session.maxSpeedMps, aggregateSpeed).maxOrNull(),
+                maxSpeedMps = listOfNotNull(session.maxSpeedMps, maxSpeedCandidate).maxOrNull(),
                 startLatitude = session.startLatitude ?: location.latitude,
                 startLongitude = session.startLongitude ?: location.longitude,
                 endLatitude = location.latitude,
@@ -405,9 +432,14 @@ class TripTrackingService : Service() {
         .setOnlyAlertOnce(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         .addAction(
-            android.R.drawable.ic_media_pause,
-            "结束行程",
-            PendingIntent.getService(this, 1, Intent(this, TripTrackingService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            android.R.drawable.ic_menu_view,
+            "打开行程",
+            PendingIntent.getActivity(
+                this,
+                1,
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
         )
         .build()
 
@@ -447,7 +479,8 @@ class TripTrackingService : Service() {
         private const val CHANNEL_ID = "trip_tracking"
         private const val NOTIFICATION_ID = 2201
         private const val SAMPLE_INTERVAL_MS = 4_000L
-        private const val SAMPLE_DISTANCE_METERS = 8f
+        // Keep callback liveness time-based; TripSamplingRules owns stationary write throttling.
+        private const val SAMPLE_DISTANCE_METERS = 0f
         private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
         private const val MAX_DETAIL_LENGTH = 160
 

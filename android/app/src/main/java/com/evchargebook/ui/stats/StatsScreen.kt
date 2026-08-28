@@ -22,11 +22,16 @@ import com.evchargebook.domain.ChargingEstimateConfidence
 import com.evchargebook.domain.ChargingIntervalSample
 import com.evchargebook.domain.ChargingTripCoverageInterval
 import com.evchargebook.domain.MonthlyChargingComparison
+import com.evchargebook.domain.trip.TripEnergyAnalytics
+import com.evchargebook.domain.trip.TripEnergySummary
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.theme.warningColor
 import com.evchargebook.viewmodel.MainUiState
 import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.YearMonth
+import java.time.ZoneId
 import java.util.Date
 import java.util.Locale
 
@@ -37,6 +42,13 @@ private val StatsHeroBrush = Brush.linearGradient(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatsScreen(state: MainUiState) {
+    val zoneId = ZoneId.systemDefault()
+    val month = YearMonth.from(Instant.now().atZone(zoneId))
+    val monthStart = month.atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+    val nextMonthStart = month.plusMonths(1).atDay(1).atStartOfDay(zoneId).toInstant().toEpochMilli()
+    val monthTripEnergy = TripEnergyAnalytics.summarize(state.trips, monthStart, nextMonthStart)
+    val lifetimeTripEnergy = TripEnergyAnalytics.summarize(state.trips)
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -57,20 +69,37 @@ fun StatsScreen(state: MainUiState) {
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
             item { MonthSummary(state) }
+            item { TripEnergyEstimateCard(monthTripEnergy, lifetimeTripEnergy) }
             MonthlyChargingComparison.compare(state.monthlyTrend)?.let { comparison -> item { MonthComparisonCard(comparison) } }
-            if (state.monthlyTrend.isNotEmpty()) item { AnalyticsSection("最近 6 个月", "MONTHLY FLOW") { MonthlyTrendContent(state) } }
+            if (state.monthlyTrend.isNotEmpty()) item { AnalyticsSection("最近 6 个月充电", "CHARGING FLOW") { MonthlyTrendContent(state) } }
             if (state.chargingRecords.isNotEmpty()) item { AnalyticsSection("充电方式", "CHARGING MIX") { ChargerTypeContent(state) } }
             if (state.chargingPlaceSummary.isNotEmpty()) item { AnalyticsSection("常用地点", "CHARGING PLACES") { CommonPlacesContent(state) } }
-            item { SectionHeading("累计账本", "LIFETIME TOTAL") }
+            item { SectionHeading("充电账本累计", "CHARGING / LIFETIME") }
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     StatTile("累计费用", "¥ ${two(state.totalCost)}", Icons.Default.Payments, Modifier.weight(1f))
-                    StatTile("累计补能", "${one(state.totalEnergy)} kWh", Icons.Default.Bolt, Modifier.weight(1f))
+                    StatTile("累计电网补能", "${one(state.totalEnergy)} kWh", Icons.Default.Bolt, Modifier.weight(1f))
                 }
             }
-            item { StatTile("平均充电单价", "¥ ${two(state.averagePrice)} / kWh", Icons.Default.BarChart, Modifier.fillMaxWidth()) }
+            item { StatTile("平均桩端单价", "¥ ${two(state.averagePrice)} / kWh", Icons.Default.BarChart, Modifier.fillMaxWidth()) }
             item { IntervalAnalyticsCard(state) }
             if (state.intervalSamples.isNotEmpty()) item { IntervalDetailSection(state) }
+            item {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.large,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                        Text("统计口径", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "充电记录中的 kWh 是充电桩/电表侧补能事实；Trip 中的 kWh/100km 是依据电池容量与整数 SOC 变化推导的估算。两类数据分开展示，不直接相减或混算充电效率。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
             item {
                 Row(Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.sm), verticalAlignment = Alignment.Top) {
                     Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
@@ -89,9 +118,9 @@ fun StatsScreen(state: MainUiState) {
 @Composable
 private fun MonthSummary(state: MainUiState) {
     val metrics = listOf(
-        "补能" to "${one(state.monthEnergy)} kWh",
-        "次数" to "${state.chargingCount} 次",
-        "均价" to "¥ ${two(state.averagePrice)}"
+        "电网补能" to "${one(state.monthEnergy)} kWh",
+        "充电次数" to "${state.chargingCount} 次",
+        "桩端均价" to "¥ ${two(state.averagePrice)}"
     )
 
     Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = Color.Transparent) {
@@ -102,7 +131,7 @@ private fun MonthSummary(state: MainUiState) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("ENERGY / MONTH", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("CHARGING / MONTH", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
                 Text("本月充电支出", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -118,13 +147,55 @@ private fun MonthSummary(state: MainUiState) {
 }
 
 @Composable
+private fun TripEnergyEstimateCard(month: TripEnergySummary, lifetime: TripEnergySummary) {
+    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+        SectionHeading("行驶能耗估算", "TRIP / SOC ESTIMATE")
+        Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                Text(
+                    "依据已完成 Trip 的开始/结束 SOC 与配置电池容量推导，不是 BMS 实测。平均值按总估算能量 ÷ 总有效距离加权计算。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (month.eligibleTripCount == 0) {
+                    Text(
+                        if (month.completedTripCount == 0) "本月暂无已完成 Trip。" else "本月 Trip 暂无足够的 SOC 下降数据用于能耗估算。",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    ResponsiveMetricGrid(3) { index, modifier ->
+                        when (index) {
+                            0 -> StatValue("本月估算消耗", "${one(month.estimatedEnergyKwh)} kWh", modifier)
+                            1 -> StatValue("有效 Trip 距离", "${one(month.distanceKm)} km", modifier)
+                            else -> StatValue("加权平均能耗", month.weightedAverageKwhPer100Km?.let { "${one(it)} kWh/100km" } ?: "--", modifier)
+                        }
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = .55f))
+                Text(
+                    "累计可估算 ${lifetime.eligibleTripCount} 段 · ${one(lifetime.distanceKm)} km · 估算 ${one(lifetime.estimatedEnergyKwh)} kWh",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (lifetime.excludedTripCount > 0) {
+                    Text(
+                        "另有 ${lifetime.excludedTripCount} 段已完成行程因 SOC 未下降、距离不足或数据缺失未纳入能耗平均。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun MonthComparisonCard(comparison: com.evchargebook.domain.MonthlyComparison) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
         SectionHeading("本月 vs 上月", "${comparison.previous.year}年${comparison.previous.month}月 → ${comparison.current.year}年${comparison.current.month}月")
         Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
             ComparisonValue("费用", "¥ ${two(comparison.current.cost)}", comparison.costChangeRate, Modifier.weight(1f))
-            ComparisonValue("补能", "${one(comparison.current.energyKwh)} kWh", comparison.energyChangeRate, Modifier.weight(1f))
-            ComparisonValue("次数", "${comparison.current.chargingCount} 次", comparison.countChangeRate, Modifier.weight(1f))
+            ComparisonValue("电网补能", "${one(comparison.current.energyKwh)} kWh", comparison.energyChangeRate, Modifier.weight(1f))
+            ComparisonValue("充电次数", "${comparison.current.chargingCount} 次", comparison.countChangeRate, Modifier.weight(1f))
         }
         if (comparison.costChangeRate == null || comparison.energyChangeRate == null || comparison.countChangeRate == null) {
             Text("上月为 0 的指标不显示无意义的增长率。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -162,7 +233,7 @@ private fun MonthlyTrendContent(state: MainUiState) {
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("¥ ${two(bucket.cost)}", fontWeight = FontWeight.SemiBold)
-                Text("${one(bucket.energyKwh)} kWh", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Text("电网补能 ${one(bucket.energyKwh)} kWh", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             Text(bucket.averagePricePerKwh?.let { "¥ ${two(it)}/kWh" } ?: "--", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -180,7 +251,7 @@ private fun ChargerTypeContent(state: MainUiState) {
             }
             Column {
                 Text("${one(item.energyKwh)} kWh")
-                Text("电量 ${percent(item.energyShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                Text("桩端电量 ${percent(item.energyShare)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             Column(horizontalAlignment = Alignment.End) {
                 Text("¥ ${two(item.cost)}")
@@ -200,7 +271,7 @@ private fun CommonPlacesContent(state: MainUiState) {
                 Text("${place.chargingCount} 次 · ${shortDate(place.latestChargeTimeEpochMillis)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Column(Modifier.weight(1f)) {
-                Text("${one(place.energyKwh)} kWh")
+                Text("桩端 ${one(place.energyKwh)} kWh")
                 Text("¥ ${two(place.cost)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
             }
             Text(place.averagePricePerKwh?.let { "¥ ${two(it)}/kWh" } ?: "--", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -215,16 +286,21 @@ private fun IntervalAnalyticsCard(state: MainUiState) {
             Surface(Modifier.size(40.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
                 Box(contentAlignment = Alignment.Center) { Icon(Icons.Default.Route, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)) }
             }
-            SectionHeading("里程区间估算", "INTERVAL ESTIMATE")
+            SectionHeading("里程区间估算", "CHARGE-TO-CHARGE ESTIMATE")
         }
         Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                Text(
+                    "这里衡量两次充电记录之间每 100 km 对应的补入电量/费用，不等同于车辆行驶能耗。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 if (state.intervalSampleCount == 0 || state.intervalEnergyPer100Km == null || state.intervalCostPer100Km == null) {
                     Text("至少需要两条有效且递增的里程记录。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 } else {
                     Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                        StatValue("补入电量", "${one(state.intervalEnergyPer100Km)} kWh/100km", Modifier.weight(1f))
-                        StatValue("费用", "¥ ${two(state.intervalCostPer100Km)}/100km", Modifier.weight(1f))
+                        StatValue("每100km补入电量", "${one(state.intervalEnergyPer100Km)} kWh", Modifier.weight(1f))
+                        StatValue("每100km费用", "¥ ${two(state.intervalCostPer100Km)}", Modifier.weight(1f))
                     }
                     Text("${state.intervalSampleCount} 个有效区间 · ${one(state.intervalDistanceKm)} km 样本", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     if (state.invalidIntervalCount > 0) Text("已排除 ${state.invalidIntervalCount} 个异常区间。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.warningColor)
@@ -269,10 +345,10 @@ private fun IntervalDetailCard(sample: ChargingIntervalSample, coverage: Chargin
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
-            Text("${one(sample.distanceKm)} km · 补入 ${one(sample.replenishedEnergyKwh)} kWh · ¥ ${two(sample.replenishmentCost)}")
+            Text("${one(sample.distanceKm)} km · 桩端补入 ${one(sample.replenishedEnergyKwh)} kWh · ¥ ${two(sample.replenishmentCost)}")
             Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                StatValue("补入电量", "${one(sample.energyPer100Km)} kWh/100km", Modifier.weight(1f))
-                StatValue("费用", "¥ ${two(sample.costPer100Km)}/100km", Modifier.weight(1f))
+                StatValue("每100km补入电量", "${one(sample.energyPer100Km)} kWh", Modifier.weight(1f))
+                StatValue("每100km费用", "¥ ${two(sample.costPer100Km)}", Modifier.weight(1f))
             }
             Text(
                 "可信度 ${confidenceText(sample.confidence)} · 结束 SOC 差 ${sample.endSocDeltaPoints} 个百分点",

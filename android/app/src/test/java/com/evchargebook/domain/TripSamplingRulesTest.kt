@@ -1,5 +1,6 @@
 package com.evchargebook.domain
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -25,6 +26,15 @@ class TripSamplingRulesTest {
         val decision = TripSamplingRules.decide(15, 1.0, 0.0, 10.0)
         assertTrue(decision.accept)
         assertFalse(decision.moving)
+    }
+
+    @Test
+    fun stationaryHeartbeatAccumulatesStoppedTime() {
+        val decision = TripSamplingRules.decide(16, 1.0, 0.0, 10.0)
+        assertTrue(decision.accept)
+        assertFalse(decision.moving)
+        assertEquals(46L, TripSamplingRules.stoppedSeconds(30L, 16L, decision.moving))
+        assertEquals(30L, TripSamplingRules.movingSeconds(30L, 16L, decision.moving))
     }
 
     @Test

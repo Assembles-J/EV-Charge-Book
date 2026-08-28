@@ -52,4 +52,73 @@ class TripSpeedTrustRulesTest {
             )
         )
     }
+
+    @Test
+    fun `network speed spike cannot update max speed even when distance corroborates it`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 34.005,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 140.0,
+                continuityAllowsSpeed = true,
+                provider = "network",
+                horizontalAccuracyMeters = 100.0,
+                speedAccuracyMps = null
+            )
+        )
+    }
+
+    @Test
+    fun `accurate gps highway peak can update max speed`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 30.3,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 110.0,
+                continuityAllowsSpeed = true,
+                provider = "gps",
+                horizontalAccuracyMeters = 8.0,
+                speedAccuracyMps = 1.2
+            )
+        )
+    }
+
+    @Test
+    fun `coarse gps point cannot update max speed`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 30.3,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 110.0,
+                continuityAllowsSpeed = true,
+                provider = "gps",
+                horizontalAccuracyMeters = 60.0,
+                speedAccuracyMps = 1.2
+            )
+        )
+    }
+
+    @Test
+    fun `accurate gps speed is eligible for visualization`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMeasuredSpeed(
+                reportedSpeedMps = 15.0,
+                provider = "gps",
+                horizontalAccuracyMeters = 6.0,
+                speedAccuracyMps = 1.0
+            )
+        )
+    }
+
+    @Test
+    fun `network speed is not eligible for visualization`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForMeasuredSpeed(
+                reportedSpeedMps = 39.6,
+                provider = "network",
+                horizontalAccuracyMeters = 30.0,
+                speedAccuracyMps = null
+            )
+        )
+    }
 }

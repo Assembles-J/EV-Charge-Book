@@ -2,6 +2,7 @@ package com.evchargebook.domain.trip
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -80,5 +81,22 @@ class TripRouteGeometryTest {
 
         assertEquals(1, geometry.segments.size)
         assertEquals(0, geometry.gapCount)
+    }
+
+    @Test
+    fun `trusted speed metadata survives normalization and gap segmentation`() {
+        val geometry = TripRouteGeometryBuilder.build(
+            listOf(
+                TripGeoPoint(31.2000, 121.4000, 0L, 3.0),
+                TripGeoPoint(31.2010, 121.4010, 4_000L, 12.0),
+                TripGeoPoint(31.2500, 121.4500, 180_000L, null),
+                TripGeoPoint(31.2510, 121.4510, 184_000L, 25.0)
+            )
+        )!!
+
+        assertEquals(3.0, geometry.segments[0][0].speedMps!!, 0.0001)
+        assertEquals(12.0, geometry.segments[0][1].speedMps!!, 0.0001)
+        assertNull(geometry.segments[1][0].speedMps)
+        assertEquals(25.0, geometry.segments[1][1].speedMps!!, 0.0001)
     }
 }
