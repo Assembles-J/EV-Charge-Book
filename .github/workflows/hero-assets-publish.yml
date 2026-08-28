@@ -75,10 +75,12 @@ jobs:
           while IFS= read -r url; do
             echo "Checking $url"
             tmp="$(mktemp)"
+            headers="$(mktemp)"
             curl --fail --silent --show-error --location \
               --retry 2 \
               --connect-timeout 5 \
               --max-time 30 \
+              -D "$headers" \
               "$url" \
               -o "$tmp"
 
@@ -92,12 +94,21 @@ jobs:
               exit 1
             fi
 
-            python3 - "$tmp" "$url" <<'PY'
+            if ! python3 - "$tmp" <<'PY'
           import sys
-          path, url = sys.argv[1], sys.argv[2]
-          data = open(path, 'rb').read(12)
-          if len(data) < 12 or data[:4] != b'RIFF' or data[8:12] != b'WEBP':
-              raise SystemExit(f'Not a valid WebP header: {url}')
+          data = open(sys.argv[1], 'rb').read(12)
+          raise SystemExit(0 if len(data) >= 12 and data[:4] == b'RIFF' and data[8:12] == b'WEBP' else 1)
           PY
-            rm -f "$tmp"
+            then
+              echo "CDN response is not WebP: $url"
+              echo "Relevant response headers:"
+              grep -iE '^(HTTP/|content-type:|content-length:|location:|server:)' "$headers" || true
+              echo "Detected MIME: $(file -b --mime-type "$tmp" || true)"
+              echo "Response prefix:"
+              head -c 200 "$tmp" | tr '\n' ' ' | sed 's/[^[:print:]\t]/?/g' || true
+              echo
+              exit 1
+            fi
+
+            rm -f "$tmp" "$headers"
           done < /tmp/hero-urls.txt
