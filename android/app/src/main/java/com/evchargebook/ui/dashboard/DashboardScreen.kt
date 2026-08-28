@@ -69,6 +69,7 @@ fun DashboardScreen(
                 latestTrip = latestCompletedTrip
             )
         }
+        item { DashboardRecentTripCard(latestCompletedTrip) }
         item { EnergyCockpitCard(state) }
         item { RecentChargingHeader(onAddClick) }
 
