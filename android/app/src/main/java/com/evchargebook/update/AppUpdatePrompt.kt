@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -21,6 +22,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.ErrorOutline
+import androidx.compose.material.icons.rounded.SystemUpdateAlt
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -56,11 +59,15 @@ fun AppUpdatePrompt() {
     var phase by remember { mutableStateOf(UpdatePhase.IDLE) }
     var downloadedUri by remember { mutableStateOf<Uri?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-    var retryToken by remember { mutableIntStateOf(0) }
+    var downloadToken by remember { mutableIntStateOf(0) }
+    var showInstallConfirmation by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         runCatching { manager.checkForUpdate() }
-            .onSuccess { update = it }
+            .onSuccess { info ->
+                update = info
+                if (info != null) phase = UpdatePhase.DISCOVERED
+            }
             .onFailure { error ->
                 Log.w(TAG, "Update discovery failed for ${BuildConfig.UPDATE_MANIFEST_URL}", error)
             }
@@ -68,7 +75,8 @@ fun AppUpdatePrompt() {
 
     val info = update ?: return
 
-    LaunchedEffect(info.versionCode, retryToken) {
+    LaunchedEffect(downloadToken) {
+        if (downloadToken <= 0) return@LaunchedEffect
         phase = UpdatePhase.DOWNLOADING
         errorMessage = null
         downloadedUri = null
@@ -84,13 +92,32 @@ fun AppUpdatePrompt() {
             }
     }
 
+    fun continueInstall() {
+        val uri = downloadedUri ?: return
+        if (!manager.canRequestPackageInstalls()) {
+            phase = UpdatePhase.PERMISSION_REQUIRED
+            manager.openInstallPermissionSettings(activity)
+        } else {
+            manager.launchInstaller(activity, uri)
+        }
+    }
+
     Popup(
         alignment = Alignment.BottomCenter,
-        properties = PopupProperties(focusable = false, clippingEnabled = true)
+        properties = PopupProperties(
+            focusable = false,
+            dismissOnBackPress = false,
+            dismissOnClickOutside = false,
+            clippingEnabled = true
+        )
     ) {
+        // Important: use offset instead of bottom/vertical padding here. Padding enlarges the
+        // Popup window's touchable bounds and can cover the bottom navigation even though the
+        // visible card itself sits above it. Offset keeps the popup hit region equal to the card.
         Box(
             modifier = Modifier
-                .padding(horizontal = 8.dp, vertical = 88.dp)
+                .offset(y = (-82).dp)
+                .padding(horizontal = 8.dp)
                 .widthIn(min = 320.dp, max = 520.dp)
         ) {
             BackgroundUpdateCard(
@@ -98,16 +125,10 @@ fun AppUpdatePrompt() {
                 phase = phase,
                 errorMessage = errorMessage,
                 mandatory = info.mandatory,
-                onInstall = {
-                    val uri = downloadedUri ?: return@BackgroundUpdateCard
-                    if (!manager.canRequestPackageInstalls()) {
-                        phase = UpdatePhase.PERMISSION_REQUIRED
-                        manager.openInstallPermissionSettings(activity)
-                    } else {
-                        manager.launchInstaller(activity, uri)
-                    }
-                },
-                onRetry = { retryToken += 1 },
+                onUpdate = { downloadToken += 1 },
+                onInstall = { showInstallConfirmation = true },
+                onContinueInstall = ::continueInstall,
+                onRetry = { downloadToken += 1 },
                 onLater = {
                     if (!info.mandatory && phase != UpdatePhase.DOWNLOADING) {
                         update = null
@@ -115,6 +136,50 @@ fun AppUpdatePrompt() {
                 }
             )
         }
+    }
+
+    if (showInstallConfirmation) {
+        AlertDialog(
+            onDismissRequest = { showInstallConfirmation = false },
+            containerColor = EVDesignTokens.Dark.surfaceElevated,
+            titleContentColor = EVDesignTokens.Dark.primaryText,
+            textContentColor = EVDesignTokens.Dark.secondaryText,
+            title = {
+                Text(
+                    text = "确认安装更新 ${info.versionName}",
+                    fontWeight = FontWeight.SemiBold
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("更新包已下载并完成完整性校验。")
+                    Text("安装时 Android 会打开系统安装界面，安装期间应用会暂时退出；完成后重新打开即可。")
+                    Text(
+                        text = "建议在停车且网络、电量状态良好时安装。",
+                        color = EVDesignTokens.Energy.green
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showInstallConfirmation = false
+                        continueInstall()
+                    }
+                ) {
+                    Text(
+                        text = "确认安装",
+                        color = EVDesignTokens.Energy.green,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showInstallConfirmation = false }) {
+                    Text("取消", color = EVDesignTokens.Dark.secondaryText)
+                }
+            }
+        )
     }
 }
 
@@ -124,12 +189,21 @@ private fun BackgroundUpdateCard(
     phase: UpdatePhase,
     errorMessage: String?,
     mandatory: Boolean,
+    onUpdate: () -> Unit,
     onInstall: () -> Unit,
+    onContinueInstall: () -> Unit,
     onRetry: () -> Unit,
     onLater: () -> Unit
 ) {
     val copy = when (phase) {
         UpdatePhase.IDLE,
+        UpdatePhase.DISCOVERED -> UpdateCardCopy(
+            icon = Icons.Rounded.SystemUpdateAlt,
+            title = "发现新版本 $versionName",
+            subtitle = "确认后将在后台下载，期间可以继续使用应用",
+            accent = EVDesignTokens.Energy.green,
+            action = "更新"
+        )
         UpdatePhase.DOWNLOADING -> UpdateCardCopy(
             icon = Icons.Rounded.Download,
             title = "正在后台更新 $versionName",
@@ -140,20 +214,20 @@ private fun BackgroundUpdateCard(
         UpdatePhase.READY -> UpdateCardCopy(
             icon = Icons.Rounded.CheckCircle,
             title = "$versionName 已准备好",
-            subtitle = "更新包已下载并完成校验，可随时安装",
+            subtitle = "更新已下载完成，可随时安装",
             accent = EVDesignTokens.Energy.success,
-            action = "安装"
+            action = "立即安装"
         )
         UpdatePhase.PERMISSION_REQUIRED -> UpdateCardCopy(
             icon = Icons.Rounded.CheckCircle,
-            title = "允许安装后即可更新",
-            subtitle = "授权后返回应用，再继续安装",
+            title = "$versionName 已准备好",
+            subtitle = "允许安装此来源应用后，返回继续安装",
             accent = EVDesignTokens.Energy.warning,
             action = "继续安装"
         )
         UpdatePhase.FAILED -> UpdateCardCopy(
             icon = Icons.Rounded.ErrorOutline,
-            title = "后台更新失败",
+            title = "更新失败",
             subtitle = errorMessage ?: "网络恢复后可以重试",
             accent = EVDesignTokens.Energy.danger,
             action = "重试"
@@ -211,7 +285,14 @@ private fun BackgroundUpdateCard(
 
                 copy.action?.let { label ->
                     TextButton(
-                        onClick = if (phase == UpdatePhase.FAILED) onRetry else onInstall
+                        onClick = when (phase) {
+                            UpdatePhase.IDLE,
+                            UpdatePhase.DISCOVERED -> onUpdate
+                            UpdatePhase.READY -> onInstall
+                            UpdatePhase.PERMISSION_REQUIRED -> onContinueInstall
+                            UpdatePhase.FAILED -> onRetry
+                            UpdatePhase.DOWNLOADING -> ({})
+                        }
                     ) {
                         Text(
                             text = label,
@@ -221,14 +302,21 @@ private fun BackgroundUpdateCard(
                     }
                 }
 
-                if (!mandatory && phase != UpdatePhase.DOWNLOADING && phase != UpdatePhase.IDLE) {
+                val canDefer = !mandatory && phase in setOf(
+                    UpdatePhase.IDLE,
+                    UpdatePhase.DISCOVERED,
+                    UpdatePhase.READY,
+                    UpdatePhase.PERMISSION_REQUIRED,
+                    UpdatePhase.FAILED
+                )
+                if (canDefer) {
                     TextButton(onClick = onLater) {
                         Text("稍后", color = EVDesignTokens.Dark.secondaryText)
                     }
                 }
             }
 
-            if (phase == UpdatePhase.DOWNLOADING || phase == UpdatePhase.IDLE) {
+            if (phase == UpdatePhase.DOWNLOADING) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -258,6 +346,7 @@ private data class UpdateCardCopy(
 
 private enum class UpdatePhase {
     IDLE,
+    DISCOVERED,
     DOWNLOADING,
     READY,
     PERMISSION_REQUIRED,
