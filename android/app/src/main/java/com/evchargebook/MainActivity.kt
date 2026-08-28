@@ -351,7 +351,12 @@ fun MainApp(
                             viewModel.closeTripDetail()
                             tab = 3
                         },
-                        onOpenChargingRecords = { tab = 1 }
+                        onOpenTripDetail = { tripId ->
+                            viewModel.openTripDetail(tripId)
+                            tab = 3
+                        },
+                        onOpenChargingRecords = { tab = 1 },
+                        onEditChargingRecord = { editingRecord = it }
                     )
                     1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
                     2 -> StatsScreen(state)
