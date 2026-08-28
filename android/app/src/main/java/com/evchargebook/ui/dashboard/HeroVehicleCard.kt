@@ -216,7 +216,8 @@ private fun VehicleStage(
     val context = LocalContext.current
     val artwork = OfficialVehicleImageCatalog.resolve(vehicle, artworkKey)
     var remoteArtwork by remember(artwork?.key) {
-        mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null) }
+        mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
+    }
 
     LaunchedEffect(artwork?.key) {
         remoteArtwork = artwork?.let { HeroArtworkManifestRepository.resolve(context, it.key) }
@@ -319,6 +320,10 @@ private fun HeroDynamicStatePanel(
                 shape = panelShape
             )
     ) {
+        // The panel now sits on top of the artwork. The translucent smoke/highlight layers
+        // intentionally preserve some of the underlying image so the surface reads as glass
+        // instead of a second opaque card. Compose has no true arbitrary backdrop blur here,
+        // so the frost is created with controlled translucency and edge highlights.
         Box(
             Modifier
                 .fillMaxSize()
