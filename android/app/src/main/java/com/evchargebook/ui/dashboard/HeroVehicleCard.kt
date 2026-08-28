@@ -60,10 +60,12 @@ fun HeroVehicleCard(
     currentMileageKm: Double? = null,
     latestTrip: TripSessionEntity? = null,
     vehicles: List<VehicleEntity> = emptyList(),
+    vehicleSwitchEnabled: Boolean = true,
     onSelectVehicle: (Long) -> Unit = {}
 ) {
     val cockpit = LocalCockpitColors.current
     val selectableVehicles = if (vehicles.isNotEmpty()) vehicles else listOfNotNull(vehicle)
+    val canSwitchVehicle = vehicleSwitchEnabled && selectableVehicles.size > 1
     var vehicleMenuExpanded by remember { mutableStateOf(false) }
 
     Surface(
@@ -131,21 +133,21 @@ fun HeroVehicleCard(
                                 .clip(CircleShape)
                                 .background(Color(0x8F07110F))
                                 .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape)
-                                .clickable(enabled = selectableVehicles.isNotEmpty()) {
+                                .clickable(enabled = canSwitchVehicle) {
                                     vehicleMenuExpanded = true
                                 },
                             contentAlignment = Alignment.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.DirectionsCar,
-                                contentDescription = "切换车辆",
-                                tint = Color.White,
+                                contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
+                                tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 1f else 0.45f),
                                 modifier = Modifier.size(23.dp)
                             )
                         }
 
                         DropdownMenu(
-                            expanded = vehicleMenuExpanded,
+                            expanded = vehicleMenuExpanded && canSwitchVehicle,
                             onDismissRequest = { vehicleMenuExpanded = false }
                         ) {
                             selectableVehicles.forEach { candidate ->
