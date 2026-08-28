@@ -210,13 +210,15 @@ private fun HeroDynamicStateOverlay(
                             modifier = Modifier.weight(1f)
                         )
                     }
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(1.dp)
-                            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
-                    )
-                    HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.fillMaxWidth())
+                    if (latestTrip != null) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                                .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
+                        )
+                        HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.fillMaxWidth())
+                    }
                 }
             } else {
                 Row(
@@ -231,8 +233,10 @@ private fun HeroDynamicStateOverlay(
                         value = currentMileageKm?.let(::formatMileage) ?: "--",
                         modifier = Modifier.weight(1f)
                     )
-                    MetricDivider()
-                    HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.weight(1.05f))
+                    if (latestTrip != null) {
+                        MetricDivider()
+                        HeroRecentTripMetric(trip = latestTrip, modifier = Modifier.weight(1.05f))
+                    }
                 }
             }
         }
@@ -285,13 +289,13 @@ private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifi
 }
 
 @Composable
-private fun HeroRecentTripMetric(trip: TripSessionEntity?, modifier: Modifier = Modifier) {
+private fun HeroRecentTripMetric(trip: TripSessionEntity, modifier: Modifier = Modifier) {
     val cockpit = LocalCockpitColors.current
-    val distance = trip?.distanceMeters
-        ?.takeIf { it.isFinite() && it > 0.0 }
+    val distance = trip.distanceMeters
+        .takeIf { it.isFinite() && it > 0.0 }
         ?.let(::formatTripDistance)
         ?: "--"
-    val consumption = trip?.averageConsumptionKwhPer100Km
+    val consumption = trip.averageConsumptionKwhPer100Km
         ?.takeIf { it.isFinite() && it >= 0.0 }
         ?.let { String.format(Locale.US, "%.1f kWh/100km", it) }
 
