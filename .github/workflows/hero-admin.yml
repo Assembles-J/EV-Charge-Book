@@ -1,0 +1,126 @@
+name: Hero Admin
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/**'
+      - '.github/workflows/hero-admin.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/**'
+      - '.github/workflows/hero-admin.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify Hero Admin publisher
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build Hero Admin container
+        run: docker build -t ev-charge-book-hero-admin:test hero-admin
+
+      - name: Prepare isolated runtime directories
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p .hero-admin-test/releases .hero-admin-test/release-meta
+          cp hero-assets/manifest-v1.json .hero-admin-test/release-meta/hero-assets-v1.json
+
+      - name: Start Hero Admin
+        shell: bash
+        run: |
+          set -eu
+          docker run -d \
+            --name ev-charge-book-hero-admin-test \
+            -p 127.0.0.1:18080:8080 \
+            -e HERO_ADMIN_PASSWORD=test-only-password \
+            -e HERO_PUBLIC_ORIGIN=http://127.0.0.1:18080 \
+            -v "$PWD/.hero-admin-test/releases:/data/releases" \
+            -v "$PWD/.hero-admin-test/release-meta:/data/release-meta" \
+            ev-charge-book-hero-admin:test
+
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if curl --fail --silent http://127.0.0.1:18080/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs ev-charge-book-hero-admin-test
+          exit 1
+
+      - name: Generate valid 1600x1100 PNG fixture
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import struct
+          import zlib
+          from pathlib import Path
+
+          width, height = 1600, 1100
+          signature = b'\x89PNG\r\n\x1a\n'
+
+          def chunk(kind, payload):
+              body = kind + payload
+              return struct.pack('>I', len(payload)) + body + struct.pack('>I', zlib.crc32(body) & 0xffffffff)
+
+          ihdr = struct.pack('>IIBBBBB', width, height, 8, 2, 0, 0, 0)
+          row = b'\x00' + (b'\x08\x18\x12' * width)
+          pixels = row * height
+          png = signature + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(pixels, 9)) + chunk(b'IEND', b'')
+          Path('.hero-admin-test/fixture.png').write_bytes(png)
+          PY
+
+      - name: Publish through HTTP API
+        shell: bash
+        run: |
+          set -eu
+          curl --fail --silent --show-error \
+            -u admin:test-only-password \
+            -H 'Origin: http://127.0.0.1:18080' \
+            -H 'X-Hero-Admin-Request: 1' \
+            -F 'artworkKey=leapmotor-c16-2026' \
+            -F 'file=@.hero-admin-test/fixture.png;type=image/png' \
+            http://127.0.0.1:18080/api/publish \
+            -o .hero-admin-test/result.json
+          cat .hero-admin-test/result.json
+
+      - name: Verify immutable WebP and manifest switch
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          result = json.loads(Path('.hero-admin-test/result.json').read_text())
+          assert result['ok'] is True
+          assert result['version'] == 2
+          assert result['outputWidth'] == 1600
+          assert result['outputHeight'] == 1100
+          assert result['filename'] == 'leapmotor_c16_2026_v2.webp'
+
+          image = Path('.hero-admin-test/releases/hero-assets/leapmotor_c16_2026_v2.webp').read_bytes()
+          assert image[:4] == b'RIFF' and image[8:12] == b'WEBP'
+          assert len(image) <= 2_621_440
+
+          manifest = json.loads(Path('.hero-admin-test/release-meta/hero-assets-v1.json').read_text())
+          item = manifest['artworks']['leapmotor-c16-2026']
+          assert item['version'] == 2
+          assert item['url'].endswith('/leapmotor_c16_2026_v2.webp')
+
+          backup = json.loads(Path('.hero-admin-test/release-meta/hero-assets-v1.json.bak').read_text())
+          assert backup['artworks']['leapmotor-c16-2026']['version'] == 1
+          PY
+
+      - name: Stop test container
+        if: always()
+        run: docker rm -f ev-charge-book-hero-admin-test || true
