@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EV Charge Book · Hero Admin</title>
+  <style>
+    :root { color-scheme: dark; --bg:#050a08; --panel:#0b1512; --line:#1d2c27; --text:#f3f7f5; --muted:#94a39d; --green:#35ef84; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; background:radial-gradient(circle at 50% -20%,#123127 0,#07110d 36%,var(--bg) 72%); color:var(--text); min-height:100vh; }
+    main { width:min(920px,calc(100% - 32px)); margin:0 auto; padding:48px 0 72px; }
+    header { margin-bottom:24px; }
+    .eyebrow { color:var(--green); font-size:13px; letter-spacing:.16em; text-transform:uppercase; }
+    h1 { font-size:clamp(30px,5vw,48px); margin:8px 0 10px; font-weight:650; }
+    .intro { color:var(--muted); margin:0; line-height:1.65; }
+    .panel { background:rgba(10,22,18,.86); border:1px solid rgba(255,255,255,.09); border-radius:24px; padding:22px; box-shadow:0 20px 70px rgba(0,0,0,.32); backdrop-filter:blur(18px); }
+    .grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    label { display:block; color:#c5d0cc; font-size:14px; margin:0 0 8px; }
+    select,input,button { font:inherit; }
+    select { width:100%; padding:13px 14px; background:#07110d; color:var(--text); border:1px solid var(--line); border-radius:14px; outline:none; }
+    .drop { min-height:255px; border:1px dashed #365148; border-radius:18px; display:flex; align-items:center; justify-content:center; text-align:center; padding:18px; position:relative; overflow:hidden; cursor:pointer; background:rgba(255,255,255,.015); }
+    .drop.drag { border-color:var(--green); background:rgba(53,239,132,.05); }
+    .drop input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+    .drop img { width:100%; height:100%; max-height:300px; object-fit:contain; border-radius:14px; display:none; }
+    .drop.has-preview img { display:block; }
+    .drop.has-preview .placeholder { display:none; }
+    .placeholder strong { display:block; font-size:17px; margin-bottom:6px; }
+    .placeholder span { color:var(--muted); font-size:13px; line-height:1.6; }
+    .status { margin-top:16px; padding:13px 14px; border-radius:14px; background:#07110d; border:1px solid var(--line); color:var(--muted); min-height:48px; line-height:1.55; }
+    .status.ok { color:#b8f8d0; border-color:rgba(53,239,132,.28); }
+    .status.error { color:#ffb5b5; border-color:rgba(255,90,90,.3); }
+    .actions { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-top:18px; }
+    .hint { color:var(--muted); font-size:12px; line-height:1.55; }
+    button { border:0; border-radius:14px; padding:13px 22px; background:var(--green); color:#031108; font-weight:750; cursor:pointer; min-width:130px; }
+    button:disabled { opacity:.35; cursor:not-allowed; }
+    .current { margin-top:22px; display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .current-card { padding:13px; background:#07110d; border:1px solid var(--line); border-radius:14px; min-width:0; }
+    .current-card b { display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:13px; }
+    .current-card span { color:var(--muted); font-size:12px; }
+    @media(max-width:720px){ .grid{grid-template-columns:1fr}.current{grid-template-columns:1fr 1fr} main{padding-top:28px}.actions{align-items:flex-end}.panel{padding:16px} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">EV Charge Book</div>
+    <h1>Hero 图片管理</h1>
+    <p class="intro">选择已有车型，拖入 PNG / WebP。服务器会校验比例、统一转换为 1600×1100 真 WebP、自动版本 +1，并原子更新 Hero manifest。</p>
+  </header>
+
+  <section class="panel">
+    <div class="grid">
+      <div>
+        <label for="vehicle">车型</label>
+        <select id="vehicle"></select>
+        <div class="current" id="current"></div>
+      </div>
+
+      <div>
+        <label>新 Hero 原图</label>
+        <div class="drop" id="drop">
+          <input id="file" type="file" accept="image/png,image/webp,.png,.webp" />
+          <img id="preview" alt="Hero preview" />
+          <div class="placeholder">
+            <strong>拖图片到这里</strong>
+            <span>PNG / WebP · 推荐 1600×1100 · 比例约 1.45:1<br/>无需自己转换 WebP</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status" id="status">正在读取当前 Hero manifest…</div>
+    <div class="actions">
+      <div class="hint">发布会生成新的 <code>_vN.webp</code>，不会覆盖旧文件。旧版本仍留在服务器，便于回退。</div>
+      <button id="publish" disabled>发布 Hero</button>
+    </div>
+  </section>
+</main>
+
+<script>
+  const vehicle = document.getElementById('vehicle');
+  const fileInput = document.getElementById('file');
+  const drop = document.getElementById('drop');
+  const preview = document.getElementById('preview');
+  const publish = document.getElementById('publish');
+  const statusEl = document.getElementById('status');
+  const current = document.getElementById('current');
+  let manifest = null;
+  let chosenFile = null;
+
+  function setStatus(text, kind='') {
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+    statusEl.textContent = text;
+  }
+
+  function renderCurrent() {
+    current.innerHTML = '';
+    if (!manifest) return;
+    const selected = manifest.artworks[vehicle.value];
+    if (!selected) return;
+    const values = [
+      ['当前版本', `v${selected.version}`],
+      ['目标版本', `v${selected.version + 1}`],
+      ['规格', '1600×1100'],
+    ];
+    for (const [name, value] of values) {
+      const card = document.createElement('div');
+      card.className = 'current-card';
+      card.innerHTML = `<b>${value}</b><span>${name}</span>`;
+      current.appendChild(card);
+    }
+  }
+
+  async function loadState() {
+    try {
+      const res = await fetch('api/state');
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '读取失败');
+      manifest = data;
+      vehicle.innerHTML = '';
+      for (const [key, item] of Object.entries(data.artworks)) {
+        const option = document.createElement('option');
+        option.value = key;
+        option.textContent = `${key} · v${item.version}`;
+        vehicle.appendChild(option);
+      }
+      renderCurrent();
+      setStatus('请选择图片。页面会先做本地预览，正式尺寸与格式由服务器再次校验。', 'ok');
+    } catch (err) {
+      setStatus(err.message, 'error');
+    }
+  }
+
+  function selectFile(file) {
+    chosenFile = file || null;
+    publish.disabled = !chosenFile || !manifest;
+    if (!chosenFile) {
+      drop.classList.remove('has-preview');
+      preview.removeAttribute('src');
+      return;
+    }
+    if (!['image/png','image/webp'].includes(chosenFile.type) && !/\.(png|webp)$/i.test(chosenFile.name)) {
+      chosenFile = null;
+      publish.disabled = true;
+      setStatus('只接受 PNG 或 WebP。', 'error');
+      return;
+    }
+    preview.src = URL.createObjectURL(chosenFile);
+    drop.classList.add('has-preview');
+    setStatus(`${chosenFile.name} · ${(chosenFile.size / 1024).toFixed(0)} KB · 等待发布`, 'ok');
+  }
+
+  fileInput.addEventListener('change', () => selectFile(fileInput.files[0]));
+  vehicle.addEventListener('change', renderCurrent);
+  ['dragenter','dragover'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.add('drag'); }));
+  ['dragleave','drop'].forEach(type => drop.addEventListener(type, e => { e.preventDefault(); drop.classList.remove('drag'); }));
+  drop.addEventListener('drop', e => selectFile(e.dataTransfer.files[0]));
+
+  publish.addEventListener('click', async () => {
+    if (!chosenFile || !vehicle.value) return;
+    publish.disabled = true;
+    setStatus('正在校验、转换并发布…');
+    const body = new FormData();
+    body.append('artworkKey', vehicle.value);
+    body.append('file', chosenFile);
+    try {
+      const res = await fetch('api/publish', {
+        method: 'POST',
+        headers: {'X-Hero-Admin-Request': '1'},
+        body,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || '发布失败');
+      setStatus(`发布成功：${data.artworkKey} → v${data.version} · ${data.outputWidth}×${data.outputHeight} WebP · ${(data.outputBytes/1024).toFixed(0)} KB`, 'ok');
+      chosenFile = null;
+      fileInput.value = '';
+      drop.classList.remove('has-preview');
+      preview.removeAttribute('src');
+      await loadState();
+    } catch (err) {
+      setStatus(err.message, 'error');
+    } finally {
+      publish.disabled = !chosenFile || !manifest;
+    }
+  });
+
+  loadState();
+</script>
+</body>
+</html>
