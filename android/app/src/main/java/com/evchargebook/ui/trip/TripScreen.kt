@@ -1,59 +1,62 @@
 package com.evchargebook.ui.trip
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
-import com.evchargebook.domain.TripSpeedTrustRules
-import com.evchargebook.domain.trip.TripElevationAnalytics
-import com.evchargebook.domain.trip.TripGeoPoint
-import com.evchargebook.domain.trip.TripRouteGeometryBuilder
-import com.evchargebook.location.AndroidGeocoderAddressResolver
+import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
-import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
-private val TripHeroBrush = Brush.linearGradient(
-    listOf(Color(0xFF06100B), Color(0xFF0A2116), Color(0xFF07120D))
-)
-private val SpeedDeepRed = Color(0xFF8E1919)
-private val SpeedRed = Color(0xFFE44545)
-private val SpeedYellow = Color(0xFFF2C94C)
-private val SpeedGreen = Color(0xFF35C46A)
-private val SpeedBlue = Color(0xFF3B82F6)
-private val SpeedDeepBlue = Color(0xFF2457C5)
-
+/**
+ * Trip router + active v0.6 cockpit.
+ *
+ * The no-active state is owned by TripReadyScreen. Selected/completed detail is intentionally
+ * isolated in TripDetailScreen.kt so #149-#151 can evolve it without destabilizing live tracking.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripScreen(
@@ -74,23 +77,37 @@ fun TripScreen(
         trips.firstOrNull { it.id == id } ?: activeTrip?.takeIf { it.id == id }
     }
     if (selectedTrip != null) {
-        TripDetailScreen(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
+        TripDetailScreenV05(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
         return
     }
 
-    var deleteTarget by remember { mutableStateOf<TripSessionEntity?>(null) }
-    var confirmStop by remember { mutableStateOf(false) }
-    val activeVehicle = activeTrip?.let { trip -> vehicles.firstOrNull { it.id == trip.vehicleId } }
-    val savedTrips = trips.filter { it.id != activeTrip?.id }
+    if (activeTrip == null) {
+        // MainActivity routes this state to TripReadyScreen. Keep a truthful fallback for state races.
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Text("暂无进行中的行程", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        return
+    }
+
+    var confirmStop by remember(activeTrip.id) { mutableStateOf(false) }
+    val activeVehicle = vehicles.firstOrNull { it.id == activeTrip.vehicleId } ?: vehicle
+    val interrupted = activeTrip.status == TripStatus.INTERRUPTED
+    val telemetry = remember(selectedTripPoints) { summarizeActiveTripTelemetry(selectedTripPoints) }
+    val accent = EVDesignTokens.Energy.green
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("TRIP JOURNAL", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("行程进行中", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            Modifier
+                                .size(7.dp)
+                                .background(if (interrupted) MaterialTheme.colorScheme.error else accent, CircleShape)
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
@@ -100,41 +117,133 @@ fun TripScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             item {
-                ActiveTripPanel(
-                    selectedVehicle = vehicle,
-                    activeVehicle = activeVehicle,
-                    activeTrip = activeTrip,
-                    onStart = onStart,
-                    onResume = onResume,
-                    onStop = { confirmStop = true },
-                    onOpenDetail = onOpenDetail
-                )
-            }
-            item {
-                SectionHeading(
-                    "历史行程",
-                    if (savedTrips.isEmpty()) "真实行程会按时间顺序沉淀在这里" else "${savedTrips.size} 条已保存行程"
-                )
-            }
-            if (savedTrips.isEmpty()) {
-                item { EmptyTripTimeline() }
-            } else {
-                items(savedTrips, key = { it.id }) { trip ->
-                    TripHistoryRow(
-                        trip = trip,
-                        onClick = { onOpenDetail(trip.id) },
-                        onDelete = { deleteTarget = trip }
-                    )
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+                    ) {
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    activeVehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${activeTrip.vehicleId}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    if (interrupted) "定位已中断，等待用户恢复" else "真实 GPS 持续记录",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            ActiveStatusPill(
+                                text = if (interrupted) "需恢复" else "记录中",
+                                warning = interrupted
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
+                            verticalAlignment = Alignment.Bottom
+                        ) {
+                            ActivePrimaryMetric(
+                                label = "行程距离",
+                                value = if (activeTrip.distanceMeters > 0.0) formatActiveDistance(activeTrip.distanceMeters) else "--",
+                                modifier = Modifier.weight(1f)
+                            )
+                            ActivePrimaryMetric(
+                                label = "当前速度",
+                                value = telemetry.trustedLatestSpeedMps?.let(::formatActiveSpeed) ?: "--",
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
+
+                        ActiveMetricGrid(
+                            listOf(
+                                ActiveMetric("已记录", formatActiveDuration(activeTrip.elapsedSeconds)),
+                                ActiveMetric("行驶均速", activeTrip.averageSpeedMps?.let(::formatActiveSpeed) ?: "--"),
+                                ActiveMetric("最高速度", activeTrip.maxSpeedMps?.let(::formatActiveSpeed) ?: "--"),
+                                ActiveMetric("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--"),
+                                ActiveMetric("GPS 点", selectedTripPoints.size.toString()),
+                                ActiveMetric("海拔样本", telemetry.altitudePointCount.toString())
+                            )
+                        )
+                    }
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
+
+            item {
+                TripActiveTelemetryV06(points = selectedTripPoints)
+            }
+
+            if (interrupted) {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = MaterialTheme.shapes.large,
+                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)
+                    ) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+                        ) {
+                            Text("定位记录已中断", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "修复定位权限或系统定位后，由你明确恢复同一条行程；不会在后台擅自恢复。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(onClick = { onResume(activeTrip.id) }, modifier = Modifier.fillMaxWidth()) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                                Text("恢复记录")
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                OutlinedButton(
+                    onClick = { onOpenDetail(activeTrip.id) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.Route, contentDescription = null)
+                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                    Text("查看完整轨迹与诊断")
+                }
+            }
+
+            item {
+                TripSlideAction(
+                    label = if (interrupted) "滑动结束已中断行程" else "滑动结束行程",
+                    enabled = true,
+                    onConfirmed = { confirmStop = true },
+                    icon = Icons.Default.Stop,
+                    releaseLabel = "松开结束"
+                )
+                Text(
+                    "结束前仍会保留一次确认，避免驾驶中误操作。",
+                    modifier = Modifier.padding(top = 6.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            item { Spacer(Modifier.size(MaterialTheme.spacing.md)) }
         }
     }
 
-    if (confirmStop && activeTrip != null) {
+    if (confirmStop) {
         AlertDialog(
             onDismissRequest = { confirmStop = false },
             title = { Text("结束当前行程？") },
@@ -144,153 +253,38 @@ fun TripScreen(
                     Text("结束行程", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { confirmStop = false }) { Text("继续记录") } }
-        )
-    }
-
-    deleteTarget?.let { trip ->
-        AlertDialog(
-            onDismissRequest = { deleteTarget = null },
-            title = { Text("删除这条行程？") },
-            text = { Text("行程及关联轨迹点会一并删除。") },
-            confirmButton = {
-                TextButton(onClick = { onDelete(trip); deleteTarget = null }) {
-                    Text("删除", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = { TextButton(onClick = { deleteTarget = null }) { Text("取消") } }
+            dismissButton = {
+                TextButton(onClick = { confirmStop = false }) { Text("继续记录") }
+            }
         )
     }
 }
 
+private data class ActiveMetric(val label: String, val value: String)
+
 @Composable
-private fun ActiveTripPanel(
-    selectedVehicle: VehicleEntity?,
-    activeVehicle: VehicleEntity?,
-    activeTrip: TripSessionEntity?,
-    onStart: () -> Unit,
-    onResume: (Long) -> Unit,
-    onStop: () -> Unit,
-    onOpenDetail: (Long) -> Unit
-) {
-    val interrupted = activeTrip?.status == TripStatus.INTERRUPTED
+private fun ActivePrimaryMetric(label: String, value: String, modifier: Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+    }
+}
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = Color.Transparent
-    ) {
-        Column(
-            modifier = Modifier.background(TripHeroBrush).padding(MaterialTheme.spacing.lg),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-        ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(7.dp).background(if (interrupted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, CircleShape))
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text(
-                        when {
-                            activeTrip == null -> "TRIP / READY"
-                            interrupted -> "TRIP / INTERRUPTED"
-                            else -> "TRIP / LIVE"
-                        },
-                        style = MaterialTheme.typography.labelLarge,
-                        color = if (interrupted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                    )
-                }
-                StatusPill(
-                    text = when {
-                        activeTrip == null -> "待命"
-                        interrupted -> "需恢复"
-                        else -> "记录中"
-                    },
-                    warning = interrupted
-                )
-            }
-
-            if (activeTrip == null) {
-                Text("准备出发", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                Text(
-                    selectedVehicle?.let { "${it.brand} ${it.model}" } ?: "请先选择车辆",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
+@Composable
+private fun ActiveMetricGrid(metrics: List<ActiveMetric>) {
+    BoxWithConstraints(Modifier.fillMaxWidth()) {
+        val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
+        val columns = if (compact) 2 else 3
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            metrics.chunked(columns).forEach { rowMetrics ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                    ReadyMetric("轨迹", "GPS 实录", Modifier.weight(1f))
-                    ReadyMetric("距离", "真实计算", Modifier.weight(1f))
-                    ReadyMetric("中断", "可恢复", Modifier.weight(1f))
-                }
-                Text(
-                    "开始后持续记录真实 GPS 轨迹；没有有效定位点时不会虚构距离。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Button(onClick = onStart, enabled = selectedVehicle != null, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.PlayArrow, null)
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("开始行程")
-                }
-                return@Column
-            }
-
-            Text(
-                activeVehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${activeTrip.vehicleId}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-                Text("当前距离", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    if (activeTrip.distanceMeters > 0) formatDistance(activeTrip.distanceMeters) else "--",
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
-            ResponsiveCockpitMetrics(
-                listOf(
-                    CockpitMetricData("耗时", formatDuration(activeTrip.elapsedSeconds)),
-                    CockpitMetricData("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--"),
-                    CockpitMetricData("行驶均速", activeTrip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
-                    CockpitMetricData("最高速度", activeTrip.maxSpeedMps?.let(::formatSpeed) ?: "--")
-                )
-            )
-            Text(
-                "行程进行中没有实时车辆 SOC 数据，因此这里只显示出发时快照，不推算当前 SOC 或实时能耗。",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            if (interrupted) {
-                Surface(color = MaterialTheme.colorScheme.error.copy(alpha = .10f), shape = MaterialTheme.shapes.medium) {
-                    Text(
-                        "定位服务曾被中断。恢复后会继续同一条行程，并继续更新 GPS 健康状态。",
-                        modifier = Modifier.padding(MaterialTheme.spacing.sm),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-                Button(onClick = { onResume(activeTrip.id) }, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.Refresh, null)
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("恢复记录")
-                }
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                OutlinedButton(onClick = { onOpenDetail(activeTrip.id) }, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Route, null)
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("实时轨迹")
-                }
-                TextButton(onClick = onStop, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Default.Stop, null)
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text(if (interrupted) "结束行程" else "结束")
+                    rowMetrics.forEach { metric ->
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(metric.value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -298,19 +292,12 @@ private fun ActiveTripPanel(
 }
 
 @Composable
-private fun ReadyMetric(label: String, value: String, modifier: Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun StatusPill(text: String, warning: Boolean) {
-    val color = if (warning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-    Surface(shape = CircleShape, color = color.copy(alpha = .12f)) {
+private fun ActiveStatusPill(text: String, warning: Boolean) {
+    val accent = EVDesignTokens.Energy.green
+    val color = if (warning) MaterialTheme.colorScheme.error else accent
+    Surface(shape = CircleShape, color = color.copy(alpha = 0.10f)) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -320,492 +307,25 @@ private fun StatusPill(text: String, warning: Boolean) {
                 tint = color,
                 modifier = Modifier.size(14.dp)
             )
-            Text(text, style = MaterialTheme.typography.labelMedium, color = color)
+            Text(text, style = MaterialTheme.typography.labelSmall, color = color)
         }
     }
 }
 
-@Composable
-private fun EmptyTripTimeline() {
-    Row(Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.sm), verticalAlignment = Alignment.Top) {
-        TripTimelineRail(isLast = true, active = false)
-        Spacer(Modifier.width(MaterialTheme.spacing.md))
-        Column {
-            Text("等待第一段真实行程", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(MaterialTheme.spacing.xxs))
-            Text("完成行程后会形成连续的驾驶日志。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
+private fun formatActiveDistance(meters: Double): String =
+    if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0)
+    else String.format(Locale.US, "%.0f m", meters)
 
-@Composable
-private fun TripHistoryRow(trip: TripSessionEntity, onClick: () -> Unit, onDelete: () -> Unit) {
-    Surface(onClick = onClick, color = Color.Transparent, modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.sm), verticalAlignment = Alignment.Top) {
-            TripTimelineRail(isLast = false, active = trip.status != TripStatus.COMPLETED)
-            Spacer(Modifier.width(MaterialTheme.spacing.md))
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatTime(trip.startedAtEpochMillis), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-                    if (trip.status == TripStatus.COMPLETED) {
-                        IconButton(onClick = onDelete, modifier = Modifier.size(48.dp)) {
-                            Icon(Icons.Default.Delete, "删除行程", tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
-                        }
-                    }
-                }
-                Text(formatDistance(trip.distanceMeters), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${formatDuration(trip.elapsedSeconds)} · ${trip.averageSpeedMps?.let(::formatSpeed) ?: "均速 --"}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                formatTripEnergyLine(trip)?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text(statusText(trip.status), style = MaterialTheme.typography.labelMedium, color = if (trip.status == TripStatus.INTERRUPTED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
-            }
-        }
-    }
-}
+private fun formatActiveSpeed(mps: Double): String =
+    String.format(Locale.US, "%.0f km/h", mps * 3.6)
 
-@Composable
-private fun TripTimelineRail(isLast: Boolean, active: Boolean) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            Modifier.size(34.dp).background((if (active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary).copy(alpha = .12f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(Icons.Default.Route, null, tint = if (active) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-        }
-        if (!isLast) {
-            Box(Modifier.width(1.dp).height(58.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = .42f)))
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEntity>, points: List<TripPointEntity>, onBack: () -> Unit) {
-    val vehicle = vehicles.firstOrNull { it.id == trip.vehicleId }
-    val firstPoint = points.firstOrNull()
-    val lastPoint = points.lastOrNull()
-    val wholeTripAverageMps = if (trip.elapsedSeconds > 0) trip.distanceMeters / trip.elapsedSeconds else null
-    val context = LocalContext.current
-    val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context) }
-    var startAddress by remember(trip.id) { mutableStateOf<String?>(null) }
-    var endAddress by remember(trip.id) { mutableStateOf<String?>(null) }
-    var resolvingAddresses by remember(trip.id) { mutableStateOf(false) }
-    val elevationSummary = remember(points) { TripElevationAnalytics.summarize(points) }
-    val hasAltitude = elevationSummary != null || listOf(
-        trip.startAltitudeMeters,
-        trip.endAltitudeMeters,
-        trip.minAltitudeMeters,
-        trip.maxAltitudeMeters
-    ).any { it != null }
-    val hasVehicleStateData = listOf(
-        trip.startSoc,
-        trip.endSoc,
-        trip.startMileageKm,
-        trip.endMileageKm,
-        trip.consumedEnergyKwh,
-        trip.averageConsumptionKwhPer100Km
-    ).any { it != null }
-    val geometry = remember(points) {
-        if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() }) else null
-    }
-
-    LaunchedEffect(trip.id, trip.status, firstPoint?.id, lastPoint?.id) {
-        if (trip.status == TripStatus.RECORDING || (firstPoint == null && lastPoint == null)) {
-            startAddress = null
-            endAddress = null
-            resolvingAddresses = false
-            return@LaunchedEffect
-        }
-        resolvingAddresses = true
-        startAddress = firstPoint?.let { addressResolver.reverse(it.latitude, it.longitude) }
-        endAddress = when {
-            lastPoint == null -> null
-            firstPoint != null && firstPoint.latitude == lastPoint.latitude && firstPoint.longitude == lastPoint.longitude -> startAddress
-            else -> addressResolver.reverse(lastPoint.latitude, lastPoint.longitude)
-        }
-        resolvingAddresses = false
-    }
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("行程详情") },
-                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
-        ) {
-            item {
-                Surface(modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = Color.Transparent) {
-                    Column(Modifier.background(TripHeroBrush).padding(MaterialTheme.spacing.lg), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text("TRIP / SUMMARY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
-                                Text(vehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${trip.vehicleId}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                                Text("${formatTime(trip.startedAtEpochMillis)} · ${statusText(trip.status)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            geometry?.let { StatusPill(if (it.gapCount > 0) "GPS ${it.gapCount} 缺口" else "GPS 连续", it.gapCount > 0) }
-                        }
-                        Text("行程距离", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatDistance(trip.distanceMeters), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
-                        ResponsiveCockpitMetrics(
-                            listOf(
-                                CockpitMetricData("总耗时", formatDuration(trip.elapsedSeconds)),
-                                CockpitMetricData("全程均速", wholeTripAverageMps?.let(::formatSpeed) ?: "--"),
-                                CockpitMetricData("行驶均速", trip.averageSpeedMps?.let(::formatSpeed) ?: "--"),
-                                CockpitMetricData("最高速度", trip.maxSpeedMps?.let(::formatSpeed) ?: "--"),
-                                CockpitMetricData("移动时间", trip.movingSeconds?.let(::formatDuration) ?: "--"),
-                                CockpitMetricData("GPS 点", points.size.toString())
-                            )
-                        )
-                    }
-                }
-            }
-
-            if (hasVehicleStateData) {
-                item {
-                    SectionHeading("能耗与车辆状态", "SOC 能耗基于配置电池容量和整数 SOC 变化估算，不冒充 BMS 实测值")
-                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                    ResponsiveCockpitMetrics(
-                        listOf(
-                            CockpitMetricData("SOC", formatSocRange(trip.startSoc, trip.endSoc)),
-                            CockpitMetricData("估算消耗", formatEnergyKwh(trip.consumedEnergyKwh)),
-                            CockpitMetricData("估算能耗", formatConsumption(trip.averageConsumptionKwhPer100Km)),
-                            CockpitMetricData("总里程", formatMileageRange(trip.startMileageKm, trip.endMileageKm))
-                        )
-                    )
-                    if (trip.startSoc != null && trip.endSoc != null && trip.endSoc >= trip.startSoc && trip.consumedEnergyKwh == null) {
-                        Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                        Text(
-                            "SOC 未下降或出现回升，本次不强行推算行驶能耗；可能来自整数取整、能量回收或中途补能。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            geometry?.let { if (it.isDrawable) item { TripRoutePreview(points) } }
-
-            if (hasAltitude) {
-                item {
-                    SectionHeading(
-                        "海拔",
-                        if ((elevationSummary?.skippedLongGapCount ?: 0) > 0) {
-                            "来自可信定位海拔；GPS 长缺口两侧不会被拼成累计爬升/下降"
-                        } else {
-                            "来自可信定位海拔；累计爬升/下降会抑制小幅 GPS 垂直抖动"
-                        }
-                    )
-                    Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                    ResponsiveCockpitMetrics(
-                        listOf(
-                            CockpitMetricData("起点海拔", formatAltitude(elevationSummary?.startAltitudeMeters ?: trip.startAltitudeMeters)),
-                            CockpitMetricData("终点海拔", formatAltitude(elevationSummary?.endAltitudeMeters ?: trip.endAltitudeMeters)),
-                            CockpitMetricData("最低海拔", formatAltitude(elevationSummary?.minAltitudeMeters ?: trip.minAltitudeMeters)),
-                            CockpitMetricData("最高海拔", formatAltitude(elevationSummary?.maxAltitudeMeters ?: trip.maxAltitudeMeters)),
-                            CockpitMetricData(
-                                "累计爬升",
-                                if (elevationSummary?.hasCumulativeEstimate == true) formatAltitude(elevationSummary.elevationGainMeters) else "--"
-                            ),
-                            CockpitMetricData(
-                                "累计下降",
-                                if (elevationSummary?.hasCumulativeEstimate == true) formatAltitude(elevationSummary.elevationLossMeters) else "--"
-                            )
-                        )
-                    )
-                    elevationSummary?.takeIf { it.skippedLongGapCount > 0 }?.let {
-                        Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                        Text(
-                            "${it.skippedLongGapCount} 个 GPS 长缺口已从累计海拔变化中断开；不会用缺失区间的高度差制造地形变化。",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            item {
-                SectionHeading("轨迹可信度", if ((geometry?.gapCount ?: 0) > 0) "存在长时间 GPS 缺口，缺失区间保持断开" else "当前轨迹未检测到超过 2 分钟的长缺口")
-                Spacer(Modifier.height(MaterialTheme.spacing.sm))
-                EndpointRow("起点", firstPoint, startAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
-                Spacer(Modifier.height(MaterialTheme.spacing.md))
-                EndpointRow("终点", lastPoint, endAddress, resolvingAddresses, trip.status == TripStatus.RECORDING)
-                if (points.isEmpty()) Text("本次没有保存有效 GPS 轨迹点。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            if (points.isNotEmpty()) {
-                item { SectionHeading("最近轨迹点", "用于排查 GPS 质量，不作为主视觉") }
-                items(points.takeLast(6).reversed(), key = { it.id }) { point ->
-                    Row(Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.xs), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Column {
-                            Text(SimpleDateFormat("HH:mm:ss", Locale.SIMPLIFIED_CHINESE).format(Date(point.capturedAtEpochMillis)), fontWeight = FontWeight.SemiBold)
-                            Text("${formatCoordinate(point.latitude)}, ${formatCoordinate(point.longitude)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                        point.horizontalAccuracyMeters?.let { Text("±${it.toInt()} m", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EndpointRow(
-    label: String,
-    point: TripPointEntity?,
-    address: String?,
-    resolving: Boolean,
-    tripRecording: Boolean
-) {
-    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            when {
-                point == null -> "--"
-                tripRecording -> "行程进行中，结束后解析地址"
-                resolving -> "地址解析中…"
-                !address.isNullOrBlank() -> address
-                else -> "地址暂不可用"
-            },
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        if (point != null) {
-            Text(
-                "坐标 · ${formatCoordinate(point.latitude)}, ${formatCoordinate(point.longitude)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-    }
-}
-
-private data class CockpitMetricData(val label: String, val value: String)
-
-@Composable
-private fun ResponsiveCockpitMetrics(metrics: List<CockpitMetricData>) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
-        val columns = if (compact) 2 else 3
-        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            metrics.chunked(columns).forEach { rowMetrics ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                    rowMetrics.forEach { metric -> CockpitMetric(metric.label, metric.value, Modifier.weight(1f)) }
-                    repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CockpitMetric(label: String, value: String, modifier: Modifier) {
-    Column(modifier) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-    }
-}
-
-@Composable
-private fun SectionHeading(title: String, subtitle: String) {
-    Column {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-        Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun TripRoutePreview(points: List<TripPointEntity>) {
-    val geometry = remember(points) {
-        TripRouteGeometryBuilder.build(points.map { it.toRouteGeoPoint() })
-    }
-    if (geometry == null || !geometry.isDrawable) return
-    val fallbackRouteColor = MaterialTheme.colorScheme.outline.copy(alpha = .72f)
-    val startColor = MaterialTheme.colorScheme.tertiary
-    val endColor = MaterialTheme.colorScheme.error
-
-    Surface(Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.padding(MaterialTheme.spacing.md), verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Column {
-                    Text("真实轨迹", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("${geometry.points.size} 点 · ${geometry.segments.size} 段", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                StatusPill(if (geometry.gapCount > 0) "${geometry.gapCount} 个长缺口" else "轨迹连续", geometry.gapCount > 0)
-            }
-
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(240.dp)
-                    .semantics { contentDescription = "真实行程轨迹；轨迹颜色表示本车速度，圆形标记为起点，方形标记为终点" }
-            ) {
-                val p = 16.dp.toPx()
-                val w = (size.width - p * 2).coerceAtLeast(1f)
-                val h = (size.height - p * 2).coerceAtLeast(1f)
-                fun offset(point: com.evchargebook.domain.trip.TripRoutePoint) = Offset(p + point.x * w, p + point.y * h)
-                geometry.segments.forEach { segment ->
-                    segment.zipWithNext().forEach { (fromPoint, toPoint) ->
-                        val from = offset(fromPoint)
-                        val to = offset(toPoint)
-                        val segmentSpeed = averageSpeed(fromPoint.speedMps, toPoint.speedMps)
-                        drawLine(speedRouteColor(segmentSpeed, fallbackRouteColor), from, to, strokeWidth = 4.dp.toPx(), cap = StrokeCap.Round)
-                    }
-                }
-                val start = offset(geometry.points.first())
-                val end = offset(geometry.points.last())
-                drawCircle(startColor, 8.dp.toPx(), start)
-                val endSize = 14.dp.toPx()
-                drawRect(
-                    color = endColor,
-                    topLeft = Offset(end.x - endSize / 2, end.y - endSize / 2),
-                    size = Size(endSize, endSize)
-                )
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xxs)) {
-                Text("车辆速度分布", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(8.dp)
-                        .background(
-                            Brush.horizontalGradient(listOf(SpeedDeepRed, SpeedRed, SpeedYellow, SpeedGreen, SpeedBlue, SpeedDeepBlue)),
-                            CircleShape
-                        )
-                )
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("15", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("30", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("70", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("90+ km/h", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Text("颜色仅表示本车可信 GPS 速度，不代表道路拥堵或交通状态。灰色线段表示速度数据不足。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).background(startColor, CircleShape))
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("起点 · 圆形", style = MaterialTheme.typography.labelMedium)
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(10.dp).background(endColor))
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("终点 · 方形", style = MaterialTheme.typography.labelMedium)
-                }
-            }
-            if (geometry.gapCount > 0) {
-                Text("检测到 ${geometry.gapCount} 处超过 2 分钟的 GPS 缺口。断点保持断开，不使用实线伪装连续。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
-            }
-            Text("基于真实 WGS84 轨迹点绘制，不做道路吸附或虚构路线。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-private fun TripPointEntity.toRouteGeoPoint(): TripGeoPoint {
-    val trustedSpeed = speedMps.takeIf {
-        TripSpeedTrustRules.eligibleForMeasuredSpeed(
-            reportedSpeedMps = speedMps,
-            provider = provider,
-            horizontalAccuracyMeters = horizontalAccuracyMeters,
-            speedAccuracyMps = speedAccuracyMps
-        )
-    }
-    return TripGeoPoint(
-        latitude = latitude,
-        longitude = longitude,
-        capturedAtEpochMillis = capturedAtEpochMillis,
-        speedMps = trustedSpeed
-    )
-}
-
-private fun averageSpeed(first: Double?, second: Double?): Double? =
-    if (first != null && second != null) (first + second) / 2.0 else null
-
-private fun speedRouteColor(speedMps: Double?, fallback: Color): Color {
-    val kmh = speedMps?.times(3.6)?.takeIf { it.isFinite() && it >= 0.0 } ?: return fallback
+private fun formatActiveDuration(seconds: Long): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    val secs = seconds % 60
     return when {
-        kmh <= 5.0 -> SpeedDeepRed
-        kmh <= 15.0 -> SpeedRed
-        kmh <= 30.0 -> blendColor(SpeedRed, SpeedYellow, ((kmh - 15.0) / 15.0).toFloat())
-        kmh <= 50.0 -> blendColor(SpeedYellow, SpeedGreen, ((kmh - 30.0) / 20.0).toFloat())
-        kmh <= 70.0 -> SpeedGreen
-        kmh <= 90.0 -> blendColor(SpeedGreen, SpeedBlue, ((kmh - 70.0) / 20.0).toFloat())
-        else -> blendColor(SpeedBlue, SpeedDeepBlue, ((kmh - 90.0) / 40.0).toFloat().coerceIn(0f, 1f))
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m ${secs}s"
+        else -> "${secs}s"
     }
-}
-
-private fun blendColor(from: Color, to: Color, fraction: Float): Color {
-    val value = fraction.coerceIn(0f, 1f)
-    return Color(
-        red = from.red + (to.red - from.red) * value,
-        green = from.green + (to.green - from.green) * value,
-        blue = from.blue + (to.blue - from.blue) * value,
-        alpha = from.alpha + (to.alpha - from.alpha) * value
-    )
-}
-
-private fun formatTripEnergyLine(trip: TripSessionEntity): String? {
-    val parts = mutableListOf<String>()
-    if (trip.startSoc != null || trip.endSoc != null) {
-        parts += "SOC ${formatSocRange(trip.startSoc, trip.endSoc)}"
-    }
-    when {
-        trip.averageConsumptionKwhPer100Km != null -> parts += "估算 ${formatConsumption(trip.averageConsumptionKwhPer100Km)}"
-        trip.consumedEnergyKwh != null -> parts += "估算 ${formatEnergyKwh(trip.consumedEnergyKwh)}"
-    }
-    return parts.takeIf { it.isNotEmpty() }?.joinToString(" · ")
-}
-
-private fun formatSocRange(start: Int?, end: Int?): String =
-    "${start?.let { "$it%" } ?: "--"} → ${end?.let { "$it%" } ?: "--"}"
-
-private fun formatEnergyKwh(value: Double?): String =
-    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh", it) } ?: "--"
-
-private fun formatConsumption(value: Double?): String =
-    value?.takeIf { it.isFinite() && it >= 0.0 }?.let { String.format(Locale.US, "%.1f kWh/100km", it) } ?: "--"
-
-private fun formatMileageRange(start: Double?, end: Double?): String =
-    when {
-        start != null && end != null -> "${formatMileage(start)} → ${formatMileage(end)} km"
-        start != null -> "${formatMileage(start)} → -- km"
-        end != null -> "-- → ${formatMileage(end)} km"
-        else -> "--"
-    }
-
-private fun formatMileage(value: Double): String =
-    if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
-
-private fun formatTime(epochMillis: Long) = SimpleDateFormat("M月d日 HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
-private fun formatDuration(seconds: Long): String {
-    val h = seconds / 3600
-    val m = (seconds % 3600) / 60
-    val s = seconds % 60
-    return if (h > 0) "${h}小时${m}分" else if (m > 0) "${m}分${s}秒" else "${s}秒"
-}
-private fun formatDistance(meters: Double) = if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0) else String.format(Locale.US, "%.0f m", meters)
-private fun formatSpeed(mps: Double) = String.format(Locale.US, "%.1f km/h", mps * 3.6)
-private fun formatAltitude(meters: Double?) = meters?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.0f m", it) } ?: "--"
-private fun formatCoordinate(value: Double) = String.format(Locale.US, "%.6f", value)
-private fun statusText(status: String) = when (status) {
-    TripStatus.RECORDING -> "进行中"
-    TripStatus.INTERRUPTED -> "已中断，可恢复"
-    TripStatus.COMPLETED -> "已完成"
-    else -> status
 }
