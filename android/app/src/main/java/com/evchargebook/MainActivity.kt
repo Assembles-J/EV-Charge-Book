@@ -58,17 +58,21 @@ class MainActivity : ComponentActivity() {
         MainViewModel.Factory(ChargingRepository(db, applicationContext))
     }
     private var openTripConfirmation by mutableStateOf(false)
+    private var openActiveTrip by mutableStateOf(false)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         openTripConfirmation = intent.getBooleanExtra(EXTRA_OPEN_TRIP_CONFIRMATION, false)
+        openActiveTrip = intent.getBooleanExtra(EXTRA_OPEN_ACTIVE_TRIP, false)
         enableEdgeToEdge()
         setContent {
             EvChargeTheme {
                 MainApp(
                     viewModel = vm,
                     openTripConfirmation = openTripConfirmation,
-                    onTripConfirmationConsumed = { openTripConfirmation = false }
+                    onTripConfirmationConsumed = { openTripConfirmation = false },
+                    openActiveTrip = openActiveTrip,
+                    onActiveTripConsumed = { openActiveTrip = false }
                 )
             }
         }
@@ -78,10 +82,12 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         if (intent.getBooleanExtra(EXTRA_OPEN_TRIP_CONFIRMATION, false)) openTripConfirmation = true
+        if (intent.getBooleanExtra(EXTRA_OPEN_ACTIVE_TRIP, false)) openActiveTrip = true
     }
 
     companion object {
         const val EXTRA_OPEN_TRIP_CONFIRMATION = "open_trip_confirmation"
+        const val EXTRA_OPEN_ACTIVE_TRIP = "open_active_trip"
     }
 }
 
@@ -89,7 +95,9 @@ class MainActivity : ComponentActivity() {
 fun MainApp(
     viewModel: MainViewModel,
     openTripConfirmation: Boolean = false,
-    onTripConfirmationConsumed: () -> Unit = {}
+    onTripConfirmationConsumed: () -> Unit = {},
+    openActiveTrip: Boolean = false,
+    onActiveTripConsumed: () -> Unit = {}
 ) {
     val state by viewModel.uiState.collectAsState()
     val context = LocalContext.current
@@ -152,6 +160,14 @@ fun MainApp(
         if (openTripConfirmation) {
             showBluetoothTripPrompt("已检测到车辆蓝牙连接，请确认是否开始本次行程")
             onTripConfirmationConsumed()
+        }
+    }
+
+    LaunchedEffect(openActiveTrip) {
+        if (openActiveTrip) {
+            viewModel.closeTripDetail()
+            tab = 3
+            onActiveTripConsumed()
         }
     }
 
