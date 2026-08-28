@@ -3,27 +3,27 @@
   "artworks": {
     "byd-seal-2025": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/byd_seal_2025.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/byd_seal_2025.webp"
     },
     "leapmotor-c16-2026": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/leapmotor_c16_2026.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/leapmotor_c16_2026.webp"
     },
     "tesla-model-3": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/tesla_model_3.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/tesla_model_3.webp"
     },
     "xiaomi-su7-2024": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/xiaomi_su7_2024.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/xiaomi_su7_2024.webp"
     },
     "xiaomi-su7-ultra-2024": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/xiaomi_su7_ultra_2024.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/xiaomi_su7_ultra_2024.webp"
     },
     "xiaomi-yu7-2025": {
       "version": 1,
-      "url": "https://groupim.cn/ev-charge-book/hero-assets/remote/xiaomi_yu7_2025.webp"
+      "url": "https://groupim.cn/ev-charge-book/releases/hero-assets/xiaomi_yu7_2025.webp"
     }
   }
 }
