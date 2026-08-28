@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.EVDesignTokens
@@ -83,8 +84,8 @@ fun DashboardRecentTripCard(
         color = Color(0xFF0A1210)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             RecentTripHeader(onViewAll)
 
@@ -92,10 +93,10 @@ fun DashboardRecentTripCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onOpenTrip(trip.id) }
-                    .padding(top = 2.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .padding(top = 1.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -104,7 +105,7 @@ fun DashboardRecentTripCard(
                 ) {
                     Text(
                         formatTime(trip.startedAtEpochMillis),
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Surface(
@@ -113,8 +114,8 @@ fun DashboardRecentTripCard(
                     ) {
                         Text(
                             "已完成",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            style = MaterialTheme.typography.labelSmall,
                             color = EVDesignTokens.Energy.green
                         )
                     }
@@ -125,10 +126,10 @@ fun DashboardRecentTripCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     TripRouteRail()
-                    Spacer(Modifier.width(12.dp))
+                    Spacer(Modifier.width(10.dp))
                     Column(
                         modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         TripEndpointRow(
                             address = endpointText(startAddress, trip.startLatitude, trip.startLongitude, resolving)
@@ -139,7 +140,7 @@ fun DashboardRecentTripCard(
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -170,7 +171,7 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
                 modifier = Modifier
-                    .size(38.dp)
+                    .size(34.dp)
                     .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
@@ -178,13 +179,13 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
                     Icons.Default.Route,
                     contentDescription = null,
                     tint = EVDesignTokens.Energy.green,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier.size(18.dp)
                 )
             }
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(8.dp))
             Text(
                 "最近行程",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -192,22 +193,22 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
 
         Row(
             modifier = Modifier
-                .heightIn(min = 48.dp)
+                .heightIn(min = 44.dp)
                 .clip(CircleShape)
                 .clickable(onClick = onViewAll)
-                .padding(start = 10.dp, top = 8.dp, bottom = 8.dp),
+                .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
                 "查看全部",
-                style = MaterialTheme.typography.bodyMedium,
+                style = MaterialTheme.typography.bodySmall,
                 color = EVDesignTokens.Energy.green
             )
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = "查看全部行程",
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(18.dp)
             )
         }
     }
@@ -219,6 +220,7 @@ private fun TripEndpointRow(address: String) {
         text = address,
         modifier = Modifier.fillMaxWidth(),
         style = MaterialTheme.typography.bodyMedium,
+        fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
         color = MaterialTheme.colorScheme.onSurface,
         maxLines = 2,
@@ -232,19 +234,19 @@ private fun TripRouteRail() {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier
-                .size(10.dp)
-                .border(1.5.dp, markerColor.copy(alpha = 0.90f), CircleShape)
+                .size(9.dp)
+                .border(1.4.dp, markerColor.copy(alpha = 0.88f), CircleShape)
         )
         Box(
             Modifier
-                .size(width = 1.dp, height = 42.dp)
-                .background(markerColor.copy(alpha = 0.42f))
+                .size(width = 1.dp, height = 36.dp)
+                .background(markerColor.copy(alpha = 0.40f))
         )
         Box(
             Modifier
-                .size(10.dp)
-                .background(markerColor.copy(alpha = 0.68f), CircleShape)
-                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f), CircleShape)
+                .size(9.dp)
+                .background(markerColor.copy(alpha = 0.66f), CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.20f), CircleShape)
         )
     }
 }
@@ -258,12 +260,12 @@ private fun TripMetric(value: String, label: String, modifier: Modifier = Modifi
         Text(
             value,
             style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.SemiBold,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(1.dp))
         Text(
             label,
             style = MaterialTheme.typography.labelSmall,
@@ -278,8 +280,8 @@ private fun TripMetric(value: String, label: String, modifier: Modifier = Modifi
 private fun MetricSeparator() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 34.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            .size(width = 1.dp, height = 30.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f))
     )
 }
 
@@ -291,8 +293,8 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
         color = Color(0xFF0A1210)
     ) {
         Column(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             RecentTripHeader(onViewAll)
             Row(
@@ -300,11 +302,11 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TripRouteRail()
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         "完成第一段行程后，这里会显示距离、SOC、里程与可信的能耗估算。",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
