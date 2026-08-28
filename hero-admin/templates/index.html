@@ -171,12 +171,14 @@
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || '发布失败');
-      setStatus(`发布成功：${data.artworkKey} → v${data.version} · ${data.outputWidth}×${data.outputHeight} WebP · ${(data.outputBytes/1024).toFixed(0)} KB`, 'ok');
+
+      manifest.artworks[data.artworkKey] = {version: data.version, url: data.url};
+      renderCurrent();
       chosenFile = null;
       fileInput.value = '';
       drop.classList.remove('has-preview');
       preview.removeAttribute('src');
-      await loadState();
+      setStatus(`发布成功：${data.artworkKey} → v${data.version} · ${data.outputWidth}×${data.outputHeight} WebP · ${(data.outputBytes/1024).toFixed(0)} KB`, 'ok');
     } catch (err) {
       setStatus(err.message, 'error');
     } finally {
