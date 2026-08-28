@@ -21,10 +21,16 @@ The app always has a local fallback. A first successful network load is cached o
 Default endpoint:
 
 ```text
-https://groupim.cn/ev-charge-book/hero-assets/manifest-v1.json
+https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
 ```
 
 The endpoint can be overridden at build time with `HERO_ARTWORK_MANIFEST_URL`.
+
+The public path deliberately reuses the same `release-meta` route already used by the Android updater. Hero binaries reuse the existing public `releases` route:
+
+```text
+https://groupim.cn/ev-charge-book/releases/hero-assets/<file>.webp
+```
 
 Each artwork entry has a stable key, version, and HTTPS URL. Increment the version whenever the remote visual changes so the app gets a new Coil cache key without deleting the old cache globally.
 
@@ -66,6 +72,15 @@ No screen should block waiting for artwork.
 
 `.github/workflows/hero-assets-publish.yml` publishes `hero-assets/**` independently of an APK release. A Hero image can therefore be replaced without rebuilding or releasing the Android app.
 
+The workflow first uploads the repository asset package, then activates it into the public directories already used by releases:
+
+```text
+/opt/ev-charge-book/release-meta/hero-assets-v1.json
+/opt/ev-charge-book/releases/hero-assets/*.webp
+```
+
+The manifest is copied last so clients never discover URLs before the corresponding images are present.
+
 The workflow validates:
 
 - manifest schema version
@@ -73,6 +88,7 @@ The workflow validates:
 - manifest/file consistency
 - remote WebP hard ceiling of 2.5 MB per file
 - public manifest reachability after upload
+- every manifest image URL is publicly readable
 
 ## Local APK budget
 
