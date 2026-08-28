@@ -35,6 +35,7 @@ import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.domain.TripSpeedTrustRules
+import com.evchargebook.domain.trip.TripElevationAnalytics
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.location.AndroidGeocoderAddressResolver
@@ -394,7 +395,8 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
     var startAddress by remember(trip.id) { mutableStateOf<String?>(null) }
     var endAddress by remember(trip.id) { mutableStateOf<String?>(null) }
     var resolvingAddresses by remember(trip.id) { mutableStateOf(false) }
-    val hasAltitude = listOf(
+    val elevationSummary = remember(points) { TripElevationAnalytics.summarize(points) }
+    val hasAltitude = elevationSummary != null || listOf(
         trip.startAltitudeMeters,
         trip.endAltitudeMeters,
         trip.minAltitudeMeters,
@@ -499,16 +501,39 @@ private fun TripDetailScreen(trip: TripSessionEntity, vehicles: List<VehicleEnti
 
             if (hasAltitude) {
                 item {
-                    SectionHeading("海拔", "来自设备定位海拔；暂不根据原始噪声推算累计爬升")
+                    SectionHeading(
+                        "海拔",
+                        if ((elevationSummary?.skippedLongGapCount ?: 0) > 0) {
+                            "来自可信定位海拔；GPS 长缺口两侧不会被拼成累计爬升/下降"
+                        } else {
+                            "来自可信定位海拔；累计爬升/下降会抑制小幅 GPS 垂直抖动"
+                        }
+                    )
                     Spacer(Modifier.height(MaterialTheme.spacing.sm))
                     ResponsiveCockpitMetrics(
                         listOf(
-                            CockpitMetricData("起点海拔", formatAltitude(trip.startAltitudeMeters)),
-                            CockpitMetricData("终点海拔", formatAltitude(trip.endAltitudeMeters)),
-                            CockpitMetricData("最低海拔", formatAltitude(trip.minAltitudeMeters)),
-                            CockpitMetricData("最高海拔", formatAltitude(trip.maxAltitudeMeters))
+                            CockpitMetricData("起点海拔", formatAltitude(elevationSummary?.startAltitudeMeters ?: trip.startAltitudeMeters)),
+                            CockpitMetricData("终点海拔", formatAltitude(elevationSummary?.endAltitudeMeters ?: trip.endAltitudeMeters)),
+                            CockpitMetricData("最低海拔", formatAltitude(elevationSummary?.minAltitudeMeters ?: trip.minAltitudeMeters)),
+                            CockpitMetricData("最高海拔", formatAltitude(elevationSummary?.maxAltitudeMeters ?: trip.maxAltitudeMeters)),
+                            CockpitMetricData(
+                                "累计爬升",
+                                if (elevationSummary?.hasCumulativeEstimate == true) formatAltitude(elevationSummary.elevationGainMeters) else "--"
+                            ),
+                            CockpitMetricData(
+                                "累计下降",
+                                if (elevationSummary?.hasCumulativeEstimate == true) formatAltitude(elevationSummary.elevationLossMeters) else "--"
+                            )
                         )
                     )
+                    elevationSummary?.takeIf { it.skippedLongGapCount > 0 }?.let {
+                        Spacer(Modifier.height(MaterialTheme.spacing.sm))
+                        Text(
+                            "${it.skippedLongGapCount} 个 GPS 长缺口已从累计海拔变化中断开；不会用缺失区间的高度差制造地形变化。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
