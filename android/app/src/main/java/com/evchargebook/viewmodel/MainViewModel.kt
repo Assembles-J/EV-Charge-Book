@@ -85,8 +85,16 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
             }
         }
         viewModelScope.launch {
-            selectedTripId.flatMapLatest { tripId -> tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList()) }
-                .collect { points -> _uiState.value = _uiState.value.copy(selectedTripId = selectedTripId.value, selectedTripPoints = points) }
+            combine(selectedTripId, repository.activeTrip) { selectedId, activeTrip ->
+                selectedId ?: activeTrip?.id
+            }.flatMapLatest { tripId ->
+                tripId?.let { repository.observeTripPoints(it) } ?: flowOf(emptyList())
+            }.collect { points ->
+                _uiState.value = _uiState.value.copy(
+                    selectedTripId = selectedTripId.value,
+                    selectedTripPoints = points
+                )
+            }
         }
         viewModelScope.launch {
             combine(repository.vehicle, repository.vehicles, repository.catalogVehicles, repository.chargingRecords, repository.trips) { vehicle, vehicles, catalogVehicles, records, trips ->
