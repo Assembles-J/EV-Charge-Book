@@ -48,8 +48,8 @@ fun EnergyCockpitCard(
         Column(
             modifier = Modifier
                 .background(surfaceBrush)
-                .padding(horizontal = 14.dp, vertical = 13.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -59,7 +59,7 @@ fun EnergyCockpitCard(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(34.dp)
                             .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
@@ -67,19 +67,19 @@ fun EnergyCockpitCard(
                             Icons.Default.Bolt,
                             contentDescription = null,
                             tint = EVDesignTokens.Energy.green,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
-                    Spacer(Modifier.size(10.dp))
+                    Spacer(Modifier.size(8.dp))
                     Column {
                         Text(
                             "ENERGY FLOW",
-                            style = MaterialTheme.typography.labelMedium,
+                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             "本月能源",
-                            style = MaterialTheme.typography.titleLarge,
+                            style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Medium,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -89,12 +89,12 @@ fun EnergyCockpitCard(
                     modifier = Modifier
                         .clip(CircleShape)
                         .clickable(onClick = onOpenRecords)
-                        .padding(start = 10.dp, top = 8.dp, bottom = 8.dp),
+                        .padding(start = 8.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         "${state.chargingCount} 次充电",
-                        style = MaterialTheme.typography.bodyMedium,
+                        style = MaterialTheme.typography.bodySmall,
                         color = EVDesignTokens.Energy.green,
                         maxLines = 1
                     )
@@ -102,7 +102,7 @@ fun EnergyCockpitCard(
                         Icons.Default.ChevronRight,
                         contentDescription = "查看充电记录",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(20.dp)
+                        modifier = Modifier.size(18.dp)
                     )
                 }
             }
@@ -124,7 +124,7 @@ fun EnergyCockpitCard(
                     value = "¥ ${two(state.monthCost)}",
                     modifier = Modifier
                         .weight(1f)
-                        .padding(horizontal = 10.dp)
+                        .padding(horizontal = 9.dp)
                 )
                 EnergyDivider()
                 EnergyMetric(
@@ -134,7 +134,7 @@ fun EnergyCockpitCard(
                     compact = true,
                     modifier = Modifier
                         .weight(1.08f)
-                        .padding(start = 10.dp)
+                        .padding(start = 9.dp)
                 )
             }
         }
@@ -153,15 +153,15 @@ private fun EnergyMetric(
     Column(modifier = modifier) {
         Text(
             label,
-            style = MaterialTheme.typography.labelMedium,
+            style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1
         )
-        Spacer(Modifier.size(4.dp))
+        Spacer(Modifier.size(3.dp))
         Row(verticalAlignment = Alignment.Bottom) {
             Text(
                 value,
-                style = if (compact) MaterialTheme.typography.titleMedium else MaterialTheme.typography.titleLarge,
+                style = if (compact) MaterialTheme.typography.bodyLarge else MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Medium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -171,7 +171,7 @@ private fun EnergyMetric(
                 Spacer(Modifier.size(3.dp))
                 Text(
                     unit,
-                    style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodySmall,
                     color = if (highlightUnit) EVDesignTokens.Energy.green else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Clip
@@ -185,8 +185,8 @@ private fun EnergyMetric(
 private fun EnergyDivider() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 52.dp)
-            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+            .size(width = 1.dp, height = 44.dp)
+            .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f))
     )
 }
 
