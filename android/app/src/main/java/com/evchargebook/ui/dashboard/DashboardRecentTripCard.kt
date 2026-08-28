@@ -1,6 +1,7 @@
 package com.evchargebook.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -124,19 +125,15 @@ fun DashboardRecentTripCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     TripRouteRail()
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(12.dp))
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         TripEndpointRow(
-                            label = "起点",
-                            labelColor = EVDesignTokens.Energy.green,
                             address = endpointText(startAddress, trip.startLatitude, trip.startLongitude, resolving)
                         )
                         TripEndpointRow(
-                            label = "终点",
-                            labelColor = Color(0xFFFF7373),
                             address = endpointText(endAddress, trip.endLatitude, trip.endLongitude, resolving)
                         )
                     }
@@ -217,41 +214,38 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
 }
 
 @Composable
-private fun TripEndpointRow(label: String, labelColor: Color, address: String) {
-    Row(
+private fun TripEndpointRow(address: String) {
+    Text(
+        text = address,
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.width(34.dp),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.Medium,
-            color = labelColor
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = address,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.Medium,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 2,
+        overflow = TextOverflow.Ellipsis
+    )
 }
 
 @Composable
 private fun TripRouteRail() {
+    val markerColor = MaterialTheme.colorScheme.onSurfaceVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.size(8.dp).background(EVDesignTokens.Energy.green, CircleShape))
         Box(
             Modifier
-                .size(width = 1.dp, height = 44.dp)
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f))
+                .size(10.dp)
+                .border(1.5.dp, markerColor.copy(alpha = 0.90f), CircleShape)
         )
-        Box(Modifier.size(8.dp).background(Color(0xFFFF7373), CircleShape))
+        Box(
+            Modifier
+                .size(width = 1.dp, height = 42.dp)
+                .background(markerColor.copy(alpha = 0.42f))
+        )
+        Box(
+            Modifier
+                .size(10.dp)
+                .background(markerColor.copy(alpha = 0.68f), CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.22f), CircleShape)
+        )
     }
 }
 
@@ -306,7 +300,7 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 TripRouteRail()
-                Spacer(Modifier.width(10.dp))
+                Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
                         "完成第一段行程后，这里会显示距离、SOC、里程与可信的能耗估算。",
