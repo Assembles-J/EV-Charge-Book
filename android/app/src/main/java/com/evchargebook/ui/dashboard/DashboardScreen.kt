@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -118,6 +119,7 @@ private fun RecentChargingHeader(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(
                 modifier = Modifier
+                    .heightIn(min = 48.dp)
                     .clip(CircleShape)
                     .clickable(onClick = onViewAll)
                     .padding(horizontal = 8.dp, vertical = 8.dp),
@@ -138,7 +140,7 @@ private fun RecentChargingHeader(
             Spacer(Modifier.size(4.dp))
             Box(
                 modifier = Modifier
-                    .size(42.dp)
+                    .size(48.dp)
                     .clip(CircleShape)
                     .background(EVDesignTokens.Energy.green)
                     .clickable(onClick = onAddClick),
