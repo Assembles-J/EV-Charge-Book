@@ -109,9 +109,9 @@ fun HeroVehicleCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // Keep the 1600x1100 source asset; use a slightly taller viewport so the
-                        // vehicle has more presence. Crop remains modest and symmetric.
-                        .aspectRatio(1.38f)
+                        // The source remains 1600x1100. A taller stage intentionally trades a
+                        // modest symmetric side crop for the stronger Hero presence approved on device.
+                        .aspectRatio(1.24f)
                 ) {
                     VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
                     Box(
@@ -305,12 +305,15 @@ private fun HeroDynamicStatePanel(
     val recentDistance = latestTrip
         ?.distanceMeters
         ?.takeIf { it.isFinite() && it > 0.0 }
+    val recentConsumption = latestTrip
+        ?.averageConsumptionKwhPer100Km
+        ?.takeIf { it.isFinite() && it >= 0.0 }
     val panelShape = RoundedCornerShape(20.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(80.dp)
+            .height(84.dp)
             .shadow(
                 elevation = 6.dp,
                 shape = panelShape,
@@ -355,7 +358,7 @@ private fun HeroDynamicStatePanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             HeroSocMetric(
@@ -379,8 +382,9 @@ private fun HeroDynamicStatePanel(
                 label = "最近行程",
                 value = recentDistance?.let(::formatTripDistance) ?: "--",
                 unit = recentDistance?.let { if (it >= 1000.0) "km" else "m" },
+                secondaryValue = recentConsumption?.let { String.format(Locale.US, "%.1f kWh/100km", it) },
                 modifier = Modifier
-                    .weight(0.96f)
+                    .weight(1.0f)
                     .padding(start = 10.dp)
             )
         }
@@ -441,6 +445,7 @@ private fun HeroMetric(
     label: String,
     value: String,
     unit: String? = null,
+    secondaryValue: String? = null,
     modifier: Modifier = Modifier
 ) {
     val cockpit = LocalCockpitColors.current
@@ -462,7 +467,7 @@ private fun HeroMetric(
                 overflow = TextOverflow.Clip
             )
         }
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(3.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.Bottom
@@ -486,6 +491,17 @@ private fun HeroMetric(
                     softWrap = false
                 )
             }
+        }
+        if (secondaryValue != null) {
+            Spacer(Modifier.height(1.dp))
+            Text(
+                text = secondaryValue,
+                style = MaterialTheme.typography.labelSmall,
+                color = cockpit.secondaryText,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
         }
     }
 }
