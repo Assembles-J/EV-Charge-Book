@@ -9,8 +9,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -103,106 +103,118 @@ fun HeroVehicleCard(
         shape = MaterialTheme.shapes.large,
         color = Color(0xFF06100C)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                // Production Hero assets are 1600x1100 (~1.455:1); 1.46 keeps crop negligible.
-                .aspectRatio(1.46f)
-        ) {
-            VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            listOf(
-                                Color(0x98020806),
-                                Color(0x20020806),
-                                Color.Transparent,
-                                Color(0x18020806),
-                                Color(0x7606100C)
-                            )
-                        )
-                    )
-            )
-
-            Text(
-                text = vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(
-                        start = 16.dp,
-                        top = topSystemInset + 14.dp,
-                        end = 72.dp
-                    ),
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Medium,
-                color = cockpit.primaryText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (vehicle != null) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Box(
                     modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = topSystemInset + 10.dp, end = 12.dp)
+                        .fillMaxWidth()
+                        // The artwork stage stays matched to the 1600x1100 production assets.
+                        .aspectRatio(1.46f)
                 ) {
+                    VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
                     Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color(0x6607110F))
-                            .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
-                            .clickable(enabled = canSwitchVehicle) {
-                                vehicleMenuExpanded = true
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.DirectionsCar,
-                            contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
-                            tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 0.94f else 0.45f),
-                            modifier = Modifier.size(22.dp)
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = vehicleMenuExpanded && canSwitchVehicle,
-                        onDismissRequest = { vehicleMenuExpanded = false }
-                    ) {
-                        selectableVehicles.forEach { candidate ->
-                            DropdownMenuItem(
-                                text = {
-                                    Column {
-                                        Text(
-                                            candidate.model,
-                                            style = MaterialTheme.typography.bodyLarge,
-                                            fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
-                                        )
-                                        Text(
-                                            candidate.brand,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                },
-                                onClick = {
-                                    vehicleMenuExpanded = false
-                                    onSelectVehicle(candidate.id)
-                                }
+                        Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(
+                                        Color(0x98020806),
+                                        Color(0x20020806),
+                                        Color.Transparent,
+                                        Color(0x10020806),
+                                        Color(0x4806100C)
+                                    )
+                                )
                             )
+                    )
+
+                    Text(
+                        text = vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(
+                                start = 16.dp,
+                                top = topSystemInset + 14.dp,
+                                end = 72.dp
+                            ),
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Medium,
+                        color = cockpit.primaryText,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    if (vehicle != null) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = topSystemInset + 10.dp, end = 12.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(46.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0x6607110F))
+                                    .border(1.dp, Color.White.copy(alpha = 0.16f), CircleShape)
+                                    .clickable(enabled = canSwitchVehicle) {
+                                        vehicleMenuExpanded = true
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsCar,
+                                    contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
+                                    tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 0.94f else 0.45f),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+
+                            DropdownMenu(
+                                expanded = vehicleMenuExpanded && canSwitchVehicle,
+                                onDismissRequest = { vehicleMenuExpanded = false }
+                            ) {
+                                selectableVehicles.forEach { candidate ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Column {
+                                                Text(
+                                                    candidate.model,
+                                                    style = MaterialTheme.typography.bodyLarge,
+                                                    fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                                )
+                                                Text(
+                                                    candidate.brand,
+                                                    style = MaterialTheme.typography.labelMedium,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                        },
+                                        onClick = {
+                                            vehicleMenuExpanded = false
+                                            onSelectVehicle(candidate.id)
+                                        }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
 
+                // Reserve real layout space below the 1600x1100 artwork stage. The panel is then
+                // bottom-aligned across this total height, overlapping only 28dp of the artwork.
+                if (vehicle != null) {
+                    Spacer(modifier = Modifier.height(52.dp))
+                }
+            }
+
+            if (vehicle != null) {
                 HeroDynamicStatePanel(
                     currentSoc = currentSoc,
                     currentMileageKm = currentMileageKm,
                     latestTrip = latestTrip,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(start = 12.dp, end = 12.dp, bottom = 10.dp)
+                        .padding(horizontal = 12.dp)
                 )
             }
         }
@@ -289,25 +301,28 @@ private fun HeroDynamicStatePanel(
         animationSpec = tween(durationMillis = 650),
         label = "dashboard_hero_soc"
     )
-    val panelShape = RoundedCornerShape(22.dp)
+    val recentDistance = latestTrip
+        ?.distanceMeters
+        ?.takeIf { it.isFinite() && it > 0.0 }
+    val panelShape = RoundedCornerShape(20.dp)
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .height(92.dp)
+            .height(80.dp)
             .shadow(
-                elevation = 8.dp,
+                elevation = 6.dp,
                 shape = panelShape,
-                ambientColor = Color.Black.copy(alpha = 0.24f),
-                spotColor = Color.Black.copy(alpha = 0.30f)
+                ambientColor = Color.Black.copy(alpha = 0.20f),
+                spotColor = Color.Black.copy(alpha = 0.26f)
             )
             .clip(panelShape)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.055f),
-                        Color(0x9413211C),
-                        Color(0xB80A1512)
+                        Color.White.copy(alpha = 0.045f),
+                        Color(0x9013211C),
+                        Color(0xB0091411)
                     )
                 )
             )
@@ -315,9 +330,9 @@ private fun HeroDynamicStatePanel(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.18f),
-                        Color.White.copy(alpha = 0.055f),
-                        EVDesignTokens.Energy.green.copy(alpha = 0.10f)
+                        Color.White.copy(alpha = 0.15f),
+                        Color.White.copy(alpha = 0.05f),
+                        EVDesignTokens.Energy.green.copy(alpha = 0.07f)
                     )
                 ),
                 shape = panelShape
@@ -329,9 +344,9 @@ private fun HeroDynamicStatePanel(
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            Color(0x241D6D49),
+                            Color(0x181D6D49),
                             Color.Transparent,
-                            Color(0x12174634)
+                            Color(0x0C174634)
                         )
                     )
                 )
@@ -339,13 +354,13 @@ private fun HeroDynamicStatePanel(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 14.dp, vertical = 10.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             HeroSocMetric(
                 safeSoc = safeSoc,
                 animatedProgress = animatedProgress,
-                modifier = Modifier.weight(0.84f)
+                modifier = Modifier.weight(0.82f)
             )
             MetricDivider()
             HeroMetric(
@@ -354,14 +369,17 @@ private fun HeroDynamicStatePanel(
                 value = currentMileageKm?.let(::formatMileage) ?: "--",
                 unit = if (currentMileageKm != null) "km" else null,
                 modifier = Modifier
-                    .weight(1.18f)
+                    .weight(1.16f)
                     .padding(horizontal = 10.dp)
             )
             MetricDivider()
-            HeroRecentTripMetric(
-                trip = latestTrip,
+            HeroMetric(
+                icon = Icons.Default.Route,
+                label = "最近行程",
+                value = recentDistance?.let(::formatTripDistance) ?: "--",
+                unit = recentDistance?.let { if (it >= 1000.0) "km" else "m" },
                 modifier = Modifier
-                    .weight(1.02f)
+                    .weight(0.96f)
                     .padding(start = 10.dp)
             )
         }
@@ -376,14 +394,14 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
                     safeSoc.toString(),
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                     color = EVDesignTokens.Energy.green
                 )
                 Text(
                     "%",
-                    modifier = Modifier.padding(bottom = 2.dp),
-                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(bottom = 1.dp),
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium,
                     color = cockpit.primaryText
                 )
@@ -391,12 +409,12 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
         } else {
             Text(
                 "--",
-                style = MaterialTheme.typography.headlineLarge,
+                style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = cockpit.primaryText
             )
         }
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(4.dp))
         Box(
             Modifier
                 .fillMaxWidth()
@@ -434,7 +452,14 @@ private fun HeroMetric(
                 modifier = Modifier.size(14.dp)
             )
             Spacer(Modifier.size(4.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = cockpit.secondaryText,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
+            )
         }
         Spacer(Modifier.height(4.dp))
         Row(
@@ -465,68 +490,11 @@ private fun HeroMetric(
 }
 
 @Composable
-private fun HeroRecentTripMetric(trip: TripSessionEntity?, modifier: Modifier = Modifier) {
-    val cockpit = LocalCockpitColors.current
-    val distance = trip
-        ?.distanceMeters
-        ?.takeIf { it.isFinite() && it > 0.0 }
-    val consumption = trip
-        ?.averageConsumptionKwhPer100Km
-        ?.takeIf { it.isFinite() && it >= 0.0 }
-
-    Column(modifier = modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = Icons.Default.Route,
-                contentDescription = null,
-                tint = cockpit.secondaryText,
-                modifier = Modifier.size(14.dp)
-            )
-            Spacer(Modifier.size(4.dp))
-            Text("最近行程", style = MaterialTheme.typography.labelMedium, color = cockpit.secondaryText)
-        }
-        Spacer(Modifier.height(4.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text(
-                distance?.let(::formatTripDistance) ?: "--",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Medium,
-                color = cockpit.primaryText
-            )
-            if (distance != null) {
-                Spacer(Modifier.size(3.dp))
-                Text(
-                    if (distance >= 1000.0) "km" else "m",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = cockpit.primaryText.copy(alpha = 0.86f)
-                )
-            }
-        }
-        if (consumption != null) {
-            Spacer(Modifier.height(2.dp))
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    String.format(Locale.US, "%.1f", consumption),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = EVDesignTokens.Energy.green
-                )
-                Spacer(Modifier.size(3.dp))
-                Text(
-                    "kWh/100km",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = cockpit.secondaryText
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun MetricDivider() {
     Box(
         Modifier
-            .size(width = 1.dp, height = 52.dp)
-            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .22f))
+            .size(width = 1.dp, height = 44.dp)
+            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
     )
 }
 
