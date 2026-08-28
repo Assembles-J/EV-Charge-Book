@@ -268,8 +268,16 @@ fun MainApp(
                         NavigationBarItem(
                             selected = tab == index,
                             onClick = { tab = index },
-                            icon = { Icon(icons[index], title) },
-                            label = { Text(title) },
+                            icon = {
+                                Icon(
+                                    imageVector = icons[index],
+                                    contentDescription = title,
+                                    modifier = Modifier
+                                        .size(26.dp)
+                                        .padding(3.dp)
+                                )
+                            },
+                            label = { Text(title, style = MaterialTheme.typography.labelMedium) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = MaterialTheme.colorScheme.primary,
                                 selectedTextColor = MaterialTheme.colorScheme.primary,
