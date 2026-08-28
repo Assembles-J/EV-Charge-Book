@@ -2,7 +2,6 @@ package com.evchargebook.domain
 
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.TripSessionEntity
-import com.evchargebook.data.entity.TripStatus
 
 data class ChargingTripCoverageInterval(
     val previousRecordId: Long,
@@ -29,12 +28,7 @@ object ChargingTripCoverage {
         val orderedRecords = records
             .filter { it.odometerKm != null }
             .sortedBy { it.chargeTimeEpochMillis }
-        val completedTrips = trips.filter {
-            it.status == TripStatus.COMPLETED &&
-                it.endedAtEpochMillis != null &&
-                it.distanceMeters.isFinite() &&
-                it.distanceMeters >= 0.0
-        }
+        val completedTrips = trips.filter(TripValidityRules::isEligibleForAnalytics)
 
         val intervals = orderedRecords.zipWithNext().mapNotNull { (previous, current) ->
             val previousOdometer = previous.odometerKm ?: return@mapNotNull null
