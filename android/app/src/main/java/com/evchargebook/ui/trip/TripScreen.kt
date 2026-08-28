@@ -22,7 +22,6 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.WarningAmber
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -31,14 +30,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -56,7 +51,7 @@ import java.util.Locale
  * Trip router + active v0.6 cockpit.
  *
  * The no-active state is owned by TripReadyScreen. Selected/completed detail is intentionally
- * isolated in TripDetailScreen.kt so #149-#151 can evolve it without destabilizing live tracking.
+ * isolated in TripDetailScreen.kt so detail/map/diagnostics can evolve without destabilizing live tracking.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +84,6 @@ fun TripScreen(
         return
     }
 
-    var confirmStop by remember(activeTrip.id) { mutableStateOf(false) }
     val activeVehicle = vehicles.firstOrNull { it.id == activeTrip.vehicleId } ?: vehicle
     val interrupted = activeTrip.status == TripStatus.INTERRUPTED
     val telemetry = remember(selectedTripPoints) { summarizeActiveTripTelemetry(selectedTripPoints) }
@@ -227,12 +221,12 @@ fun TripScreen(
                 TripSlideAction(
                     label = if (interrupted) "滑动结束已中断行程" else "滑动结束行程",
                     enabled = true,
-                    onConfirmed = { confirmStop = true },
+                    onConfirmed = onStop,
                     icon = Icons.Default.Stop,
                     releaseLabel = "松开结束"
                 )
                 Text(
-                    "结束前仍会保留一次确认，避免驾驶中误操作。",
+                    "滑动后确认结束状态；取消时行程继续记录。",
                     modifier = Modifier.padding(top = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -241,22 +235,6 @@ fun TripScreen(
 
             item { Spacer(Modifier.size(MaterialTheme.spacing.md)) }
         }
-    }
-
-    if (confirmStop) {
-        AlertDialog(
-            onDismissRequest = { confirmStop = false },
-            title = { Text("结束当前行程？") },
-            text = { Text("结束后会停止持续定位并保存当前已经记录的真实行程数据。") },
-            confirmButton = {
-                TextButton(onClick = { confirmStop = false; onStop() }) {
-                    Text("结束行程", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmStop = false }) { Text("继续记录") }
-            }
-        )
     }
 }
 
