@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.8.1
+版本: v2.8.2
 更新时间: 2026-08-29
 
 ## 0. 路线原则
@@ -178,7 +178,9 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 - [x] READY / active / completion density and interaction corrections（PR #170 / #172 / #174）
 - [x] completed Trip detail 分为 `概览` / `轨迹` / `数据`（#178 / PR #179，Android CI run `33198331727` Green）
 - [x] completed route endpoint red-flag visual language further unified by PR #184
-- [x] Trip v0.6 authority docs synchronized through PR #180
+- [x] completion narrow-width/fontScale/IME hardening merged by #187 / PR #189（Android CI run `33236915039` Green）
+- [x] Trip-home latest-summary narrow-width/fontScale hardening + completion helper copy alignment merged by #194 / PR #195 as `8a895bc`（Android Build run `33240198841` Green）
+- [x] Trip v0.6 authority docs synchronized through PR #191; post-#195 authority synchronization is part of the current documentation closeout
 
 ### VehicleState / SOC / mileage
 
@@ -202,7 +204,7 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 - [x] successful geocode process-local bounded cache
 - [x] failed / blank geocode 不缓存，允许真实 retry（#129）
 
-真机权限 / Geocoder / restore 验收仍由 #14 保留。
+#14 已收窄为 Location / Geocoder / backup restore 真机验收；交互地图增强由 #192 独立跟踪，不再作为 #14 或 #145 blocker。
 
 ### Lock-screen / background notification
 
@@ -229,17 +231,21 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 
 - #145 Trip v0.6 parent physical matrix
 - #168 Trip device-fidelity correction acceptance
+- #146 Trip home/history + latest-summary narrow-width acceptance
+- #173/#187 completion normal width / 320–360dp / fontScale / IME acceptance
 - #178 completed-detail tabs / 320–360dp / fontScale 1.3 / Dark-Light comparison
 - #70 五个一级页面 + Light mode
 - #94 Dashboard Hero
 - #95 recent Trip card
 - #42 accessibility / large font / small screen / active-Trip state safety
 - #22 top spacing / density
-- #14 Location / Geocoder
+- #14 Location / Geocoder / backup restore
 - #77 post-#184 lock-screen / delayed callback / stationary hold
 - #124 Trip SOC -> VehicleState
 - #26 lock-screen / repair notifications
 - #102 release APK updater
+
+#192 interactive map context and #193 truthful trajectory playback are post-v0.6 enhancements. They do not block this physical closeout.
 
 ---
 
@@ -270,24 +276,34 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 
 ```text
 v0.5 physical acceptance bundle
-  -> #145 / #168 / #178 Trip v0.6 design-device comparison
+  -> #145 / #168 / #146 / #173 / #187 / #178 Trip v0.6 design-device comparison
   -> #77 post-#184 lock-screen / delayed callback / stationary reliability revalidation
   -> #124 Trip SOC -> VehicleState
   -> #26 lock-screen + repair notification
-  -> #14 Location / Geocoder
+  -> #14 Location / Geocoder / backup restore
   -> #70 / #94 / #95 / #42 / #22 remaining UI-device checks
   -> #102 old-production -> new-production updater flow
   -> only fix concrete device regressions
   -> resume #27 minimal Local First sync protocol/runtime
   -> advance #20 catalog pipeline when source/coverage work is justified
+  -> evaluate #192 / #193 only after current Trip closeout and only when map/playback product value is justified
   -> P3 OBD-II optional PoC only when product value justifies it
 ```
 
-MapLibre 继续保持低优先级；当前已有真实 WGS84 route preview，不为了“看起来完整”提前引入地图 SDK。
+当前已有真实 WGS84 no-basemap route preview。#192 可探索交互地图/道路上下文，#193 可探索真实轨迹回放，但两者都保持 post-v0.6、非 blocker；不为了“看起来完整”提前绑定地图 SDK 或回放架构。
 
 ---
 
 ## 变更记录
+
+### v2.8.2
+
+- recorded #187 / PR #189 completion narrow-width/fontScale/IME hardening and Android CI `33236915039` Green
+- recorded #194 / PR #195 Trip-home latest-summary responsive layout and completion helper-copy alignment; Android Build `33240198841` Green; merged as `8a895bc`
+- moved #14 to Location / Geocoder / backup-restore physical acceptance only; map rendering ownership moved to #192
+- classified #192 interactive map context and #193 trajectory playback as post-v0.6, non-blocking enhancements
+- updated Trip physical closeout owners to include #146 and #173/#187 explicitly
+- synchronized direct Trip UI authority to the post-#195 code baseline
 
 ### v2.8.1
 
