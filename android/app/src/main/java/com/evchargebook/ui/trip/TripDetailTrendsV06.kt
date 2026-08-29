@@ -35,38 +35,45 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
         }
     }
 
-    Surface(
+    Column(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "横轴为行程时间，纵轴为可信样本值；超过 2 分钟的缺口保持断开。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        TripPlaybackRouteCardV06(points = points)
 
-            BoxWithConstraints(Modifier.fillMaxWidth()) {
-                val compact = maxWidth < 360.dp
-                if (compact) {
-                    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                        DetailTrendCardV06("速度", "km/h", speedSamples, Modifier.fillMaxWidth(), "暂无可信速度样本")
-                        DetailTrendCardV06("海拔", "m", altitudeSamples, Modifier.fillMaxWidth(), "暂无可信海拔样本")
-                    }
-                } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-                    ) {
-                        DetailTrendCardV06("速度", "km/h", speedSamples, Modifier.weight(1f), "暂无可信速度样本")
-                        DetailTrendCardV06("海拔", "m", altitudeSamples, Modifier.weight(1f), "暂无可信海拔样本")
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = MaterialTheme.shapes.large,
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "横轴为行程时间，纵轴为可信样本值；超过 2 分钟的缺口保持断开。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                BoxWithConstraints(Modifier.fillMaxWidth()) {
+                    val compact = maxWidth < 360.dp
+                    if (compact) {
+                        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+                            DetailTrendCardV06("速度", "km/h", speedSamples, Modifier.fillMaxWidth(), "暂无可信速度样本")
+                            DetailTrendCardV06("海拔", "m", altitudeSamples, Modifier.fillMaxWidth(), "暂无可信海拔样本")
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+                        ) {
+                            DetailTrendCardV06("速度", "km/h", speedSamples, Modifier.weight(1f), "暂无可信速度样本")
+                            DetailTrendCardV06("海拔", "m", altitudeSamples, Modifier.weight(1f), "暂无可信海拔样本")
+                        }
                     }
                 }
             }
