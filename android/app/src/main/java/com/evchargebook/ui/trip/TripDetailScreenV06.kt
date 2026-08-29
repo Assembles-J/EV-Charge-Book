@@ -106,14 +106,6 @@ internal fun TripDetailScreenV06(
         null
     }
     val displayAverageSpeed = trip.averageSpeedMps ?: wholeTripAverageMps
-    val hasVehicleState = listOf(
-        trip.startSoc,
-        trip.endSoc,
-        trip.startMileageKm,
-        trip.endMileageKm,
-        trip.consumedEnergyKwh,
-        trip.averageConsumptionKwhPer100Km
-    ).any { it != null }
     val hasAltitude = elevationSummary != null || listOf(
         trip.startAltitudeMeters,
         trip.endAltitudeMeters,
@@ -171,8 +163,7 @@ internal fun TripDetailScreenV06(
                         CompletedTripSummaryCardV06(
                             trip = trip,
                             vehicle = vehicle,
-                            averageSpeedMps = displayAverageSpeed,
-                            hasVehicleState = hasVehicleState
+                            averageSpeedMps = displayAverageSpeed
                         )
                     }
                     item {
@@ -296,8 +287,7 @@ private fun DetailUnavailableCardV06(title: String, detail: String) {
 private fun CompletedTripSummaryCardV06(
     trip: TripSessionEntity,
     vehicle: VehicleEntity?,
-    averageSpeedMps: Double?,
-    hasVehicleState: Boolean
+    averageSpeedMps: Double?
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -352,14 +342,6 @@ private fun CompletedTripSummaryCardV06(
                     SummaryMetricV06("移动时间", trip.movingSeconds?.let(::formatV06Duration) ?: "--")
                 )
             )
-
-            if (hasVehicleState) {
-                Text(
-                    "SOC / 能耗沿用现有估算口径，非 BMS 实测；缺失、SOC 回升或无法可信计算时保持 --。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -588,11 +570,14 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEnd
 
                 if (finalEndpoint) {
                     val poleHeight = 13.dp.toPx()
+                    val flagWidth = 9.dp.toPx()
+                    val flagHeight = 6.dp.toPx()
                     drawLine(endColor, end, Offset(end.x, end.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
                     val flag = Path().apply {
                         moveTo(end.x, end.y - poleHeight)
-                        lineTo(end.x + 9.dp.toPx(), end.y - poleHeight + 3.dp.toPx())
-                        lineTo(end.x, end.y - poleHeight + 6.dp.toPx())
+                        lineTo(end.x + flagWidth, end.y - poleHeight)
+                        lineTo(end.x + flagWidth, end.y - poleHeight + flagHeight)
+                        lineTo(end.x, end.y - poleHeight + flagHeight)
                         close()
                     }
                     drawPath(flag, endColor)

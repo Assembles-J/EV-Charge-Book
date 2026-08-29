@@ -48,8 +48,8 @@ class TripContinuityRulesTest {
     }
 
     @Test
-    fun `stale location age is rejected`() {
-        assertFalse(TripContinuityRules.isFreshLocation(15_001))
-        assertTrue(TripContinuityRules.isFreshLocation(15_000))
+    fun `lock screen delayed callback remains eligible within delivery grace`() {
+        assertTrue(TripContinuityRules.isFreshLocation(10 * 60_000L))
+        assertFalse(TripContinuityRules.isFreshLocation(10 * 60_000L + 1L))
     }
 }
