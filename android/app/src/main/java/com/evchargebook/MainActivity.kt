@@ -33,6 +33,7 @@ import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.export.ChargingCsvExporter
 import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.domain.TripNotificationPermissionPolicy
+import com.evchargebook.domain.trip.TripEndSocEstimator
 import com.evchargebook.ui.dashboard.DashboardScreen
 import com.evchargebook.ui.records.AddRecordScreen
 import com.evchargebook.ui.records.RecordEditScreen
@@ -40,7 +41,7 @@ import com.evchargebook.ui.records.RecordsScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
 import com.evchargebook.ui.theme.LocalAppThemeController
-import com.evchargebook.ui.trip.TripCompletionDialogV06
+import com.evchargebook.ui.trip.TripCompletionScreenV07
 import com.evchargebook.ui.trip.TripReadyScreen
 import com.evchargebook.ui.trip.TripScreen
 import com.evchargebook.ui.vehicle.BluetoothPromptScreen
@@ -127,8 +128,8 @@ fun MainApp(
     var pendingResumeTripId by remember { mutableStateOf<Long?>(null) }
     var promptedConnectedAddress by remember { mutableStateOf<String?>(null) }
     var showTripCompletion by remember { mutableStateOf(false) }
-    var tripEndSocText by remember { mutableStateOf("") }
-    var tripEndMileageText by remember { mutableStateOf("") }
+    var tripStartSoc by remember { mutableIntStateOf(50) }
+    var tripEndSoc by remember { mutableIntStateOf(50) }
     var tripCompletionError by remember { mutableStateOf<String?>(null) }
 
     fun showBluetoothTripPrompt(message: String) {
@@ -280,16 +281,23 @@ fun MainApp(
 
     fun requestTripCompletion() {
         val active = state.activeTrip ?: return
-        tripEndSocText = ""
-        tripEndMileageText = active.startMileageKm
-            ?.plus(active.distanceMeters / 1000.0)
-            ?.let { String.format(Locale.US, "%.1f", it) }
-            .orEmpty()
-        tripCompletionError = null
+        val tripVehicle = state.vehicles.firstOrNull { it.id == active.vehicleId } ?: state.vehicle
+        val startSoc = active.startSoc ?: state.currentSoc ?: 50
+        tripStartSoc = startSoc
+        tripEndSoc = TripEndSocEstimator.estimate(
+            startSoc = startSoc,
+            distanceMeters = active.distanceMeters,
+            batteryCapacityKwh = tripVehicle?.batteryCapacityKwh
+        ) ?: startSoc
+        tripCompletionError = if (active.startSoc == null && state.currentSoc == null) {
+            "未读取到开始 SOC，当前为默认值，请滚动选择实际电量"
+        } else {
+            null
+        }
         showTripCompletion = true
     }
 
-    val hasOverlayPage = editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || editingRecord != null || state.selectedTripId != null
+    val hasOverlayPage = showTripCompletion || editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || editingRecord != null || state.selectedTripId != null
     val themeController = LocalAppThemeController.current
     SideEffect {
         (context as? Activity)?.window?.let { window ->
@@ -302,6 +310,7 @@ fun MainApp(
     }
     BackHandler(enabled = hasOverlayPage) {
         when {
+            showTripCompletion -> showTripCompletion = false
             state.selectedTripId != null -> viewModel.closeTripDetail()
             editingRecord != null -> editingRecord = null
             addRecord -> addRecord = false
@@ -309,6 +318,37 @@ fun MainApp(
             selectCatalogVehicle -> selectCatalogVehicle = false
             addVehicle -> { addVehicle = false; catalogSelection = null }
             editVehicle -> editVehicle = false
+        }
+    }
+
+    if (showTripCompletion) {
+        val active = state.activeTrip
+        if (active != null) {
+            val tripVehicle = state.vehicles.firstOrNull { it.id == active.vehicleId } ?: state.vehicle
+            TripCompletionScreenV07(
+                activeTrip = active,
+                points = state.selectedTripPoints,
+                batteryCapacityKwh = tripVehicle?.batteryCapacityKwh,
+                startSoc = tripStartSoc,
+                endSoc = tripEndSoc,
+                onStartSocChange = {
+                    tripStartSoc = it.coerceIn(0, 100)
+                    tripCompletionError = null
+                },
+                onEndSocChange = {
+                    tripEndSoc = it.coerceIn(0, 100)
+                    tripCompletionError = null
+                },
+                errorText = tripCompletionError,
+                onBack = { showTripCompletion = false },
+                onSaveAndFinish = {
+                    showTripCompletion = false
+                    viewModel.stopTrip(tripStartSoc, tripEndSoc, null)
+                }
+            )
+            return
+        } else {
+            LaunchedEffect(showTripCompletion) { showTripCompletion = false }
         }
     }
 
@@ -507,44 +547,5 @@ fun MainApp(
             confirmButton = { TextButton(onClick = { pendingRestoreContent = null; viewModel.restoreBackup(content) }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
         )
-    }
-
-    if (showTripCompletion) {
-        val active = state.activeTrip
-        if (active == null) {
-            showTripCompletion = false
-        } else {
-            val tripVehicle = state.vehicles.firstOrNull { it.id == active.vehicleId } ?: state.vehicle
-            TripCompletionDialogV06(
-                activeTrip = active,
-                batteryCapacityKwh = tripVehicle?.batteryCapacityKwh,
-                endSocText = tripEndSocText,
-                onEndSocChange = {
-                    tripEndSocText = it
-                    tripCompletionError = null
-                },
-                endMileageText = tripEndMileageText,
-                onEndMileageChange = {
-                    tripEndMileageText = it
-                    tripCompletionError = null
-                },
-                errorText = tripCompletionError,
-                onContinue = { showTripCompletion = false },
-                onSaveAndStop = {
-                    val parsedSoc = tripEndSocText.toIntOrNull()
-                    val parsedMileage = tripEndMileageText.toDoubleOrNull()
-                    tripCompletionError = when {
-                        parsedSoc == null || parsedSoc !in 0..100 -> "请输入 0~100 的结束 SOC"
-                        tripEndMileageText.isNotBlank() && (parsedMileage == null || parsedMileage < 0.0) -> "请输入有效的结束总里程"
-                        active.startMileageKm != null && parsedMileage != null && parsedMileage < active.startMileageKm -> "结束里程不能低于开始里程"
-                        else -> null
-                    }
-                    if (tripCompletionError == null) {
-                        showTripCompletion = false
-                        viewModel.stopTrip(parsedSoc!!, parsedMileage)
-                    }
-                }
-            )
-        }
     }
 }
