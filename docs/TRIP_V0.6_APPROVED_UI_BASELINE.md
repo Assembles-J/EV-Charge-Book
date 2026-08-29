@@ -1,6 +1,6 @@
 # EV Charge Book Trip v0.6 Approved UI Baseline
 
-Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison, completed-detail information-architecture correction, post-lock-screen endpoint fidelity cleanup, and narrow-width/IME completion hardening.
+Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison, completed-detail information-architecture correction, post-lock-screen endpoint fidelity cleanup, completion narrow-width/IME hardening, and Trip-home narrow-width hardening.
 
 Owning issue: #145
 
@@ -19,8 +19,10 @@ Current Trip UI/runtime baseline in `main` includes:
 - PR #185 / `5e27203`: post-#184 reliability/Roadmap documentation synchronization
 - PR #186 / `3433492`: Trip v0.6 UI authority synchronized after #184
 - PR #189 / `536fc80`: completion dialog narrow-width/fontScale/IME hardening
+- PR #191 / `8d2d828`: Trip UI authority synchronized after #189
+- PR #195 / `8a895bc`: Trip-home latest-summary narrow-width/fontScale hardening + completion helper copy aligned with the single completion-form flow
 
-Android CI run `33229162800` was Green for PR #184. Android CI run `33236915039` was Green for PR #189.
+Android CI run `33229162800` was Green for PR #184. Android CI run `33236915039` was Green for PR #189. Android Build run `33240198841` was Green for PR #195, including tests and Debug APK upload.
 
 The runtime reliability change in PR #184 is accepted only at code/CI level. Real-device lock-screen/background revalidation remains owned by #77 and must not be inferred from UI completion.
 
@@ -61,7 +63,7 @@ Completed Trips may show the recorded end address when available. Coordinate fal
 
 ## Six implementation surfaces
 
-### 1. Trip home / history — #146, #175
+### 1. Trip home / history — #146, #175, #194
 
 Goal: make the Trip landing page compact and immediately useful.
 
@@ -84,6 +86,11 @@ Rules:
 - avoid decorative status cards
 - do not expose raw GPS diagnostics in the list
 - use only persisted completed-Trip facts in the latest summary
+- when width is <360dp or fontScale >=1.3, the latest-summary metric group keeps distance + duration on the first row and moves energy to its own row
+- normal-width latest summary keeps the established three-column layout
+- do not shrink typography merely to keep three metrics on one row
+
+PR #195 implements the latest-summary responsive rule above without changing Trip persistence or calculations.
 
 ### 2. READY / preparation — #147, #171, #175
 
@@ -140,8 +147,12 @@ Interaction:
 
 - restrained slide-to-end control
 - the slide opens the final completion surface directly; do not stack a redundant generic confirmation alert in between
-- preserve existing interrupted / pause / resume semantics
+- helper copy must describe that direct completion-form flow and must not imply that a second generic confirmation appears after the slide
+- `继续行驶` keeps the Trip active; only valid save/finish ends it
+- preserve existing interrupted / resume semantics
 - no selected-destination implication while the Trip is active
+
+PR #195 aligns the active helper copy with this existing interaction behavior; it does not alter stop/validation semantics.
 
 ### 4. Completed Trip overview — #149
 
@@ -314,6 +325,16 @@ Post-PR #184 reliability boundary:
 
 The post-#184 physical drive remains tracked by #77; CI Green does not close that acceptance.
 
+## Post-v0.6 enhancements — not blockers
+
+The following are intentionally outside current v0.6 closeout:
+
+- #152 — destination selection / pre-trip endpoint planning
+- #192 — interactive map context, pan/zoom and optional road-name/basemap provider work
+- #193 — truthful trajectory playback
+
+They must not delay #145 closure or #77 reliability revalidation. Current v0.6 remains valid with the truthful no-basemap route renderer.
+
 ## Implementation history
 
 Original slices:
@@ -324,7 +345,7 @@ Original slices:
 4. #149/#150 / PR #158 — completed overview + route markers
 5. #151 / PR #161 — diagnostics + trends
 
-Physical-device corrections:
+Physical-device / static-review corrections:
 
 - #168 / PR #170 — rounded slider progress, labeled trends, history density, inset ownership, recording endpoint semantics
 - #171 / PR #172 — compact READY information group + active metric de-duplication
@@ -335,8 +356,8 @@ Physical-device corrections:
 - PR #185 — synchronize post-#184 reliability boundary and Roadmap; merged as `5e27203`
 - PR #186 — synchronize post-#184 Trip UI authority; merged as `3433492`
 - #187 / PR #189 — narrow-width/fontScale/IME completion hardening; Android CI `33236915039` Green; merged as `536fc80`
-
-#152 remains the future destination-selection capability and is not part of v0.6.
+- PR #191 — synchronize Trip authority after #189; merged as `8d2d828`
+- #194 / PR #195 — Trip-home latest-summary responsive layout + active completion helper copy alignment; Android Build `33240198841` Green; merged as `8a895bc`
 
 ## Acceptance gate
 
@@ -351,9 +372,9 @@ Every implementation PR requires:
 
 Final closure of #145 requires one physical-device pass across:
 
-1. Trip home/history
+1. Trip home/history, including latest-summary compact layout on 320–360dp/fontScale 1.3+
 2. READY preparation
-3. active cockpit
+3. active cockpit, including direct completion helper wording
 4. completion form at normal width and 320–360dp/fontScale 1.3+, including keyboard/IME action reachability
 5. completed overview / `概览`
 6. route / `轨迹`, including unified compact four-corner completed red flag
