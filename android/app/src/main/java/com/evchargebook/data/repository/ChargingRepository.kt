@@ -139,6 +139,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                     vehicleId = selectedVehicle.id,
                     startedAtEpochMillis = startedAtEpochMillis,
                     startSoc = state?.currentSoc,
+                    startSocSnapshot = state?.currentSoc,
                     startMileageKm = state?.currentMileage,
                     status = TripStatus.RECORDING
                 )
@@ -173,10 +174,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
 
     suspend fun stopActiveTrip(
+        startSoc: Int,
         endSoc: Int,
         endMileageKm: Double? = null,
         endedAtEpochMillis: Long = System.currentTimeMillis()
     ) {
+        require(startSoc in 0..100) { "开始 SOC 必须在 0 到 100 之间" }
         require(endSoc in 0..100) { "结束 SOC 必须在 0 到 100 之间" }
         database.withTransaction {
             val active = tripDao.getActive() ?: error("当前没有进行中的行程")
@@ -188,9 +191,11 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == active.vehicleId }
                 ?: error("行程车辆不可用")
             val derivedEndMileage = endMileageKm ?: active.startMileageKm?.plus(active.distanceMeters / 1000.0)
+            val originalStartSoc = active.startSocSnapshot ?: active.startSoc
+            val startSocOverride = startSoc.takeIf { originalStartSoc == null || it != originalStartSoc }
             val estimate = TripEnergyCalculator.estimate(
                 batteryCapacityKwh = selectedVehicle.batteryCapacityKwh,
-                startSoc = active.startSoc,
+                startSoc = startSoc,
                 endSoc = endSoc,
                 distanceMeters = active.distanceMeters
             )
@@ -198,6 +203,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                 active.copy(
                     endedAtEpochMillis = endedAtEpochMillis,
                     elapsedSeconds = TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis),
+                    startSoc = startSoc,
+                    startSocSnapshot = originalStartSoc,
+                    startSocOverride = startSocOverride,
                     endSoc = endSoc,
                     endMileageKm = derivedEndMileage,
                     consumedEnergyKwh = estimate.consumedEnergyKwh,
