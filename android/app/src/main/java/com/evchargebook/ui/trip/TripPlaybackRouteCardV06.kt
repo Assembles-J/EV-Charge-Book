@@ -52,8 +52,6 @@ import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import kotlinx.coroutines.delay
 import java.util.Locale
-import kotlin.math.cos
-import kotlin.math.sin
 
 /**
  * Completed-Trip playback surface for the current no-basemap renderer.
@@ -67,8 +65,11 @@ internal fun TripPlaybackRouteCardV06(
     modifier: Modifier = Modifier
 ) {
     val accent = EVDesignTokens.Energy.green
-    val samples = remember(points) {
-        points.map {
+    val playbackPoints = remember(points) {
+        points.filter { it.latitude.isFinite() && it.longitude.isFinite() }
+    }
+    val samples = remember(playbackPoints) {
+        playbackPoints.map {
             TripPlaybackSample(
                 capturedAtEpochMillis = it.capturedAtEpochMillis,
                 latitude = it.latitude,
@@ -77,9 +78,9 @@ internal fun TripPlaybackRouteCardV06(
             )
         }
     }
-    val geometry = remember(points) {
+    val geometry = remember(playbackPoints) {
         TripRouteGeometryBuilder.build(
-            points.map {
+            playbackPoints.map {
                 TripGeoPoint(
                     latitude = it.latitude,
                     longitude = it.longitude,
@@ -92,10 +93,10 @@ internal fun TripPlaybackRouteCardV06(
     val totalMillis = remember(samples) { TripPlaybackTimeline.durationMillis(samples) }
     val playable = geometry?.isDrawable == true && totalMillis > 0L && TripPlaybackTimeline.isChronological(samples)
 
-    var playbackMode by remember(points.firstOrNull()?.tripId) { mutableStateOf(false) }
-    var playing by remember(points.firstOrNull()?.tripId) { mutableStateOf(false) }
-    var elapsedMillis by remember(points.firstOrNull()?.tripId) { mutableLongStateOf(0L) }
-    var speed by remember(points.firstOrNull()?.tripId) { mutableFloatStateOf(1f) }
+    var playbackMode by remember(playbackPoints.firstOrNull()?.tripId) { mutableStateOf(false) }
+    var playing by remember(playbackPoints.firstOrNull()?.tripId) { mutableStateOf(false) }
+    var elapsedMillis by remember(playbackPoints.firstOrNull()?.tripId) { mutableLongStateOf(0L) }
+    var speed by remember(playbackPoints.firstOrNull()?.tripId) { mutableFloatStateOf(1f) }
 
     val frame = remember(samples, elapsedMillis) {
         TripPlaybackTimeline.frameAt(samples, elapsedMillis)
@@ -115,9 +116,7 @@ internal fun TripPlaybackRouteCardV06(
                 speedMultiplier = speed,
                 totalMillis = totalMillis
             )
-            if (elapsedMillis >= totalMillis) {
-                playing = false
-            }
+            if (elapsedMillis >= totalMillis) playing = false
         }
     }
 
@@ -135,16 +134,16 @@ internal fun TripPlaybackRouteCardV06(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("轨迹", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text("轨迹回放", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
                         when {
                             !playable -> "当前轨迹不足以进行可信回放"
-                            frame?.isLongGap == true -> "回放暂停于 GPS 缺口"
+                            playbackMode && frame?.isLongGap == true -> "GPS 缺口 · 保持最后真实定位点"
                             playbackMode -> "${formatPlaybackTime(elapsedMillis)} / ${formatPlaybackTime(totalMillis)} · ${formatPlaybackSpeed(speed)}"
-                            else -> "${points.size} 个 GPS 点 · 可按真实时间回放"
+                            else -> "${playbackPoints.size} 个 GPS 点 · 按真实时间推进"
                         },
                         style = MaterialTheme.typography.labelSmall,
-                        color = if (frame?.isLongGap == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (playbackMode && frame?.isLongGap == true) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 TextButton(
@@ -156,28 +155,26 @@ internal fun TripPlaybackRouteCardV06(
                     enabled = playable,
                     modifier = Modifier.heightIn(min = 48.dp)
                 ) {
-                    Text(if (playbackMode) "退出回放" else "回放")
+                    Text(if (playbackMode) "退出" else "回放")
                 }
             }
 
-            geometry?.takeIf { it.isDrawable }?.let { routeGeometry ->
-                PlaybackCanvasV06(
-                    points = points,
-                    frame = if (playbackMode) frame else null,
-                    elapsedMillis = if (playbackMode) elapsedMillis else totalMillis,
-                    totalMillis = totalMillis,
-                    minLatitude = routeGeometry.minLatitude,
-                    maxLatitude = routeGeometry.maxLatitude,
-                    minLongitude = routeGeometry.minLongitude,
-                    maxLongitude = routeGeometry.maxLongitude,
-                    accent = accent
-                )
-            }
-
             if (playbackMode && playable) {
-                val sliderValue = if (totalMillis > 0L) elapsedMillis.toFloat().coerceIn(0f, totalMillis.toFloat()) else 0f
+                geometry?.takeIf { it.isDrawable }?.let { routeGeometry ->
+                    PlaybackCanvasV06(
+                        points = playbackPoints,
+                        frame = frame,
+                        elapsedMillis = elapsedMillis,
+                        minLatitude = routeGeometry.minLatitude,
+                        maxLatitude = routeGeometry.maxLatitude,
+                        minLongitude = routeGeometry.minLongitude,
+                        maxLongitude = routeGeometry.maxLongitude,
+                        accent = accent
+                    )
+                }
+
                 Slider(
-                    value = sliderValue,
+                    value = elapsedMillis.toFloat().coerceIn(0f, totalMillis.toFloat()),
                     onValueChange = {
                         playing = false
                         elapsedMillis = it.toLong().coerceIn(0L, totalMillis)
@@ -268,7 +265,6 @@ private fun PlaybackCanvasV06(
     points: List<TripPointEntity>,
     frame: TripPlaybackFrame?,
     elapsedMillis: Long,
-    totalMillis: Long,
     minLatitude: Double,
     maxLatitude: Double,
     minLongitude: Double,
@@ -281,9 +277,7 @@ private fun PlaybackCanvasV06(
             .fillMaxWidth()
             .height(170.dp)
             .semantics {
-                contentDescription = if (frame == null) {
-                    "已完成真实行程轨迹；绿色起点和红色终点旗"
-                } else if (frame.isLongGap) {
+                contentDescription = if (frame?.isLongGap == true) {
                     "行程轨迹回放；当前处于 GPS 缺口，车辆位置保持在最后真实定位点"
                 } else {
                     "行程轨迹回放；移动标记沿真实定位时间推进"
@@ -393,7 +387,7 @@ private fun formatPlaybackSpeed(value: Float): String =
     if (value % 1f == 0f) "${value.toInt()}×" else String.format(Locale.US, "%.1f×", value)
 
 private fun formatPlaybackTime(valueMillis: Long): String {
-    val totalSeconds = (valueMillis.coerceAtLeast(0L) / 1_000L)
+    val totalSeconds = valueMillis.coerceAtLeast(0L) / 1_000L
     val hours = totalSeconds / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L
     val seconds = totalSeconds % 60L
