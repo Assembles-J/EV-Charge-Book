@@ -1,6 +1,6 @@
 # EV Charge Book Roadmap
 
-版本: v2.8.0
+版本: v2.8.1
 更新时间: 2026-08-29
 
 ## 0. 路线原则
@@ -37,7 +37,7 @@
 
 ## v0.2 - Vehicle, Location & Trip Foundation
 
-状态: **Core Implemented / Physical Reliability Revalidation**
+状态: **Core Implemented / Post-#184 Physical Reliability Revalidation**
 
 ### Trip / Location 基础
 
@@ -54,9 +54,12 @@
 
 ### GPS continuity / data trust
 
-- [x] callback registration 改为 time-based liveness，不再依赖 8m system displacement gate
+- [x] callback registration 改为 time-based liveness，不再依赖 8m system displacement gate（PR #80）
 - [x] stationary TripPoint 继续由 app-level 15s throttling 控制
-- [x] LONG_GAP 两端不作为可信连续距离
+- [x] 2026-08-29 新锁屏证据后，delayed callback freshness 从 15s 放宽到 10min（PR #184）
+- [x] delayed fix 仍使用原始 `location.time`，倒序 historical point 继续拒绝
+- [x] `LONG_GAP_SECONDS = 120` 未因 callback grace 放宽；真实 capture-time long gap 两端仍不累计可信距离/时长/速度
+- [x] PR #184 Android CI run `33229162800` Green，merged as `bae3a21`
 - [x] long gap 在 route preview 中保持断开，不画假实线
 - [x] GPS health 区分 WAITING / GOOD / DEGRADED / LOST / LONG_GAP
 - [x] coarse/network provider 不直接制造 Trip max-speed peak
@@ -76,12 +79,15 @@
 
 ### Physical reliability remaining
 
-#77 保留为新的 post-RC 真机可靠性验收，不重新打开已经完成的 RC #41：
+2026-08-29 新锁屏真机证据在 PR #80 后仍出现 2 个长缺口，因此完成了聚焦修复 PR #184。#77 现在保留为 **post-#184 真机复验 owner**，不是新的 broad tracking architecture 项目：
 
-- [ ] 另一 App 前台 5–10 分钟时可信距离继续增加
+- [ ] 锁屏/另一 App 前台 5–10 分钟时，连续 capture 的 delayed fixes 不再因 >15s delivery age 被整体丢弃
+- [ ] 原始 capture timestamps 连续时可信距离继续增加
+- [ ] 真实 >=120s capture-time gap 仍产生断点且不补造距离
 - [ ] 2–3 分钟停车/红灯能累计 stopped time，不产生 false LONG_GAP
 - [ ] 真正 callback/provider loss 仍产生 LOST / LONG_GAP
 - [ ] stationary heartbeat 不产生过量 TripPoint
+- [ ] out-of-order delayed historical point 仍被 non-monotonic guard 拒绝
 
 相关：#77、#67、#42、#26。
 
@@ -171,6 +177,7 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 - [x] Trip home/history 与 READY preparation 分离（PR #176）
 - [x] READY / active / completion density and interaction corrections（PR #170 / #172 / #174）
 - [x] completed Trip detail 分为 `概览` / `轨迹` / `数据`（#178 / PR #179，Android CI run `33198331727` Green）
+- [x] completed route endpoint red-flag visual language further unified by PR #184
 - [x] Trip v0.6 authority docs synchronized through PR #180
 
 ### VehicleState / SOC / mileage
@@ -229,7 +236,7 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 - #42 accessibility / large font / small screen / active-Trip state safety
 - #22 top spacing / density
 - #14 Location / Geocoder
-- #77 background callback / stationary hold
+- #77 post-#184 lock-screen / delayed callback / stationary hold
 - #124 Trip SOC -> VehicleState
 - #26 lock-screen / repair notifications
 - #102 release APK updater
@@ -264,7 +271,7 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 ```text
 v0.5 physical acceptance bundle
   -> #145 / #168 / #178 Trip v0.6 design-device comparison
-  -> #77 background / stationary Trip reliability
+  -> #77 post-#184 lock-screen / delayed callback / stationary reliability revalidation
   -> #124 Trip SOC -> VehicleState
   -> #26 lock-screen + repair notification
   -> #14 Location / Geocoder
@@ -281,6 +288,14 @@ MapLibre 继续保持低优先级；当前已有真实 WGS84 route preview，不
 ---
 
 ## 变更记录
+
+### v2.8.1
+
+- recorded 2026-08-29 post-PR #80 physical evidence: a lock-screen Trip still showed 2 long gaps
+- recorded focused PR #184: delayed callback freshness 15s -> 10min while preserving original capture timestamps, non-monotonic rejection and the unchanged 120s LONG_GAP trust boundary
+- recorded PR #184 Android CI run `33229162800` Green and merge `bae3a21`
+- changed #77 from generic background physical acceptance to explicit post-#184 lock-screen/delayed-callback revalidation
+- recorded the small completed endpoint red-flag visual convergence from PR #184
 
 ### v2.8.0
 
