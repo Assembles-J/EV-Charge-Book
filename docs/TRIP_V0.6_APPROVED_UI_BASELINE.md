@@ -1,6 +1,6 @@
 # EV Charge Book Trip v0.6 Approved UI Baseline
 
-Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison and the completed-detail information-architecture correction.
+Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison, completed-detail information-architecture correction, and post-lock-screen endpoint fidelity cleanup.
 
 Owning issue: #145
 
@@ -9,6 +9,18 @@ Owning issue: #145
 This document is the implementation authority for the Trip v0.6 UI pass. It refines the existing v0.5 Dark First language without changing Trip persistence, GPS truth semantics, or the current Local First product boundary.
 
 The approved direction is **denser, clearer, and more data-led** than the earlier physical-device Trip UI. It should not look like a debug screen, a dashboard of unrelated cards, or an advertising surface.
+
+## Current implementation baseline
+
+Current Trip UI/runtime baseline in `main` includes:
+
+- PR #179 / `88e1e2b`: completed detail split into `概览` / `轨迹` / `数据`
+- PR #184 / `bae3a21`: delayed lock-screen callback handling, completed endpoint route flag changed to the compact four-corner red flag, and redundant long SOC/energy helper copy removed while `估算能耗` remains explicit
+- PR #185 / `5e27203`: post-#184 reliability/Roadmap documentation synchronization
+
+Android CI run `33229162800` was Green for PR #184.
+
+The runtime reliability change in PR #184 is accepted only at code/CI level. Real-device lock-screen/background revalidation remains owned by #77 and must not be inferred from UI completion.
 
 ## Design token authority
 
@@ -138,6 +150,7 @@ Endpoint summary:
 - start + end belong in one card
 - start icon: small primary-green play/start glyph
 - completed end icon: small red flag
+- completed endpoint presentation must use the same compact four-corner red-flag visual language as the route endpoint; do not mix a triangular pennant with the rectangular endpoint treatment
 - no large endpoint rings or halos
 
 Metric hierarchy may include:
@@ -145,11 +158,11 @@ Metric hierarchy may include:
 - distance
 - elapsed duration
 - average speed
-- average consumption
+- estimated average consumption (`估算能耗`)
 - start -> end SOC
 - start -> end mileage
 
-Missing values stay unavailable. Do not infer legacy data.
+Missing values stay unavailable. Do not infer legacy data. Estimated energy/consumption remains a bookkeeping estimate and must never be promoted to BMS truth. The long explanatory helper sentence is intentionally removed; the metric label itself carries the estimate semantics.
 
 ### 5. Route / map — #150, #168
 
@@ -161,7 +174,7 @@ Rules:
 - restrained primary-green route treatment where reliable
 - keep large-gap / continuity semantics from the existing reliability work
 - start marker is compact and green
-- completed end marker is a small red flag only
+- completed end marker is a compact four-corner red flag only
 - recording latest point stays green; interrupted/non-final latest point is not presented as a completed endpoint
 - map controls stay secondary
 - no animated route pulse or neon route glow
@@ -192,7 +205,7 @@ If altitude is unavailable or untrustworthy, omit the metric rather than showing
 
 ## Completed Trip detail information architecture — #178 / PR #179
 
-The approved board treats completed/selected Trip detail as separate reading surfaces rather than one long scroll. This presentation correction is now implemented in `main` by PR #179, merged as `88e1e2b` after Android CI run `33198331727` passed.
+The approved board treats completed/selected Trip detail as separate reading surfaces rather than one long scroll. This presentation correction is implemented in `main` by PR #179, merged as `88e1e2b` after Android CI run `33198331727` passed.
 
 Supported sections:
 
@@ -210,7 +223,7 @@ Rules:
 - unavailable route or altitude uses a compact truthful empty state
 - no unsupported `充电`, `备注`, destination-planning or navigation tabs are added merely because an early mock contained them
 - no fake basemap is introduced
-- completed red-flag, active green `当前点`, LONG_GAP discontinuity and raw-point collapsed-by-default semantics remain unchanged
+- completed four-corner red-flag, active green `当前点`, LONG_GAP discontinuity and raw-point collapsed-by-default semantics remain unchanged
 
 Physical comparison against approved detail-board screens remains required before final UI acceptance.
 
@@ -282,6 +295,16 @@ The redesign must preserve existing domain authority:
 - estimated energy must not be presented as BMS measurement
 - active Trip remains bound to its original vehicleId
 
+Post-PR #184 reliability boundary:
+
+- callback delivery age tolerance is wider so delayed lock-screen/OEM batched real fixes are not automatically discarded solely because delivery exceeded 15 seconds
+- original `location.time` remains the capture timestamp
+- non-monotonic historical points remain rejected
+- `LONG_GAP_SECONDS = 120` remains the hard route/data-trust boundary
+- widening delivery tolerance must never reconnect a real >=120s capture-time gap or fabricate distance/duration/speed
+
+The post-#184 physical drive remains tracked by #77; CI Green does not close that acceptance.
+
 ## Implementation history
 
 Original slices:
@@ -299,6 +322,8 @@ Physical-device corrections:
 - #173 / PR #174 — compact completion flow + removal of redundant intermediate confirmation
 - #175 / PR #176 — separate Trip home/history from READY preparation
 - #178 / PR #179 — split completed Trip detail into `概览` / `轨迹` / `数据` supported surfaces; Android CI Green
+- #77 / PR #184 — delayed lock-screen callback grace plus completed-route four-corner endpoint flag and removal of redundant SOC/energy helper copy; Android CI `33229162800` Green; merged as `bae3a21`
+- PR #185 — synchronize post-#184 reliability boundary and Roadmap; merged as `5e27203`
 
 #152 remains the future destination-selection capability and is not part of v0.6.
 
@@ -320,10 +345,12 @@ Final closure of #145 requires one physical-device pass across:
 3. active cockpit
 4. completion form
 5. completed overview / `概览`
-6. route / `轨迹`
+6. route / `轨迹`, including unified compact four-corner completed red flag
 7. speed + altitude trends
 8. diagnostics / `数据` disclosure
 9. detail-section switching and truthful unavailable states
 10. Dark / Light readability where the shared theme supports both
 
 Also verify 320–360dp width and fontScale 1.3 before declaring UI acceptance complete.
+
+Separately, #77 must pass a post-#184 real-device drive covering lock screen, another app in foreground for 5–10 minutes, 2–3 minutes stationary, resumed driving, real LONG_GAP behavior and stationary write throttling.
