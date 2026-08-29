@@ -1,7 +1,8 @@
 # EV Charge Book 前端设计
 
-版本: v1.4.0
-更新时间: 2026-08-26
+版本: v1.5.0
+更新时间: 2026-08-29
+状态: Authority Document
 
 ## 1. 技术方案
 
@@ -12,274 +13,293 @@ Android Native:
 - ViewModel + StateFlow
 - Room / SQLite
 - Coroutines
+- DataStore
+- Android LocationManager / foreground service
 - Repository Gradle Wrapper
-- DataStore（v0.2 selectedVehicleId）
-- Android Location API / foreground service（v0.2）
-- MapLibre Native adapter（v0.2 地图展示）
 
-当前包名 `com.evchargebook`。继续避免为早期功能引入不必要的 DI 或形式化 Clean Architecture 层级。
+当前包名 `com.evchargebook`。
+
+架构继续保持单体、简单可维护，不为当前规模引入 Hilt/Koin、多 module Clean Architecture、第二套 Trip tracking service 或 WorkManager tracking。
 
 ---
 
-## 2. v0.1 当前数据流
+## 2. 当前主数据流
 
 ```text
-Compose
+Compose UI
  -> MainViewModel
- -> ChargingRepository
+ -> ChargingRepository / domain rules
  -> Room DAO
- -> Flow
+ -> Flow / StateFlow
  -> UI
 ```
 
-Dashboard / Records / Stats 共享同一真实数据口径。
+当前车辆上下文通过统一状态/DataStore 管理；Dashboard / Records / Stats / Trip / Add Record 不各自维护一份 selected vehicle。
 
-v0.1 已完成：
-
-- 车辆读取 / 编辑 / 保存
-- 充电记录新增 / 编辑 / 删除
-- 日期 / 时间选择
-- charger type / remark
-- 删除确认
-- success / error Snackbar
-- empty state
-- Material 3 theme
-- edge-to-edge
-- ChargingRecordRules
-- ChargingStatistics
-- domain rules / statistics unit tests
-
-当前前端阶段不是继续扩功能，而是通过 CI / APK / 真机走查验证完整闭环。
+Trip tracking 的持续定位不放进 Composable/ViewModel 循环，而由 foreground service 负责。
 
 ---
 
-## 3. v0.1 页面状态
+## 3. 当前一级 UI
+
+```text
+Dashboard
+Records
+Stats
+Trip
+Vehicle
+```
+
+Dark First 为默认视觉语言，Light mode 可切换。核心 UI token 由 `EVDesignTokens` / MaterialTheme 统一提供。
+
+页面安全区由 root app/scaffold 统一拥有；嵌套 Trip Scaffold/TopAppBar 不重复申请系统顶部 inset。
+
+---
+
+## 4. Dashboard / Records / Stats
 
 ### Dashboard
 
-- 真实车辆信息
-- 本月费用 / 电量 / 次数 / 平均电价
-- Energy Hero 使用月充电量与车辆电池容量做等效展示
-- 最近充电记录
-- 无记录时 EmptyState
+- dynamic Vehicle Hero
+- current VehicleState SOC / mileage
+- latest valid completed Trip summary
+- recent charging evidence
+- generated Hero artwork slot
 
-Energy Hero 是展示型派生指标，不代表车辆实时 SOC、剩余电量或 SOH。
+Hero 不伪造实时 SOC / remaining range，不在 Compose 里重建复杂极光/倒影。
 
 ### Records
 
-- Room 实时记录列表
-- 新增入口
-- 点击进入编辑
-- 删除前确认
+- compact ledger summary
+- chronological charging timeline
+- row edit
+- explicit delete + confirmation
+- Add/Edit Charge 共用当前真实业务规则
 
-### Record Edit / Add
+### Stats
 
-字段：
+- current month summary
+- previous-month comparison
+- Trip SOC-derived energy estimate
+- monthly trends / mix / places
+- lifetime / interval evidence
 
-- charge time
-- start SOC
-- end SOC
-- energy kWh
-- final paid cost
-- charger type
-- location
-- remark
-
-保存前统一通过 ChargingRecordRules 校验。
-
-### Vehicle
-
-- 读取 Room Vehicle
-- 编辑品牌 / 车型 / 电池容量 / 标称续航
-- 不展示无法从当前数据源获得的实时 SOC / SOH / 实时续航
+UI 不自行重新计算已经由 domain/repository 拥有的业务统计。
 
 ---
 
-## 4. Domain Rules
+## 5. Trip 数据与服务边界
 
-v0.1 已将核心规则从 UI / Repository 内联判断中抽出。
+### 5.1 Room facts
 
-ChargingRecordRules 负责：
+Trip 持久化核心仍是:
 
-- startSoc 0..100
-- endSoc 0..100
-- endSoc >= startSoc
-- energyKwh > 0
-- cost >= 0
+- `TripSession`
+- `TripPoint`
+- diagnostic events / runtime evidence
 
-ChargingStatistics 负责基础聚合：
+原始 GPS facts 与派生统计分离；raw point 不因为派生统计过滤而被静默重写。
 
-- monthCost
-- monthEnergy
-- chargingCount
-- totalCost
-- totalEnergy
-- averagePrice
+### 5.2 `TripTrackingService`
 
-UI 不重复实现这些计算规则。
+当前 foreground service 负责:
 
----
+- start/resume active Trip tracking
+- LocationManager callback registration
+- provider / permission health checks
+- Location callback -> sampling/trust rules
+- TripPoint persistence
+- elapsed / distance / moving / stopped aggregates
+- ongoing notification
+- interrupted state / service diagnostic evidence
 
-## 5. v0.2 模块扩展
+当前 callback baseline:
 
-推荐新增:
+- request interval ~4s
+- `SAMPLE_DISTANCE_METERS = 0f`
+- callback liveness 保持 time-based
+- stationary Room write 仍由 `TripSamplingRules` 约 15s 节流
 
-```text
-com.evchargebook
-├── data
-│   ├── local
-│   │   ├── trip
-│   │   └── catalog
-│   └── repository
-│       ├── VehicleRepository
-│       └── TripRepository
-├── location
-│   ├── LocationProvider
-│   ├── AndroidLocationProvider
-│   └── TripTrackingService
-├── map
-│   ├── MapProvider
-│   └── MapLibreProvider
-└── ui
-    ├── trip
-    └── vehiclecatalog
-```
+不要重新在 LocationManager 层加 8m 之类的大位移门槛，否则会破坏 stationary heartbeat 与 callback health 诊断。
 
-接口以实际替换需求为目的，不创建多层空抽象。
+#77 仍只负责真实 Android/ROM 后台 callback 验收。
 
 ---
 
-## 6. 多车辆 App State
+## 6. Trip UI 组件边界
 
-v0.2 引入统一 `selectedVehicleId`。
+Trip 当前已经从早期单页结构拆分为稳定的 v0.6 状态/阅读面。
 
-```text
-DataStore selectedVehicleId
- -> VehicleRepository
- -> App/ViewModel State
- -> Dashboard / Records / Stats / Add Record / Trip
-```
+### `TripReadyScreen`
 
-页面不各自保存当前车辆。
+拥有 no-active Trip 的两阶段入口:
 
-任何新增充电/行程都必须显式绑定 vehicleId。
+1. Trip home/history
+2. READY preparation
 
----
+进入 Trip 默认显示 history；用户明确点击 `开始行程` 才进入 READY。
 
-## 7. Vehicle Catalog
+READY back 不创建空 Trip。
 
-车型目录与 UserVehicle 分离。
+### `TripScreen`
 
-v0.2 首先采用本地版本化 JSON/Room seed，实现离线搜索，不让 App 依赖在线免费 API 才能添加车辆。
+拥有 active/interrupted cockpit:
 
-流程:
+- distance + trusted latest speed 主指标
+- elapsed / moving average / max recorded speed / start SOC 辅助指标
+- active truthful route/trends
+- interrupted resume
+- slide-to-end
 
-```text
-Catalog Search
- -> Select model
- -> User confirms/overrides values
- -> Save UserVehicle snapshot
-```
+active Trip 始终绑定启动时的 `vehicleId`，之后切换 selected vehicle 不重绑当前 Trip。
 
-必须保留 Custom Vehicle fallback。
+### completion surface
 
----
+slide-to-end 进入唯一 Trip completion form:
 
-## 8. LocationProvider
+- GPS distance + start SOC/mileage evidence
+- end SOC required
+- end mileage optional / validated
+- SOC-derived energy estimate when trustworthy
+- `继续行驶`
+- `保存并结束`
 
-定位核心定义最小接口:
+不要重新加入通用 intermediate `AlertDialog` 作为第二次“是否结束”确认。
 
-- getCurrentLocation()
-- startUpdates(config)
-- stopUpdates()
+### `TripDetailScreenV06`
 
-核心业务使用统一 LocationSample，不让 ViewModel 直接依赖地图 SDK 的 location object。
+完成/选中 Trip detail 当前分为:
 
-建议 LocationSample 包含:
+- `概览`: summary + endpoint card
+- `轨迹`: route + speed/altitude trends
+- `数据`: altitude/reliability + raw-point disclosure
 
-- lat/lng
-- altitude?
-- speed?
-- bearing?
-- accuracy
-- timestamp
+默认 `概览`。section state 是 presentation state，不写回 Trip 数据。
 
-原始数据库坐标统一 WGS84。
+不增加当前产品不支持的 `充电`、`备注`、destination planning 或 fake map tab。
 
 ---
 
-## 9. TripTrackingService
+## 7. Trip route / trend rendering
 
-v0.2 使用用户主动启动的 location foreground service。
+当前 route renderer 直接消费真实 TripPoint 派生 geometry，不要求外部地图 SDK。
 
-职责:
+规则:
 
-- 启动/结束 TripSession
-- 订阅定位更新
-- 过滤明显无效点
-- 批量写入 TripPoint
-- 更新 ongoing notification
-- 处理进程/服务异常结束状态
+- WGS84 原始坐标为事实
+- LONG_GAP segment 断开
+- gap 两端不计可信连续距离
+- trusted speed 可用于 route color
+- untrusted/unknown speed 使用中性语义
+- completed endpoint 使用 red flag
+- active latest point 保持 green current point
+- trend >2min gaps 不插值
+- speed / altitude trend 提供稀疏 X/Y reference
 
-UI 不承担持续采样逻辑。
-
-Android 10+ 声明 `foregroundServiceType="location"`；持续记录过程中必须有通知。
-
-v0.2 不默认申请“永久后台自动位置追踪”来做自动开车识别。
-
----
-
-## 10. Map Adapter
-
-地图只消费已有轨迹数据:
-
-```text
-TripPoint Flow/List
- -> MapProvider
- -> Polyline / Start / End
-```
-
-MapLibre 作为首选开源实现；tile/style provider 单独配置。
-
-地图失败不影响 Trip 数据读取、统计和删除。
-
-高德等中国地图可作为后续 adapter，不能把其 SDK 类型渗透到 Room/Repository。
+MapLibre 仍是未来可选 renderer。当前代码不应假装 MapLibre 已是 Trip 主依赖，也不应为了地图外观提前加入道路吸附。
 
 ---
 
-## 11. Build Baseline
+## 8. Location / address frontend boundary
 
-当前已具备 Gradle Wrapper。CI / Release 使用 `./gradlew`，Android SDK 与 `compileSdk` 保持一致。
+`LocationProvider` 与 `AddressResolver` 分离。
 
-当前验收优先级：
+前端语义:
 
-1. CI Green
-2. Debug APK Artifact
-3. 真机安装和业务走查
-4. assembleRelease
-5. signed production publish
+- coordinates 先作为事实保存
+- reverse geocode 是 optional enhancement
+- Geocoder 失败仍允许保存/继续业务
+- 地址不可用时显示真实 fallback，不编造 place name
+
+Location permission/provider 丢失时 active Trip 进入 `INTERRUPTED`，修复后由用户显式 resume。
 
 ---
 
-## 12. 变更记录
+## 9. Notification / deep link
+
+Trip ongoing notification 当前承担状态可见性:
+
+- elapsed time
+- trusted persisted distance
+- active Trip deep link
+
+repair notification 用于 permission/provider interruption。
+
+notification permission 被拒绝不能成为 Trip tracking 的业务阻塞；notification 也不能绕过 completion form 直接结束 Trip。
+
+---
+
+## 10. Responsive / accessibility baseline
+
+当前 UI code 需要遵守:
+
+- >=48dp interaction target where applicable
+- icon-only action 提供 contentDescription/语义
+- 320-360dp 不崩溃、不裁切关键操作
+- fontScale 1.3 可用
+- 关键状态不能只靠颜色表达
+- Dark/Light 均需实际设备对比
+
+active cockpit 的 metric grid 会在窄屏/大字体下降低列数，而不是缩小字体逃避布局问题。
+
+---
+
+## 11. Build / acceptance baseline
+
+开发顺序:
+
+1. current-head Android test/build
+2. Android CI Green
+3. Debug APK
+4. owning Issue/PR 状态同步
+5. physical function/visual acceptance
+6. Production Release（需要下发 APK 时）
+
+CI Green 不等于 Trip 真机验收。
+
+当前 Trip UI code-side baseline 已完成；physical owners 主要是 #145 / #168 / #178 / #77 / #42 / #22。
+
+---
+
+## 12. Future map / sync boundary
+
+### Map
+
+可选未来方向:
+
+- `MapProvider`
+- MapLibre renderer
+- China map adapter
+
+只有当真实地图体验有明确价值时推进。地图 provider 类型不得渗透到 Room/Trip domain facts。
+
+### Sync
+
+第一批 cloud sync 仍只考虑 Vehicle + ChargingRecord。TripSession / TripPoint 不进入最小 v0.4 cloud slice。
+
+---
+
+## 13. 变更记录
+
+### v1.5.0
+
+- 对齐当前五一级页面与 Dark First v0.5/v0.6 UI
+- 记录真实 `TripTrackingService` time-based callback + app-level stationary throttle baseline
+- 对齐 `TripReadyScreen` / active `TripScreen` / completion / `TripDetailScreenV06` 职责
+- 记录 completed detail `概览 / 轨迹 / 数据` 三 section
+- 移除“MapLibre 已是当前 Trip 实现”的过时表述，恢复 optional renderer 边界
+- 明确 CI 与 physical Trip acceptance 的区别
 
 ### v1.4.0
 
-- 对齐 commit `7204c56` 的完整 Record CRUD 与 UI 重构
+- 对齐早期完整 Record CRUD 与 UI 重构
 - 记录 ChargingRecordRules / ChargingStatistics domain 抽取
 - 增加删除确认、Snackbar、EmptyState、日期时间和充电类型
 - 明确 Energy Hero 不是实时电池状态
-- 前端阶段切换为 CI / APK / 真机验收
 
 ### v1.3.0
 
 - 增加 DataStore 当前车辆上下文
 - 定义车型目录本地 seed 方案
 - 定义 LocationProvider / TripTrackingService
-- 定义 MapLibre 可替换 MapProvider
 - 明确 WGS84、foreground location 和统计口径
-- 更新构建基线为使用已提交 Gradle Wrapper
-
-### v1.2.0
-
-- 对齐 Room CRUD 和真实 Dashboard / Records / Stats
