@@ -1,6 +1,6 @@
 # EV Charge Book Trip v0.6 Approved UI Baseline
 
-Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison, completed-detail information-architecture correction, and post-lock-screen endpoint fidelity cleanup.
+Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison, completed-detail information-architecture correction, post-lock-screen endpoint fidelity cleanup, and narrow-width/IME completion hardening.
 
 Owning issue: #145
 
@@ -17,8 +17,10 @@ Current Trip UI/runtime baseline in `main` includes:
 - PR #179 / `88e1e2b`: completed detail split into `概览` / `轨迹` / `数据`
 - PR #184 / `bae3a21`: delayed lock-screen callback handling, completed endpoint route flag changed to the compact four-corner red flag, and redundant long SOC/energy helper copy removed while `估算能耗` remains explicit
 - PR #185 / `5e27203`: post-#184 reliability/Roadmap documentation synchronization
+- PR #186 / `3433492`: Trip v0.6 UI authority synchronized after #184
+- PR #189 / `536fc80`: completion dialog narrow-width/fontScale/IME hardening
 
-Android CI run `33229162800` was Green for PR #184.
+Android CI run `33229162800` was Green for PR #184. Android CI run `33236915039` was Green for PR #189.
 
 The runtime reliability change in PR #184 is accepted only at code/CI level. Real-device lock-screen/background revalidation remains owned by #77 and must not be inferred from UI completion.
 
@@ -227,7 +229,7 @@ Rules:
 
 Physical comparison against approved detail-board screens remains required before final UI acceptance.
 
-## Completion flow — #173
+## Completion flow — #173 / #187
 
 The final completion form is part of the Trip interaction language even though it is not one of the six browsing surfaces.
 
@@ -246,6 +248,13 @@ Rules:
 - existing start-mileage + GPS-distance prefill may remain, but is editable
 - estimate remains clearly non-BMS
 - dismiss / continue never ends the Trip
+- width <380dp or fontScale >=1.3 switches to the compact evidence layout: GPS distance + start SOC on the first row, start mileage on its own row
+- normal-width layout keeps the established three-fact evidence hierarchy
+- compact mode stacks `继续行驶` and `保存并结束` instead of squeezing the labels side-by-side
+- both actions retain >=48dp height
+- dialog content is vertically scrollable so IME or large text cannot permanently hide actions
+
+PR #189 implements the responsive/IME hardening above without changing completion validation, `TripEnergyCalculator`, persistence or tracking behavior.
 
 ## System inset ownership
 
@@ -324,6 +333,8 @@ Physical-device corrections:
 - #178 / PR #179 — split completed Trip detail into `概览` / `轨迹` / `数据` supported surfaces; Android CI Green
 - #77 / PR #184 — delayed lock-screen callback grace plus completed-route four-corner endpoint flag and removal of redundant SOC/energy helper copy; Android CI `33229162800` Green; merged as `bae3a21`
 - PR #185 — synchronize post-#184 reliability boundary and Roadmap; merged as `5e27203`
+- PR #186 — synchronize post-#184 Trip UI authority; merged as `3433492`
+- #187 / PR #189 — narrow-width/fontScale/IME completion hardening; Android CI `33236915039` Green; merged as `536fc80`
 
 #152 remains the future destination-selection capability and is not part of v0.6.
 
@@ -343,7 +354,7 @@ Final closure of #145 requires one physical-device pass across:
 1. Trip home/history
 2. READY preparation
 3. active cockpit
-4. completion form
+4. completion form at normal width and 320–360dp/fontScale 1.3+, including keyboard/IME action reachability
 5. completed overview / `概览`
 6. route / `轨迹`, including unified compact four-corner completed red flag
 7. speed + altitude trends
@@ -351,6 +362,6 @@ Final closure of #145 requires one physical-device pass across:
 9. detail-section switching and truthful unavailable states
 10. Dark / Light readability where the shared theme supports both
 
-Also verify 320–360dp width and fontScale 1.3 before declaring UI acceptance complete.
+Also verify 320–360dp width and fontScale 1.3 across the rest of Trip before declaring UI acceptance complete.
 
 Separately, #77 must pass a post-#184 real-device drive covering lock screen, another app in foreground for 5–10 minutes, 2–3 minutes stationary, resumed driving, real LONG_GAP behavior and stationary write throttling.
