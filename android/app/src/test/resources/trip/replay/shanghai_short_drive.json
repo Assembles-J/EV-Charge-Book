@@ -1,0 +1,31 @@
+{
+  "name": "shanghai_short_drive",
+  "description": "Short deterministic route for Trip background/replay validation",
+  "points": [
+    {
+      "latitude": 30.9931875,
+      "longitude": 121.483132,
+      "offsetSeconds": 0
+    },
+    {
+      "latitude": 30.99355,
+      "longitude": 121.4841,
+      "offsetSeconds": 4
+    },
+    {
+      "latitude": 30.9942,
+      "longitude": 121.4854,
+      "offsetSeconds": 8
+    },
+    {
+      "latitude": 30.9951,
+      "longitude": 121.4868,
+      "offsetSeconds": 12
+    },
+    {
+      "latitude": 30.9958,
+      "longitude": 121.4882,
+      "offsetSeconds": 16
+    }
+  ]
+}
