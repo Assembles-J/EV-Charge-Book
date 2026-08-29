@@ -1,7 +1,7 @@
 # EV Charge Book Roadmap
 
-版本: v2.7.0
-更新时间: 2026-08-28
+版本: v2.8.0
+更新时间: 2026-08-29
 
 ## 0. 路线原则
 
@@ -167,6 +167,11 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 - [x] Dashboard dynamic Vehicle Hero（#96）
 - [x] Dashboard recent Trip card（#100）
 - [x] release updater UI 对齐 Dashboard dark/green language（#126）
+- [x] Trip v0.6 information-dense baseline and device-fidelity corrections（#145 / #168）
+- [x] Trip home/history 与 READY preparation 分离（PR #176）
+- [x] READY / active / completion density and interaction corrections（PR #170 / #172 / #174）
+- [x] completed Trip detail 分为 `概览` / `轨迹` / `数据`（#178 / PR #179，Android CI run `33198331727` Green）
+- [x] Trip v0.6 authority docs synchronized through PR #180
 
 ### VehicleState / SOC / mileage
 
@@ -215,6 +220,9 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 
 仍需真实设备验收，不由 CI 代替：
 
+- #145 Trip v0.6 parent physical matrix
+- #168 Trip device-fidelity correction acceptance
+- #178 completed-detail tabs / 320–360dp / fontScale 1.3 / Dark-Light comparison
 - #70 五个一级页面 + Light mode
 - #94 Dashboard Hero
 - #95 recent Trip card
@@ -255,11 +263,12 @@ Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
 
 ```text
 v0.5 physical acceptance bundle
+  -> #145 / #168 / #178 Trip v0.6 design-device comparison
   -> #77 background / stationary Trip reliability
   -> #124 Trip SOC -> VehicleState
   -> #26 lock-screen + repair notification
   -> #14 Location / Geocoder
-  -> #70 / #94 / #95 / #42 / #22 UI-device checks
+  -> #70 / #94 / #95 / #42 / #22 remaining UI-device checks
   -> #102 old-production -> new-production updater flow
   -> only fix concrete device regressions
   -> resume #27 minimal Local First sync protocol/runtime
@@ -272,6 +281,14 @@ MapLibre 继续保持低优先级；当前已有真实 WGS84 route preview，不
 ---
 
 ## 变更记录
+
+### v2.8.0
+
+- synchronized Roadmap with the approved Trip v0.6 design authority and current `main`
+- recorded Trip device-fidelity correction series #168 / PR #170/#172/#174/#176
+- recorded completed Trip detail information architecture #178 / PR #179 (`概览` / `轨迹` / `数据`) and Android CI run `33198331727` Green
+- recorded documentation synchronization through PR #180
+- added #145/#168/#178 to the explicit physical acceptance bundle; CI remains insufficient to close them
 
 ### v2.7.0
 
