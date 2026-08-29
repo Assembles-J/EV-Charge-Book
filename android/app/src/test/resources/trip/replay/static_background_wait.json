@@ -1,0 +1,21 @@
+{
+  "name": "static_background_wait",
+  "description": "Keeps a trip session alive while validating service lifecycle without driving",
+  "points": [
+    {
+      "latitude": 30.9931875,
+      "longitude": 121.483132,
+      "offsetSeconds": 0
+    },
+    {
+      "latitude": 30.9931875,
+      "longitude": 121.483132,
+      "offsetSeconds": 60
+    },
+    {
+      "latitude": 30.9931875,
+      "longitude": 121.483132,
+      "offsetSeconds": 120
+    }
+  ]
+}
