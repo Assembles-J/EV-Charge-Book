@@ -1,14 +1,14 @@
 # Trip GPS Reliability & Speed Visualization
 
-版本: v1.2.0
+版本: v1.3.0
 更新时间: 2026-08-29
-状态: Code Baseline Complete / Physical Acceptance Pending
+状态: Code Baseline Complete / Post-#184 Physical Revalidation Pending
 
 ## 1. 文档定位
 
 本文档是 EV Charge Book 行程模块中 **GPS 可信度、轨迹连续性、速度可信度与轨迹可视化** 的实现/验收说明。
 
-当前阶段不再是“等待实现方案”。核心代码已经进入 `main`，剩余主要是 Android 真机上的后台定位、轨迹可读性与无障碍/窄屏验收。
+当前核心代码已经进入 `main`。2026-08-29 的新锁屏真机证据触发了一个聚焦修复 PR #184；该修复已合并，剩余主要是 Android 真机上的 post-#184 后台定位复验、轨迹可读性与无障碍/窄屏验收。
 
 相关 authority：
 
@@ -17,7 +17,7 @@
 - `docs/ROADMAP.md`
 - #145 Trip v0.6 总体验收
 - #168 Trip v0.6 device-fidelity correction
-- #77 后台 callback / stationary hold 真机验收
+- #77 后台 callback / stationary hold / delayed callback 真机验收
 - #67 trajectory / speed-colored route 真机验收
 
 设计原则保持不变：
@@ -27,6 +27,7 @@
 3. Network/coarse provider 可以作为诊断证据，但不能污染可信最高速度或彩色轨迹。
 4. UI 的速度颜色只表达“本车可信 GPS 速度分布”，不代表道路拥堵、限速或交通状态。
 5. 地图 SDK、road snapping、云端轨迹处理都不是当前可靠性成立的前提。
+6. **callback 派发延迟与轨迹连续性是两个不同维度**：派发较晚的真实 fix 可以被接收，但是否累计可信距离/时长仍只由原始 capture timestamp 的 continuity 决定。
 
 ---
 
@@ -82,6 +83,18 @@
 
 上述证据推动了 PR #80、#82、#85 等后续修复。
 
+### 2.3 2026-08-29：PR #80 后仍有锁屏长缺口
+
+新的真实设备行程在锁屏后完成，Trip 详情仍出现 **2 个长缺口**。
+
+这说明：
+
+- 仅移除 8m displacement gate 还不足以覆盖全部 OEM / screen-off 行为；
+- Android 可能已经采集真实 fix，但在 screen-off/light-idle 后延迟派发；
+- 若 service 使用很短的“callback 到达新鲜度”窗口，会在真正做 continuity 判断之前就丢掉这些历史 fix。
+
+这份新证据触发 #77 的一次聚焦代码回归修复，而不是重新设计 tracking 架构。
+
 ---
 
 ## 3. 当前 GPS callback / stationary reliability baseline
@@ -102,19 +115,49 @@ PR #80 `fix(android): keep Trip callbacks alive while stationary` 已进入 `mai
 
 这解决了代码层“系统 8m gate 阻止业务 15s heartbeat”的冲突。
 
-### 3.2 仍需 #77 真机验证
+### 3.2 PR #184：允许延迟派发，但不放宽轨迹 trust
 
-CI 无法证明不同 Android ROM 在后台时一定持续交付定位 callback。
+PR #184 `fix(android): harden lock-screen trip GPS and unify endpoint flag` 已合并为 `bae3a21`。
+Android CI run `33229162800` 在 PR head `11bd41a` 上 Green。
 
-因此 #77 保持 open，仅用于验证：
+聚焦修复：
 
-- [ ] 切换其他 App 并保持其前台 5–10 分钟时，可信距离仍持续增长
-- [ ] 2–3 分钟真实停车会增加合理 `stoppedSeconds`
+- callback-delivery freshness tolerance 从 15 秒放宽到 10 分钟；
+- `location.time` 仍作为 TripPoint 的原始 capture timestamp；
+- `TripTrackingService` 仍拒绝 `capturedAt <= previous.capturedAt` 的倒序历史点；
+- `LONG_GAP_SECONDS = 120` 完全不变；
+- 若原始 capture timestamp 之间真实相隔 >=120 秒，新点只建立新 baseline，不累计 gap 两端的可信距离 / duration / aggregate speed；
+- 增加 delayed callback freshness boundary regression。
+
+因此：
+
+```text
+callback delivery age
+  -> 是否允许这个真实 fix 进入后续判断
+  -> 原始 capture timestamp monotonic check
+  -> 120s continuity rule
+  -> 是否累计可信距离 / 时长 / 速度
+```
+
+**放宽 callback age 不是放宽 LONG_GAP。**
+
+如果 OEM 在解锁后按原始时间顺序补发一批连续 GPS fix，这些 fix 不再仅因为“到达晚了”而被整体丢弃；如果系统确实没有采集到连续 fix，120 秒规则仍会保留真实断点。
+
+### 3.3 #77 仍需 post-#184 真机复验
+
+CI 无法证明不同 Android ROM 在后台的实际 callback/batching 行为。
+
+使用包含 PR #184 的最新 `main` 复验：
+
+- [ ] 锁屏/另一 App 前台 5–10 分钟时，连续 capture 的 delayed fixes 能恢复可信轨迹/距离
+- [ ] 2–3 分钟真实停车增加合理 `stoppedSeconds`
 - [ ] 健康 stationary callback 不产生 false LONG_GAP
+- [ ] 真正 >=120s capture-time gap 仍保持断开、不累计伪造距离
 - [ ] 真正 provider/callback loss 仍产生 LOST/LONG_GAP
 - [ ] stationary TripPoint 写入仍保持节流
+- [ ] 解锁后如果先收到新点，再补发更老点，老点会因 non-monotonic time 被拒绝
 
-没有新的真机证据前，不再重新实现第二套 tracking service / WorkManager / 云端 tracking。
+如果 post-#184 仍失败，应先检查存储的 TripPoints / diagnostics / `stale_callback` / `non_monotonic_time` 证据，再决定是否调整阈值；不直接增加 WorkManager、第二 tracking service 或 cloud tracking。
 
 ---
 
@@ -137,6 +180,8 @@ UI / notification 使用的核心 health 语义仍是：
 - DEGRADED：约 10–30s
 - LOST：约 >30s
 - LONG_GAP：约 >=120s 的真实 continuity break
+
+注意：notification 的“最近 callback”健康状态与 delayed fix 的 capture-time continuity 不是同一个指标。设备在锁屏期间如果确实没有及时派发 callback，notification 可以进入 LOST；随后补发的历史 fix 是否能恢复已采集轨迹，由 capture timestamps 单独判断。
 
 这些阈值是产品 reliability 参数，可根据真机数据做小幅调整，但不能通过放宽阈值来隐藏真实 gap。
 
@@ -259,11 +304,12 @@ TripPoint[]
 
 当前核心规则：
 
-- `>=120s` 的真实 gap 拆成 disconnected segments
+- `>=120s` 的真实 capture-time gap 拆成 disconnected segments
 - gap 两端不累计可信直线距离
 - gap duration 不进入可信 moving/stopped 统计
 - gap 不允许刷新 aggregate / max speed
 - speed-colored route 不跨 gap 画线
+- callback 到达晚本身不能把一个真实 >=120s gap 变成连续轨迹
 
 ```text
 已知轨迹 ━━━━━     ━━━━━ 已知轨迹
@@ -277,8 +323,6 @@ MapLibre 如果未来接入，只负责更好的 renderer，不负责补造道�
 ---
 
 ## 9. 海拔 / 高程分析
-
-早期版本写着“当前不计算累计爬升/下降”，该描述已经过期。
 
 PR #127 `feat(android): add trusted Trip elevation analysis` 已实现 #69 并进入 `main`：
 
@@ -318,12 +362,14 @@ v0.6 详情中：
 
 ### 10.2 v0.6 endpoint semantics
 
-当前 v0.6 authority 已替代早期“圆形起点 / 方形终点”视觉：
+当前 v0.6 authority：
 
 - start：compact primary-green play/start icon
 - completed end：small red flag，无 ring / halo
 - active latest point：green `当前点`
 - interrupted/non-final latest point：`最后记录点`，不能冒充 completed endpoint
+
+PR #184 将 route Canvas 的 completed endpoint 从三角 pennant 收口为与 endpoint card 更一致的四角小红旗。该变化只统一视觉语言，不改变 completed/non-final 语义。
 
 同时保留 accessibility semantics，不能只靠红/绿颜色区分状态。
 
@@ -337,7 +383,7 @@ PR #179 已将 completed Trip detail 从一个长页面拆成：
 - `轨迹`：真实 route + trusted speed/altitude trends
 - `数据`：altitude/reliability summary + raw-point progressive disclosure
 
-因此本文件描述的 reliability / route / speed visualization 必须服从 `TRIP_V0.6_APPROVED_UI_BASELINE.md` 的当前信息架构，不再把所有诊断内容堆在默认详情页。
+PR #184 进一步移除 `概览` 内冗长的 SOC/能耗说明句，但保留 `估算能耗` 标签，因此能耗仍明确是 estimate，不冒充 BMS 实测。
 
 Raw GPS point list 默认折叠，只在用户明确点击 `查看轨迹点` 时展开。
 
@@ -353,9 +399,12 @@ Raw GPS point list 默认折叠，只在用户明确点击 `查看轨迹点` 时
 - [x] `>=120s` route gap 断开，不累计伪造可信距离
 - [x] old LocationManager 8m callback gate 已移除
 - [x] stationary heartbeat 可以在 domain layer 执行并保持写入节流
-- [ ] 另一 App 前台 5–10 分钟仍持续 callback / 距离更新（#77）
+- [x] PR #184 放宽 callback-delivery freshness，但保留原始 capture-time monotonic / 120s continuity trust
+- [x] PR #184 Android CI run `33229162800` Green
+- [ ] post-#184 锁屏/另一 App 前台 5–10 分钟真实距离与轨迹复验（#77）
 - [ ] 2–3 分钟停车不产生 false LONG_GAP，stoppedSeconds 合理（#77）
 - [ ] 真正 provider/callback loss 仍可复现 LOST/LONG_GAP（#77）
+- [ ] out-of-order delayed fix 仍按 non-monotonic evidence 被拒绝（#77 真机/诊断）
 
 ### P0 Speed Trust
 
@@ -370,7 +419,8 @@ Raw GPS point list 默认折叠，只在用户明确点击 `查看轨迹点` 时
 - [x] LONG_GAP 不跨 gap 上色/连线
 - [x] 不宣称真实拥堵等级
 - [x] geometry metadata JVM coverage
-- [ ] real-device route / legend Dark-Light 可读性（#67/#145/#168）
+- [x] completed endpoint route/card red-flag language code-side unified by #184
+- [ ] real-device route / legend / endpoint Dark-Light 可读性（#67/#145/#168）
 - [ ] 320–360dp + fontScale 1.3（#67/#145/#42）
 
 ### P1 Elevation / detail
@@ -386,10 +436,10 @@ Raw GPS point list 默认折叠，只在用户明确点击 `查看轨迹点` 时
 
 ## 13. 推荐一次性真机验收脚本
 
-一次 20–30 分钟 session 可覆盖主要剩余 blocker：
+下一次必须使用包含 PR #184 的最新 `main` build：
 
 1. 前台开始 Trip，正常行驶 3–5 分钟。
-2. 锁屏一段时间，确认 foreground notification 存在并刷新真实时长/距离。
+2. 锁屏并继续移动一段时间。
 3. 解锁后切换到其他 App，保持其前台 5–10 分钟并继续行驶。
 4. 找一次约 2–3 分钟停车/红灯场景。
 5. 如果安全且方便，可测试一次系统定位/provider 中断，再明确手工恢复。
@@ -399,12 +449,13 @@ Raw GPS point list 默认折叠，只在用户明确点击 `查看轨迹点` 时
 
 必须检查：
 
+- [ ] 锁屏/后台时连续 capture 的 delayed fixes 不再因为 >15s delivery age 被整体丢弃
 - [ ] 后台/另一 App 前台期间可信距离继续增长
 - [ ] 停车期间 stoppedSeconds 合理且无 false LONG_GAP
 - [ ] 真正 GPS/callback loss 仍显示 LOST/LONG_GAP
+- [ ] 真实 >=120s capture gap 仍不补距离、不画连续线
 - [ ] route 能看到可信低/中/高速度差异，不可信段保持 neutral
-- [ ] LONG_GAP 清晰断开
-- [ ] completed end 只在真实完成后显示 red flag
+- [ ] completed end 只在真实完成后显示统一小红旗
 - [ ] speed/altitude trends 有可读 X/Y context
 - [ ] altitude / ascent / descent truthfully available or unavailable
 - [ ] raw diagnostics 默认折叠
@@ -462,6 +513,7 @@ PR #36  GPS health / diagnostics / gap route split
   -> PR #127 trusted elevation analysis
   -> PR #158 / #170 v0.6 route/endpoint fidelity
   -> PR #179 completed detail `概览` / `轨迹` / `数据`
+  -> PR #184 delayed callback grace + completed endpoint flag convergence
 ```
 
 后台通知 / repair flow：
@@ -475,6 +527,15 @@ PR #130 elapsed + trusted distance + Trip deep link
 ---
 
 ## 16. 变更记录
+
+### v1.3.0
+
+- 记录 2026-08-29 PR #80 后锁屏仍出现 2 个 LONG_GAP 的新真机证据。
+- 同步 PR #184：callback-delivery freshness 从 15s 放宽到 10min，但原始 capture-time monotonic check 与 120s LONG_GAP trust 完全保留。
+- 记录 PR #184 Android CI run `33229162800` Green、merge `bae3a21`。
+- 明确 delivery age 与 route continuity 是不同维度，禁止把 10min callback grace 误解为 10min 连续轨迹。
+- 同步 completed endpoint 四角小红旗视觉收口，以及移除冗长 SOC/能耗说明但保留 `估算能耗` 标签。
+- 当前 #77 回到 post-fix physical revalidation；若仍失败先读 TripPoints/diagnostics，不新增第二 tracking architecture。
 
 ### v1.2.0
 
