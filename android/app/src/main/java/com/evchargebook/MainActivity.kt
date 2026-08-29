@@ -283,11 +283,19 @@ fun MainApp(
         val active = state.activeTrip ?: return
         val tripVehicle = state.vehicles.firstOrNull { it.id == active.vehicleId } ?: state.vehicle
         val startSoc = active.startSoc ?: state.currentSoc ?: 50
+        val historicalConsumption = TripEndSocEstimator.historicalAverageConsumptionKwhPer100Km(
+            state.trips
+                .asSequence()
+                .filter { it.vehicleId == active.vehicleId && it.status == TripStatus.COMPLETED }
+                .map { it.averageConsumptionKwhPer100Km }
+                .toList()
+        )
         tripStartSoc = startSoc
         tripEndSoc = TripEndSocEstimator.estimate(
             startSoc = startSoc,
             distanceMeters = active.distanceMeters,
-            batteryCapacityKwh = tripVehicle?.batteryCapacityKwh
+            batteryCapacityKwh = tripVehicle?.batteryCapacityKwh,
+            averageConsumptionKwhPer100Km = historicalConsumption
         ) ?: startSoc
         tripCompletionError = if (active.startSoc == null && state.currentSoc == null) {
             "未读取到开始 SOC，当前为默认值，请滚动选择实际电量"

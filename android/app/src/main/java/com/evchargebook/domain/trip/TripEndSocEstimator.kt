@@ -10,6 +10,25 @@ import kotlin.math.roundToInt
  */
 object TripEndSocEstimator {
     const val DEFAULT_CONSUMPTION_KWH_PER_100_KM = 15.0
+    private const val MIN_REASONABLE_CONSUMPTION_KWH_PER_100_KM = 5.0
+    private const val MAX_REASONABLE_CONSUMPTION_KWH_PER_100_KM = 40.0
+    private const val HISTORY_SAMPLE_LIMIT = 5
+
+    /**
+     * Uses the newest plausible completed-Trip values. Callers should pass history in newest-first
+     * order; invalid/outlier values are ignored before the small-sample average is calculated.
+     */
+    fun historicalAverageConsumptionKwhPer100Km(values: Iterable<Double?>): Double? {
+        val samples = values.asSequence()
+            .mapNotNull { value ->
+                value?.takeIf {
+                    it.isFinite() && it in MIN_REASONABLE_CONSUMPTION_KWH_PER_100_KM..MAX_REASONABLE_CONSUMPTION_KWH_PER_100_KM
+                }
+            }
+            .take(HISTORY_SAMPLE_LIMIT)
+            .toList()
+        return samples.takeIf { it.isNotEmpty() }?.average()
+    }
 
     fun estimate(
         startSoc: Int?,
@@ -22,7 +41,9 @@ object TripEndSocEstimator {
         if (!distanceMeters.isFinite() || distanceMeters <= 0.0) return start
 
         val consumption = averageConsumptionKwhPer100Km
-            ?.takeIf { it.isFinite() && it in 5.0..40.0 }
+            ?.takeIf {
+                it.isFinite() && it in MIN_REASONABLE_CONSUMPTION_KWH_PER_100_KM..MAX_REASONABLE_CONSUMPTION_KWH_PER_100_KM
+            }
             ?: DEFAULT_CONSUMPTION_KWH_PER_100_KM
         val distanceKm = distanceMeters / 1000.0
         val consumedKwh = distanceKm / 100.0 * consumption

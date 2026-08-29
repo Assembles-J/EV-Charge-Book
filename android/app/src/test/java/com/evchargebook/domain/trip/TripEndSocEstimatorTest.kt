@@ -29,6 +29,24 @@ class TripEndSocEstimatorTest {
     }
 
     @Test
+    fun averagesNewestPlausibleHistoryAndIgnoresOutliers() {
+        val average = TripEndSocEstimator.historicalAverageConsumptionKwhPer100Km(
+            listOf(16.0, null, 80.0, 14.0, 18.0, 13.0, 17.0, 12.0)
+        )
+
+        assertEquals(15.6, average!!, 0.0001)
+    }
+
+    @Test
+    fun returnsNullWhenHistoricalConsumptionHasNoPlausibleSamples() {
+        assertNull(
+            TripEndSocEstimator.historicalAverageConsumptionKwhPer100Km(
+                listOf(null, Double.NaN, 0.0, 45.0)
+            )
+        )
+    }
+
+    @Test
     fun keepsStartSocWhenDistanceOrCapacityCannotEstimateDrop() {
         assertEquals(
             62,
