@@ -1,8 +1,8 @@
 # Trip v0.7 SOC Wheel Edit Interaction Design
 
-Status: Implemented in PR #210; physical-device acceptance pending
+Status: Implemented through PR #211; physical-device acceptance pending
 Owner: #205
-Implementation baseline: `947edbca548aacae612bd7dcf527b3258fe25270`
+Implementation baseline: `113c15eb06d5c919465e28daae5fe87e5f80d801`
 
 ## Goal
 
@@ -74,7 +74,7 @@ The estimator is deliberately not labeled or persisted as a BMS measurement sour
 
 ### Future estimator refinement
 
-Historical per-vehicle/model consumption learning is not part of PR #210. It can later replace the generic fallback without changing the approved wheel interaction.
+Historical per-vehicle/model consumption learning is not part of the current implementation. It can later replace the generic fallback without changing the approved wheel interaction.
 
 ## Completion layout
 
@@ -86,7 +86,16 @@ Order:
 4. compact truthful route preview;
 5. one `保存并结束` action.
 
-The endpoint component currently uses persisted Trip coordinates as the truthful fallback. A later fidelity pass may resolve those coordinates to addresses when a real Geocoder result is available; it must not invent addresses.
+### Endpoint address truth
+
+PR #211 closes the remaining endpoint fidelity gap while preserving the location truth boundary:
+
+- start/end are derived only from persisted Trip points;
+- the existing `AndroidGeocoderAddressResolver` attempts a real Chinese-readable reverse-geocoded address;
+- while resolution is running, the UI shows `地址解析中…`;
+- when Android Geocoder is unavailable or returns no usable result, the UI falls back to the persisted latitude/longitude;
+- no synthetic or guessed address is ever displayed;
+- the resolver uses the existing in-memory geocode cache and does not change stored Trip coordinates.
 
 ## Route preview
 
@@ -104,11 +113,13 @@ PR #210 preserves the existing `TripEnergyCalculator` semantics. It receives the
 
 The new start-SOC snapshot/override fields are included in local backup encode/decode. Older backups without the fields restore `startSocSnapshot` from their existing `startSoc` value.
 
-GPS collection, location freshness rules and continuity decisions are unchanged by v0.7 completion UI work.
+GPS collection, location freshness rules and continuity decisions are unchanged by v0.7 completion UI work. PR #211 only improves the presentation of endpoint coordinates through the existing address resolver.
 
 ## Implementation
 
-PR #210 `feat(trip): implement v0.7 editable SOC completion flow`
+### PR #210 — editable SOC completion flow
+
+Merged as `947edbca548aacae612bd7dcf527b3258fe25270`.
 
 Android CI #532:
 
@@ -117,6 +128,15 @@ Android CI #532:
 - Debug APK artifact upload: Green.
 
 The earlier foundation PRs #207, #208 and #209 were superseded by #210 and closed without merging.
+
+### PR #211 — endpoint address fidelity
+
+Merged as `113c15eb06d5c919465e28daae5fe87e5f80d801`.
+
+Android CI #534:
+
+- Build and test: Green;
+- Debug APK artifact upload: Green.
 
 ## Remaining acceptance
 
@@ -127,7 +147,9 @@ Do not close #205 solely from CI. Physical-device checks remain:
 - 320-360dp width;
 - fontScale 1.3;
 - Dark/Light readability;
-- long endpoint text / coordinate fallback readability;
+- real endpoint Geocoder result readability, long-address truncation and coordinate fallback;
 - route preview remains readable with sparse points and a real LONG_GAP;
 - back action returns to the active Trip without stopping it;
 - save persists the corrected start SOC and confirmed end SOC and updates VehicleState from the completed Trip.
+
+Location/Geocoder device availability itself remains accepted under #14.
