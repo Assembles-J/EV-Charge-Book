@@ -88,6 +88,8 @@ object BackupCodec {
                     putNullable("minAltitudeMeters", trip.minAltitudeMeters)
                     putNullable("maxAltitudeMeters", trip.maxAltitudeMeters)
                     putNullable("startSoc", trip.startSoc)
+                    putNullable("startSocSnapshot", trip.startSocSnapshot)
+                    putNullable("startSocOverride", trip.startSocOverride)
                     putNullable("endSoc", trip.endSoc)
                     putNullable("startMileageKm", trip.startMileageKm)
                     putNullable("endMileageKm", trip.endMileageKm)
@@ -181,6 +183,7 @@ object BackupCodec {
         val sessions = buildList {
             for (index in 0 until sessionsJson.length()) {
                 val item = sessionsJson.getJSONObject(index)
+                val decodedStartSoc = item.optNullableInt("startSoc")
                 add(
                     TripSessionEntity(
                         id = item.getLong("id"),
@@ -201,7 +204,9 @@ object BackupCodec {
                         endAltitudeMeters = item.optNullableDouble("endAltitudeMeters"),
                         minAltitudeMeters = item.optNullableDouble("minAltitudeMeters"),
                         maxAltitudeMeters = item.optNullableDouble("maxAltitudeMeters"),
-                        startSoc = item.optNullableInt("startSoc"),
+                        startSoc = decodedStartSoc,
+                        startSocSnapshot = item.optNullableInt("startSocSnapshot") ?: decodedStartSoc,
+                        startSocOverride = item.optNullableInt("startSocOverride"),
                         endSoc = item.optNullableInt("endSoc"),
                         startMileageKm = item.optNullableDouble("startMileageKm"),
                         endMileageKm = item.optNullableDouble("endMileageKm"),
@@ -249,6 +254,8 @@ object BackupCodec {
         require(sessions.all { it.status in setOf(TripStatus.RECORDING, TripStatus.INTERRUPTED, TripStatus.COMPLETED) }) { "备份中存在未知行程状态" }
         require(sessions.all { (it.startLatitude == null) == (it.startLongitude == null) && (it.endLatitude == null) == (it.endLongitude == null) }) { "备份中存在不完整的行程坐标" }
         require(sessions.all { it.startSoc == null || it.startSoc in 0..100 }) { "备份中存在无效行程开始 SOC" }
+        require(sessions.all { it.startSocSnapshot == null || it.startSocSnapshot in 0..100 }) { "备份中存在无效行程开始 SOC 快照" }
+        require(sessions.all { it.startSocOverride == null || it.startSocOverride in 0..100 }) { "备份中存在无效行程开始 SOC 修正值" }
         require(sessions.all { it.endSoc == null || it.endSoc in 0..100 }) { "备份中存在无效行程结束 SOC" }
         require(points.all { it.tripId in tripIds }) { "备份中存在无法关联行程的轨迹点" }
 
