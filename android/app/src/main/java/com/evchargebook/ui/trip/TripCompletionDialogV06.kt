@@ -4,10 +4,13 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -19,6 +22,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -49,6 +53,8 @@ fun TripCompletionDialogV06(
     onSaveAndStop: () -> Unit
 ) {
     val accent = EVDesignTokens.Energy.green
+    val configuration = LocalConfiguration.current
+    val compactLayout = configuration.screenWidthDp < 380 || configuration.fontScale >= 1.3f
     val parsedEndSoc = endSocText.toIntOrNull()
     val estimate = TripEnergyCalculator.estimate(
         batteryCapacityKwh = batteryCapacityKwh,
@@ -72,7 +78,10 @@ fun TripCompletionDialogV06(
             tonalElevation = 0.dp
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(MaterialTheme.spacing.md),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -88,26 +97,10 @@ fun TripCompletionDialogV06(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-                ) {
-                    CompletionMetric(
-                        label = "GPS 距离",
-                        value = formatCompletionDistance(activeTrip.distanceMeters),
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompletionMetric(
-                        label = "开始 SOC",
-                        value = activeTrip.startSoc?.let { "$it%" } ?: "--",
-                        modifier = Modifier.weight(1f)
-                    )
-                    CompletionMetric(
-                        label = "开始里程",
-                        value = activeTrip.startMileageKm?.let(::formatCompletionMileage) ?: "--",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                CompletionEvidenceV06(
+                    activeTrip = activeTrip,
+                    compactLayout = compactLayout
+                )
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
 
@@ -185,27 +178,118 @@ fun TripCompletionDialogV06(
                     Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-                ) {
-                    TextButton(
-                        onClick = onContinue,
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("继续行驶")
-                    }
-                    Button(
-                        onClick = onSaveAndStop,
-                        modifier = Modifier.weight(1f),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accent,
-                            contentColor = Color(0xFF03120A)
-                        )
-                    ) {
-                        Text("保存并结束", fontWeight = FontWeight.SemiBold)
-                    }
-                }
+                CompletionActionsV06(
+                    compactLayout = compactLayout,
+                    accent = accent,
+                    onContinue = onContinue,
+                    onSaveAndStop = onSaveAndStop
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompletionEvidenceV06(
+    activeTrip: TripSessionEntity,
+    compactLayout: Boolean
+) {
+    if (compactLayout) {
+        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+            ) {
+                CompletionMetric(
+                    label = "GPS 距离",
+                    value = formatCompletionDistance(activeTrip.distanceMeters),
+                    modifier = Modifier.weight(1f)
+                )
+                CompletionMetric(
+                    label = "开始 SOC",
+                    value = activeTrip.startSoc?.let { "$it%" } ?: "--",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            CompletionMetric(
+                label = "开始里程",
+                value = activeTrip.startMileageKm?.let(::formatCompletionMileage) ?: "--",
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
+        ) {
+            CompletionMetric(
+                label = "GPS 距离",
+                value = formatCompletionDistance(activeTrip.distanceMeters),
+                modifier = Modifier.weight(1f)
+            )
+            CompletionMetric(
+                label = "开始 SOC",
+                value = activeTrip.startSoc?.let { "$it%" } ?: "--",
+                modifier = Modifier.weight(1f)
+            )
+            CompletionMetric(
+                label = "开始里程",
+                value = activeTrip.startMileageKm?.let(::formatCompletionMileage) ?: "--",
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompletionActionsV06(
+    compactLayout: Boolean,
+    accent: Color,
+    onContinue: () -> Unit,
+    onSaveAndStop: () -> Unit
+) {
+    if (compactLayout) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)
+        ) {
+            TextButton(
+                onClick = onContinue,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            ) {
+                Text("继续行驶")
+            }
+            Button(
+                onClick = onSaveAndStop,
+                modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = accent,
+                    contentColor = Color(0xFF03120A)
+                )
+            ) {
+                Text("保存并结束", fontWeight = FontWeight.SemiBold)
+            }
+        }
+    } else {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+        ) {
+            TextButton(
+                onClick = onContinue,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp)
+            ) {
+                Text("继续行驶")
+            }
+            Button(
+                onClick = onSaveAndStop,
+                modifier = Modifier.weight(1f).heightIn(min = 48.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = accent,
+                    contentColor = Color(0xFF03120A)
+                )
+            ) {
+                Text("保存并结束", fontWeight = FontWeight.SemiBold)
             }
         }
     }
