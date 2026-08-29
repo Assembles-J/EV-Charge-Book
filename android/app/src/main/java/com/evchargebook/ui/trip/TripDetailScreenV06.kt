@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Flag
@@ -65,11 +64,18 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+private enum class TripDetailSectionV06(val label: String) {
+    OVERVIEW("概览"),
+    ROUTE("轨迹"),
+    DATA("数据")
+}
+
 /**
  * v0.6 completed/selected Trip detail.
  *
- * The overview intentionally keeps route endpoints in one compact card and moves GPS diagnostics
- * behind progressive disclosure. Missing legacy data remains unavailable rather than inferred.
+ * The approved design treats overview, route and diagnostics as distinct reading surfaces. This
+ * screen keeps one route but separates those supported facts into lightweight tabs; unsupported
+ * charging/notes/destination concepts are intentionally not exposed.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,6 +94,7 @@ internal fun TripDetailScreenV06(
     var endAddress by remember(trip.id) { mutableStateOf<String?>(null) }
     var resolvingAddresses by remember(trip.id) { mutableStateOf(false) }
     var diagnosticsExpanded by remember(trip.id) { mutableStateOf(false) }
+    var selectedSection by remember(trip.id) { mutableStateOf(TripDetailSectionV06.OVERVIEW) }
 
     val geometry = remember(points) {
         if (points.size >= 2) TripRouteGeometryBuilder.build(points.map { it.toV06RoutePoint() }) else null
@@ -135,16 +142,22 @@ internal fun TripDetailScreenV06(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
-            TopAppBar(
-                title = { Text("行程详情") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                windowInsets = WindowInsets(0, 0, 0, 0),
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-            )
+            Column {
+                TopAppBar(
+                    title = { Text("行程详情") },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        }
+                    },
+                    windowInsets = WindowInsets(0, 0, 0, 0),
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                )
+                TripDetailSectionBarV06(
+                    selected = selectedSection,
+                    onSelected = { selectedSection = it }
+                )
+            }
         }
     ) { padding ->
         LazyColumn(
@@ -152,56 +165,129 @@ internal fun TripDetailScreenV06(
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
-            item {
-                CompletedTripSummaryCardV06(
-                    trip = trip,
-                    vehicle = vehicle,
-                    averageSpeedMps = displayAverageSpeed,
-                    hasVehicleState = hasVehicleState
-                )
-            }
-
-            item {
-                CompletedTripEndpointCardV06(
-                    trip = trip,
-                    startPoint = firstPoint,
-                    endPoint = lastPoint,
-                    startAddress = startAddress,
-                    endAddress = endAddress,
-                    resolving = resolvingAddresses
-                )
-            }
-
-            geometry?.takeIf { it.isDrawable }?.let {
-                item {
-                    CompletedTripRoutePreviewV06(
-                        points = points,
-                        finalEndpoint = trip.status == TripStatus.COMPLETED
-                    )
+            when (selectedSection) {
+                TripDetailSectionV06.OVERVIEW -> {
+                    item {
+                        CompletedTripSummaryCardV06(
+                            trip = trip,
+                            vehicle = vehicle,
+                            averageSpeedMps = displayAverageSpeed,
+                            hasVehicleState = hasVehicleState
+                        )
+                    }
+                    item {
+                        CompletedTripEndpointCardV06(
+                            trip = trip,
+                            startPoint = firstPoint,
+                            endPoint = lastPoint,
+                            startAddress = startAddress,
+                            endAddress = endAddress,
+                            resolving = resolvingAddresses
+                        )
+                    }
                 }
-            }
 
-            if (hasAltitude) {
-                item {
-                    CompletedTripAltitudeCardV06(
-                        trip = trip,
-                        points = points
-                    )
+                TripDetailSectionV06.ROUTE -> {
+                    if (geometry?.isDrawable == true) {
+                        item {
+                            CompletedTripRoutePreviewV06(
+                                points = points,
+                                finalEndpoint = trip.status == TripStatus.COMPLETED
+                            )
+                        }
+                    } else {
+                        item {
+                            DetailUnavailableCardV06(
+                                title = "暂无可绘制轨迹",
+                                detail = if (points.isEmpty()) {
+                                    "本次没有保存有效 GPS 轨迹点。"
+                                } else {
+                                    "当前仅有 ${points.size} 个 GPS 点，尚不足以绘制可信路线。"
+                                }
+                            )
+                        }
+                    }
+                    item { CompletedTripTrendsV06(points) }
                 }
-            }
 
-            item { CompletedTripTrendsV06(points) }
-
-            item {
-                CompletedTripDiagnosticsV06(
-                    points = points,
-                    gapCount = geometry?.gapCount ?: 0,
-                    expanded = diagnosticsExpanded,
-                    onToggle = { diagnosticsExpanded = !diagnosticsExpanded }
-                )
+                TripDetailSectionV06.DATA -> {
+                    if (hasAltitude) {
+                        item {
+                            CompletedTripAltitudeCardV06(
+                                trip = trip,
+                                points = points
+                            )
+                        }
+                    } else {
+                        item {
+                            DetailUnavailableCardV06(
+                                title = "暂无可信海拔",
+                                detail = "没有通过当前定位精度规则的海拔样本，不展示合成值。"
+                            )
+                        }
+                    }
+                    item {
+                        CompletedTripDiagnosticsV06(
+                            points = points,
+                            gapCount = geometry?.gapCount ?: 0,
+                            expanded = diagnosticsExpanded,
+                            onToggle = { diagnosticsExpanded = !diagnosticsExpanded }
+                        )
+                    }
+                }
             }
 
             item { Spacer(Modifier.height(MaterialTheme.spacing.md)) }
+        }
+    }
+}
+
+@Composable
+private fun TripDetailSectionBarV06(
+    selected: TripDetailSectionV06,
+    onSelected: (TripDetailSectionV06) -> Unit
+) {
+    val accent = EVDesignTokens.Energy.green
+    Surface(color = MaterialTheme.colorScheme.background) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacing.md),
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)
+        ) {
+            TripDetailSectionV06.entries.forEach { section ->
+                Column(modifier = Modifier.weight(1f)) {
+                    TextButton(
+                        onClick = { onSelected(section) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            section.label,
+                            color = if (section == selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontWeight = if (section == selected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                    }
+                    HorizontalDivider(
+                        thickness = 2.dp,
+                        color = if (section == selected) accent else MaterialTheme.colorScheme.background
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DetailUnavailableCardV06(title: String, detail: String) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
