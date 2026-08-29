@@ -27,3 +27,9 @@ Do not:
 - generate production GPS points
 - hide real LONG_GAP events
 - replace final physical acceptance
+
+## Current route
+
+`android/app/src/test/resources/trip/replay/shanghai_short_drive.json`
+
+The replay route only validates the pipeline. Real GPS remains the production source.
