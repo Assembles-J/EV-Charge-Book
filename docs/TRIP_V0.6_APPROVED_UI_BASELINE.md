@@ -1,6 +1,6 @@
 # EV Charge Book Trip v0.6 Approved UI Baseline
 
-Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison.
+Status: approved visual / interaction baseline from 2026-08-28 review, refined by the 2026-08-29 physical-device comparison and the completed-detail information-architecture correction.
 
 Owning issue: #145
 
@@ -190,6 +190,30 @@ Raw recent GPS points must not be expanded by default. Provide an explicit troub
 
 If altitude is unavailable or untrustworthy, omit the metric rather than showing a synthetic value.
 
+## Completed Trip detail information architecture — #178 / PR #179
+
+The approved board treats completed/selected Trip detail as separate reading surfaces rather than one long scroll. This presentation correction is now implemented in `main` by PR #179, merged as `88e1e2b` after Android CI run `33198331727` passed.
+
+Supported sections:
+
+- `概览` — completed Trip summary + one compact start/end endpoint card
+- `轨迹` — truthful route preview + trusted speed/altitude trends
+- `数据` — altitude summary + GPS reliability and raw-point progressive disclosure
+
+Rules:
+
+- detail opens on `概览`
+- switching sections is presentation-only and must not mutate Trip data
+- `概览` stays materially shorter than the old all-in-one scroll
+- `轨迹` owns route and trend evidence
+- `数据` owns reliability / diagnostic evidence
+- unavailable route or altitude uses a compact truthful empty state
+- no unsupported `充电`, `备注`, destination-planning or navigation tabs are added merely because an early mock contained them
+- no fake basemap is introduced
+- completed red-flag, active green `当前点`, LONG_GAP discontinuity and raw-point collapsed-by-default semantics remain unchanged
+
+Physical comparison against approved detail-board screens remains required before final UI acceptance.
+
 ## Completion flow — #173
 
 The final completion form is part of the Trip interaction language even though it is not one of the six browsing surfaces.
@@ -274,6 +298,7 @@ Physical-device corrections:
 - #171 / PR #172 — compact READY information group + active metric de-duplication
 - #173 / PR #174 — compact completion flow + removal of redundant intermediate confirmation
 - #175 / PR #176 — separate Trip home/history from READY preparation
+- #178 / PR #179 — split completed Trip detail into `概览` / `轨迹` / `数据` supported surfaces; Android CI Green
 
 #152 remains the future destination-selection capability and is not part of v0.6.
 
@@ -294,9 +319,11 @@ Final closure of #145 requires one physical-device pass across:
 2. READY preparation
 3. active cockpit
 4. completion form
-5. completed overview
-6. route
+5. completed overview / `概览`
+6. route / `轨迹`
 7. speed + altitude trends
-8. diagnostics disclosure
+8. diagnostics / `数据` disclosure
+9. detail-section switching and truthful unavailable states
+10. Dark / Light readability where the shared theme supports both
 
 Also verify 320–360dp width and fontScale 1.3 before declaring UI acceptance complete.

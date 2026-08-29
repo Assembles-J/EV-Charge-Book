@@ -129,7 +129,7 @@ Add:
 
 # Trip v0.6 Approved Follow-up
 
-The 2026-08-28 Trip design review approved a denser Trip-specific refinement of the v0.5 Dark First system. The 2026-08-29 device comparison then exposed concrete fidelity regressions; those are now tracked as correction slices instead of starting another redesign.
+The 2026-08-28 Trip design review approved a denser Trip-specific refinement of the v0.5 Dark First system. The 2026-08-29 device comparison then exposed concrete fidelity regressions; those are tracked as correction slices instead of starting another redesign. A final code/design comparison also found that completed Trip detail was still one long scroll while the approved board used separate reading surfaces; #178 / PR #179 closes that information-architecture gap.
 
 Authority: `docs/TRIP_V0.6_APPROVED_UI_BASELINE.md`
 Owning issue: #145
@@ -151,8 +151,22 @@ Documentation owner: #6
 - [x] #171 — READY information density + active cockpit metric de-duplication — PR #172
 - [x] #173 — compact Trip completion form + remove redundant intermediate confirmation — PR #174
 - [x] #175 — split Trip home/history from READY preparation — PR #176
+- [x] #178 — split completed Trip detail into `概览` / `轨迹` / `数据` supported sections — PR #179, merged as `88e1e2b`, Android CI run `33198331727` Green
 
 Code-side Trip v0.6 work above is in `main`. These Issues remain open only where their explicit physical-device checks are still pending.
+
+## Completed Trip detail section ownership
+
+The selected/completed Trip no longer stacks all supporting evidence into one long scroll.
+
+- `概览` owns completed summary + the compact start/end endpoint card
+- `轨迹` owns truthful route geometry + trusted speed/altitude trends
+- `数据` owns altitude/reliability evidence + raw GPS point progressive disclosure
+- detail opens on `概览`
+- switching sections is presentation-only and must not mutate Trip data
+- missing route/altitude uses truthful compact unavailable states
+- no unsupported `充电`, `备注`, destination or navigation tabs
+- no fake basemap
 
 ## Trip v0.6 guardrails
 
@@ -180,9 +194,10 @@ Remaining work is physical, not another broad code rewrite:
 2. READY — back/start behavior, compact GPS truth, slide gesture
 3. Active — live route, current speed, trends, interrupted state
 4. Completion — keyboard/IME, 320–360dp, fontScale 1.3, continue/save safety
-5. Completed detail — endpoint card and metric hierarchy
-6. Route — real geometry, start/end/current marker semantics, LONG_GAP discontinuity
-7. Trends — X/Y references, speed/altitude truth, no interpolation
-8. Diagnostics — collapsed by default, `查看轨迹点` explicit
+5. Completed detail `概览` — endpoint card and metric hierarchy
+6. Route `轨迹` — real geometry, start/end/current marker semantics, LONG_GAP discontinuity, trusted trends
+7. Data `数据` — altitude/reliability evidence, collapsed diagnostics, `查看轨迹点` explicit
+8. Detail tabs — switching remains readable and stable on 320–360dp / fontScale 1.3
+9. Dark/Light — shared-theme contrast/readability where supported
 
 Do not close #145 from CI alone. Use the latest Debug APK from `main` for the final physical comparison against the approved v0.6 board.
