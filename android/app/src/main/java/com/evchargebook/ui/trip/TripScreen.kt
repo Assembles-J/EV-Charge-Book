@@ -226,7 +226,7 @@ fun TripScreen(
                     releaseLabel = "松开结束"
                 )
                 Text(
-                    "滑动后直接进入结束信息填写；选择继续行驶时保持记录。",
+                    "滑动后进入结束确认；返回可继续记录，保存后结束本次行程。",
                     modifier = Modifier.padding(top = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant

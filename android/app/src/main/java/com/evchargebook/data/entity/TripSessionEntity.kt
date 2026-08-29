@@ -34,7 +34,12 @@ data class TripSessionEntity(
     val endAltitudeMeters: Double? = null,
     val minAltitudeMeters: Double? = null,
     val maxAltitudeMeters: Double? = null,
+    /** Effective start SOC used for the completed Trip calculation. */
     val startSoc: Int? = null,
+    /** Original VehicleState SOC captured when the Trip started. */
+    val startSocSnapshot: Int? = null,
+    /** User correction when the effective start SOC differs from the original snapshot. */
+    val startSocOverride: Int? = null,
     val endSoc: Int? = null,
     val startMileageKm: Double? = null,
     val endMileageKm: Double? = null,
