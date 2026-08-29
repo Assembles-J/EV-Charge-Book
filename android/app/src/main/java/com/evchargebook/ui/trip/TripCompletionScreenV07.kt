@@ -3,7 +3,6 @@ package com.evchargebook.ui.trip
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -33,8 +32,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -53,6 +55,7 @@ import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.trip.TripEnergyCalculator
+import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
@@ -86,6 +89,30 @@ internal fun TripCompletionScreenV07(
         endSoc = endSoc,
         distanceMeters = activeTrip.distanceMeters
     )
+    val firstPoint = points.firstOrNull()
+    val lastPoint = points.lastOrNull()
+    val context = LocalContext.current
+    val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context) }
+    var startAddress by remember(activeTrip.id) { mutableStateOf<String?>(null) }
+    var endAddress by remember(activeTrip.id) { mutableStateOf<String?>(null) }
+    var resolvingAddresses by remember(activeTrip.id) { mutableStateOf(false) }
+
+    LaunchedEffect(activeTrip.id, firstPoint?.id, lastPoint?.id) {
+        if (firstPoint == null && lastPoint == null) {
+            startAddress = null
+            endAddress = null
+            resolvingAddresses = false
+            return@LaunchedEffect
+        }
+        resolvingAddresses = true
+        startAddress = firstPoint?.let { addressResolver.reverse(it.latitude, it.longitude) }
+        endAddress = when {
+            lastPoint == null -> null
+            firstPoint != null && firstPoint.latitude == lastPoint.latitude && firstPoint.longitude == lastPoint.longitude -> startAddress
+            else -> addressResolver.reverse(lastPoint.latitude, lastPoint.longitude)
+        }
+        resolvingAddresses = false
+    }
 
     Scaffold(
         modifier = Modifier.fillMaxSize(),
@@ -109,7 +136,14 @@ internal fun TripCompletionScreenV07(
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
-            item { CompletionEndpointsV07(points) }
+            item {
+                CompletionEndpointsV07(
+                    points = points,
+                    startAddress = startAddress,
+                    endAddress = endAddress,
+                    resolving = resolvingAddresses
+                )
+            }
             item {
                 CompletionSummaryV07(
                     activeTrip = activeTrip,
@@ -152,7 +186,12 @@ internal fun TripCompletionScreenV07(
 }
 
 @Composable
-private fun CompletionEndpointsV07(points: List<TripPointEntity>) {
+private fun CompletionEndpointsV07(
+    points: List<TripPointEntity>,
+    startAddress: String?,
+    endAddress: String?,
+    resolving: Boolean
+) {
     val accent = EVDesignTokens.Energy.green
     val start = points.firstOrNull()
     val end = points.lastOrNull()
@@ -175,7 +214,7 @@ private fun CompletionEndpointsV07(points: List<TripPointEntity>) {
                     )
                 },
                 label = "起点",
-                value = start?.let(::formatPointV07) ?: "暂无可信起点"
+                value = endpointTextV07(start, startAddress, resolving, "暂无可信起点")
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
             EndpointRowV07(
@@ -188,7 +227,7 @@ private fun CompletionEndpointsV07(points: List<TripPointEntity>) {
                     )
                 },
                 label = "终点",
-                value = end?.let(::formatPointV07) ?: "暂无可信终点"
+                value = endpointTextV07(end, endAddress, resolving, "暂无可信终点")
             )
         }
     }
@@ -206,25 +245,13 @@ private fun EndpointRowV07(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         icon()
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            value,
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.bodySmall,
-            maxLines = 1
-        )
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodySmall, maxLines = 1)
     }
 }
 
 @Composable
-private fun CompletionSummaryV07(
-    activeTrip: TripSessionEntity,
-    averageConsumption: Double?
-) {
+private fun CompletionSummaryV07(activeTrip: TripSessionEntity, averageConsumption: Double?) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -270,22 +297,9 @@ private fun SocAdjustmentCardV07(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("SOC 调整", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                CompactSocWheelV07(
-                    label = "开始电量",
-                    value = startSoc,
-                    onValueChange = onStartSocChange,
-                    modifier = Modifier.weight(1f)
-                )
-                CompactSocWheelV07(
-                    label = "结束电量",
-                    value = endSoc,
-                    onValueChange = onEndSocChange,
-                    modifier = Modifier.weight(1f)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                CompactSocWheelV07("开始电量", startSoc, onStartSocChange, Modifier.weight(1f))
+                CompactSocWheelV07("结束电量", endSoc, onEndSocChange, Modifier.weight(1f))
             }
         }
     }
@@ -332,10 +346,7 @@ private fun CompactSocWheelV07(
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .42f)
         )
-        Surface(
-            shape = MaterialTheme.shapes.medium,
-            color = accent.copy(alpha = .10f)
-        ) {
+        Surface(shape = MaterialTheme.shapes.medium, color = accent.copy(alpha = .10f)) {
             Text(
                 "$value%",
                 modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
@@ -366,11 +377,7 @@ private fun CompletionRoutePreviewV07(points: List<TripPointEntity>) {
         ) {
             Text("行程轨迹", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
             if (valid.size < 2) {
-                Text(
-                    "轨迹点不足，暂不绘制路线",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("轨迹点不足，暂不绘制路线", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
                 MiniRouteCanvasV07(valid)
             }
@@ -433,6 +440,18 @@ private fun MiniRouteCanvasV07(points: List<TripPointEntity>) {
         }
         drawPath(flag, endColor)
     }
+}
+
+private fun endpointTextV07(
+    point: TripPointEntity?,
+    address: String?,
+    resolving: Boolean,
+    missingText: String
+): String = when {
+    point == null -> missingText
+    resolving -> "地址解析中…"
+    !address.isNullOrBlank() -> address
+    else -> formatPointV07(point)
 }
 
 private fun formatPointV07(point: TripPointEntity): String =
