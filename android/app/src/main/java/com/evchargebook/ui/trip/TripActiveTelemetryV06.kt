@@ -39,6 +39,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.domain.TripSpeedTrustRules
+import com.evchargebook.domain.trip.TripElevationAnalytics
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometry
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
@@ -66,7 +67,7 @@ internal fun summarizeActiveTripTelemetry(points: List<TripPointEntity>): Active
             )
         }
     }
-    val altitudeCount = points.count { point -> trustedAltitude(point) != null }
+    val altitudeCount = TripElevationAnalytics.filteredSeries(points).size
     return ActiveTripTelemetrySummary(
         trustedLatestSpeedMps = trustedSpeeds.lastOrNull(),
         trustedSpeedPointCount = trustedSpeeds.size,
@@ -97,8 +98,8 @@ internal fun TripActiveTelemetryV06(
         }
     }
     val altitudeSamples = remember(points) {
-        points.mapNotNull { point ->
-            trustedAltitude(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it) }
+        TripElevationAnalytics.filteredSeries(points).map { sample ->
+            TripTrendSampleV06(sample.capturedAtEpochMillis, sample.altitudeMeters)
         }
     }
 
@@ -358,15 +359,6 @@ private fun trustedSpeed(point: TripPointEntity): Double? {
             speedAccuracyMps = point.speedAccuracyMps
         )
     }
-}
-
-private fun trustedAltitude(point: TripPointEntity): Double? {
-    val altitude = point.altitudeMeters?.takeIf { it.isFinite() } ?: return null
-    val verticalAccuracy = point.verticalAccuracyMeters
-    if (verticalAccuracy != null && (!verticalAccuracy.isFinite() || verticalAccuracy > 50.0)) return null
-    val horizontalAccuracy = point.horizontalAccuracyMeters
-    if (horizontalAccuracy != null && (!horizontalAccuracy.isFinite() || horizontalAccuracy > 80.0)) return null
-    return altitude
 }
 
 private fun formatActiveTrendValue(value: Double, unit: String): String =
