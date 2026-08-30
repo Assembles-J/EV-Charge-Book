@@ -84,6 +84,21 @@ class TripSpeedTrustRulesTest {
     }
 
     @Test
+    fun `accurate fused highway peak can update max speed`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMaxSpeed(
+                reportedSpeedMps = 30.3,
+                deltaSeconds = 4,
+                trustedDistanceMeters = 110.0,
+                continuityAllowsSpeed = true,
+                provider = "fused",
+                horizontalAccuracyMeters = 8.0,
+                speedAccuracyMps = 1.2
+            )
+        )
+    }
+
+    @Test
     fun `extreme gps peak without speed accuracy cannot update max speed`() {
         assertFalse(
             TripSpeedTrustRules.eligibleForMaxSpeed(
@@ -114,14 +129,14 @@ class TripSpeedTrustRulesTest {
     }
 
     @Test
-    fun `coarse gps point cannot update max speed`() {
+    fun `coarse fused point cannot update max speed`() {
         assertFalse(
             TripSpeedTrustRules.eligibleForMaxSpeed(
                 reportedSpeedMps = 30.3,
                 deltaSeconds = 4,
                 trustedDistanceMeters = 110.0,
                 continuityAllowsSpeed = true,
-                provider = "gps",
+                provider = "fused",
                 horizontalAccuracyMeters = 60.0,
                 speedAccuracyMps = 1.2
             )
@@ -134,6 +149,18 @@ class TripSpeedTrustRulesTest {
             TripSpeedTrustRules.eligibleForMeasuredSpeed(
                 reportedSpeedMps = 15.0,
                 provider = "gps",
+                horizontalAccuracyMeters = 6.0,
+                speedAccuracyMps = 1.0
+            )
+        )
+    }
+
+    @Test
+    fun `accurate fused speed is eligible for visualization`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForMeasuredSpeed(
+                reportedSpeedMps = 15.0,
+                provider = "fused",
                 horizontalAccuracyMeters = 6.0,
                 speedAccuracyMps = 1.0
             )
