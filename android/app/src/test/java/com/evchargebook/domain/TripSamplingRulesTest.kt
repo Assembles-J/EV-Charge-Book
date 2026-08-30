@@ -29,6 +29,20 @@ class TripSamplingRulesTest {
     }
 
     @Test
+    fun trustedZeroSpeedWinsOverSeveralMetresOfStationaryGpsDrift() {
+        val decision = TripSamplingRules.decide(2, 6.5, 0.0, 8.0)
+        assertTrue(decision.accept)
+        assertFalse(decision.moving)
+    }
+
+    @Test
+    fun distanceStillDetectsMovementWhenTrustedSpeedIsUnavailable() {
+        val decision = TripSamplingRules.decide(2, 6.5, null, 8.0)
+        assertTrue(decision.accept)
+        assertTrue(decision.moving)
+    }
+
+    @Test
     fun stationaryHeartbeatAccumulatesStoppedTime() {
         val decision = TripSamplingRules.decide(2, 1.0, 0.0, 10.0)
         assertTrue(decision.accept)
