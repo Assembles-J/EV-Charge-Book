@@ -33,7 +33,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -46,6 +50,7 @@ import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * Trip router + active v0.6 cockpit.
@@ -87,6 +92,7 @@ fun TripScreen(
     val activeVehicle = vehicles.firstOrNull { it.id == activeTrip.vehicleId } ?: vehicle
     val interrupted = activeTrip.status == TripStatus.INTERRUPTED
     val telemetry = remember(selectedTripPoints) { summarizeActiveTripTelemetry(selectedTripPoints) }
+    val liveElapsedSeconds = rememberLiveTripElapsedSeconds(activeTrip)
     val accent = EVDesignTokens.Energy.green
 
     Scaffold(
@@ -165,7 +171,7 @@ fun TripScreen(
 
                         ActiveMetricGrid(
                             listOf(
-                                ActiveMetric("已记录", formatActiveDuration(activeTrip.elapsedSeconds)),
+                                ActiveMetric("已记录", formatActiveDuration(liveElapsedSeconds)),
                                 ActiveMetric("行驶均速", activeTrip.averageSpeedMps?.let(::formatActiveSpeed) ?: "--"),
                                 ActiveMetric("最高速度", activeTrip.maxSpeedMps?.let(::formatActiveSpeed) ?: "--"),
                                 ActiveMetric("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--")
@@ -236,6 +242,24 @@ fun TripScreen(
             item { Spacer(Modifier.size(MaterialTheme.spacing.md)) }
         }
     }
+}
+
+@Composable
+private fun rememberLiveTripElapsedSeconds(trip: TripSessionEntity): Long {
+    if (trip.status != TripStatus.RECORDING) return trip.elapsedSeconds
+
+    var nowEpochMillis by remember(trip.id, trip.startedAtEpochMillis) {
+        mutableStateOf(System.currentTimeMillis())
+    }
+    LaunchedEffect(trip.id, trip.status, trip.startedAtEpochMillis) {
+        while (true) {
+            nowEpochMillis = System.currentTimeMillis()
+            delay(1_000L)
+        }
+    }
+
+    val wallClockElapsed = ((nowEpochMillis - trip.startedAtEpochMillis) / 1_000L).coerceAtLeast(0L)
+    return maxOf(trip.elapsedSeconds, wallClockElapsed)
 }
 
 private data class ActiveMetric(val label: String, val value: String)
