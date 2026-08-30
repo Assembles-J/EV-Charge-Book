@@ -7,9 +7,9 @@ import kotlin.math.abs
 /**
  * Presentation analytics derived from already-persisted TripPoint altitude facts.
  *
- * This deliberately does not change Trip/GPS acceptance rules. It only avoids turning
- * obviously weak vertical fixes, tiny altitude jitter, or long GPS gaps into cumulative
- * climb/descent claims.
+ * Raw TripPoint altitude remains untouched. The presentation layer applies conservative vertical
+ * accuracy filtering plus a small median filter inside continuous GPS segments so isolated GNSS
+ * altitude spikes do not become user-facing min/max or climb/descent claims.
  */
 data class TripElevationSummary(
     val startAltitudeMeters: Double,
@@ -24,12 +24,20 @@ data class TripElevationSummary(
     val hasCumulativeEstimate: Boolean get() = trustedSampleCount >= 2
 }
 
-object TripElevationAnalytics {
-    const val MAX_VERTICAL_ACCURACY_METERS = 30.0
-    const val MIN_SIGNIFICANT_ALTITUDE_CHANGE_METERS = 3.0
+data class TripElevationSample(
+    val capturedAtEpochMillis: Long,
+    val altitudeMeters: Double,
+    val verticalAccuracyMeters: Double?
+)
 
-    fun summarize(points: List<TripPointEntity>): TripElevationSummary? {
-        val samples = points
+object TripElevationAnalytics {
+    const val MAX_VERTICAL_ACCURACY_METERS = 20.0
+    const val MIN_SIGNIFICANT_ALTITUDE_CHANGE_METERS = 4.0
+    private const val MEDIAN_WINDOW_RADIUS = 2
+    private const val MIN_SAMPLES_FOR_MEDIAN_FILTER = 7
+
+    fun filteredSeries(points: List<TripPointEntity>): List<TripElevationSample> {
+        val trusted = points
             .asSequence()
             .sortedBy { it.capturedAtEpochMillis }
             .mapNotNull { point ->
@@ -40,7 +48,7 @@ object TripElevationAnalytics {
                 ) {
                     return@mapNotNull null
                 }
-                ElevationSample(
+                TripElevationSample(
                     capturedAtEpochMillis = point.capturedAtEpochMillis,
                     altitudeMeters = altitude,
                     verticalAccuracyMeters = verticalAccuracy
@@ -48,6 +56,15 @@ object TripElevationAnalytics {
             }
             .toList()
 
+        if (trusted.size < MIN_SAMPLES_FOR_MEDIAN_FILTER) return trusted
+
+        return splitContinuousSegments(trusted).flatMap { segment ->
+            if (segment.size < MIN_SAMPLES_FOR_MEDIAN_FILTER) segment else medianFilter(segment)
+        }
+    }
+
+    fun summarize(points: List<TripPointEntity>): TripElevationSummary? {
+        val samples = filteredSeries(points)
         if (samples.isEmpty()) return null
 
         var gainMeters = 0.0
@@ -91,9 +108,43 @@ object TripElevationAnalytics {
         )
     }
 
-    private data class ElevationSample(
-        val capturedAtEpochMillis: Long,
-        val altitudeMeters: Double,
-        val verticalAccuracyMeters: Double?
-    )
+    private fun splitContinuousSegments(samples: List<TripElevationSample>): List<List<TripElevationSample>> {
+        if (samples.isEmpty()) return emptyList()
+        val result = mutableListOf<MutableList<TripElevationSample>>()
+        var current = mutableListOf(samples.first())
+        result += current
+        samples.zipWithNext().forEach { (previous, next) ->
+            val deltaSeconds = ((next.capturedAtEpochMillis - previous.capturedAtEpochMillis) / 1000)
+                .coerceAtLeast(0L)
+            if (deltaSeconds >= TripContinuityRules.LONG_GAP_SECONDS) {
+                current = mutableListOf()
+                result += current
+            }
+            current += next
+        }
+        return result.filter { it.isNotEmpty() }
+    }
+
+    private fun medianFilter(segment: List<TripElevationSample>): List<TripElevationSample> =
+        segment.mapIndexed { index, sample ->
+            val altitudeWindow = List(MEDIAN_WINDOW_RADIUS * 2 + 1) { offset ->
+                val sourceIndex = (index + offset - MEDIAN_WINDOW_RADIUS).coerceIn(0, segment.lastIndex)
+                segment[sourceIndex].altitudeMeters
+            }
+            val accuracyWindow = List(MEDIAN_WINDOW_RADIUS * 2 + 1) { offset ->
+                val sourceIndex = (index + offset - MEDIAN_WINDOW_RADIUS).coerceIn(0, segment.lastIndex)
+                segment[sourceIndex].verticalAccuracyMeters
+            }.filterNotNull()
+
+            sample.copy(
+                altitudeMeters = median(altitudeWindow),
+                verticalAccuracyMeters = accuracyWindow.takeIf { it.isNotEmpty() }?.let(::median)
+            )
+        }
+
+    private fun median(values: List<Double>): Double {
+        val sorted = values.sorted()
+        val middle = sorted.size / 2
+        return if (sorted.size % 2 == 1) sorted[middle] else (sorted[middle - 1] + sorted[middle]) / 2.0
+    }
 }
