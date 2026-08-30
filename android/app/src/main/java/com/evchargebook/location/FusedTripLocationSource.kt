@@ -40,8 +40,8 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
             return
         }
 
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 4_000L)
-            .setMinUpdateIntervalMillis(2_000L)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1_000L)
+            .setMinUpdateIntervalMillis(1_000L)
             .setMinUpdateDistanceMeters(0f)
             .setMaxUpdateDelayMillis(0L)
             .build()

@@ -17,29 +17,29 @@ class TripSamplingRulesTest {
     }
 
     @Test
-    fun throttlesStationaryPointsBeforeFifteenSeconds() {
-        assertFalse(TripSamplingRules.decide(8, 1.0, 0.0, 10.0).accept)
+    fun throttlesOneSecondStationaryPoint() {
+        assertFalse(TripSamplingRules.decide(1, 1.0, 0.0, 10.0).accept)
     }
 
     @Test
-    fun keepsStationaryHeartbeatAfterFifteenSeconds() {
-        val decision = TripSamplingRules.decide(15, 1.0, 0.0, 10.0)
+    fun keepsStationaryHeartbeatAfterTwoSeconds() {
+        val decision = TripSamplingRules.decide(2, 1.0, 0.0, 10.0)
         assertTrue(decision.accept)
         assertFalse(decision.moving)
     }
 
     @Test
     fun stationaryHeartbeatAccumulatesStoppedTime() {
-        val decision = TripSamplingRules.decide(16, 1.0, 0.0, 10.0)
+        val decision = TripSamplingRules.decide(2, 1.0, 0.0, 10.0)
         assertTrue(decision.accept)
         assertFalse(decision.moving)
-        assertEquals(46L, TripSamplingRules.stoppedSeconds(30L, 16L, decision.moving))
-        assertEquals(30L, TripSamplingRules.movingSeconds(30L, 16L, decision.moving))
+        assertEquals(32L, TripSamplingRules.stoppedSeconds(30L, 2L, decision.moving))
+        assertEquals(30L, TripSamplingRules.movingSeconds(30L, 2L, decision.moving))
     }
 
     @Test
-    fun acceptsNormalMovingSegment() {
-        val decision = TripSamplingRules.decide(4, 18.0, 4.0, 8.0)
+    fun acceptsOneSecondMovingSegment() {
+        val decision = TripSamplingRules.decide(1, 6.0, 6.0, 8.0)
         assertTrue(decision.accept)
         assertTrue(decision.moving)
     }

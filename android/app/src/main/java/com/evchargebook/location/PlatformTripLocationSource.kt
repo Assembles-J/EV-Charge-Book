@@ -67,6 +67,6 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         // Android's fused provider since earlier releases. Use the stable provider string because
         // this app supports API 26+.
         const val PLATFORM_FUSED_PROVIDER = "fused"
-        const val SAMPLE_INTERVAL_MS = 4_000L
+        const val SAMPLE_INTERVAL_MS = 1_000L
     }
 }
