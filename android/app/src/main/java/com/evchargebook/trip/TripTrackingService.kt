@@ -10,12 +10,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
-import android.location.LocationListener
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -39,6 +37,8 @@ import com.evchargebook.domain.TripServiceLifecycleRules
 import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.domain.TripTrackingRepairReason
 import com.evchargebook.domain.TripTrackingRepairRules
+import com.evchargebook.location.FusedTripLocationSource
+import com.evchargebook.location.TripLocationSource
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +58,7 @@ class TripTrackingService : Service() {
     private val pointMutex = Mutex()
     private val repairInProgress = AtomicBoolean(false)
     private lateinit var locationManager: LocationManager
+    private var locationSource: TripLocationSource? = null
     private val tripDao by lazy { AppDatabase.getInstance(applicationContext).tripDao() }
     private var currentTripId: Long? = null
     private var lastPoint: TripPointEntity? = null
@@ -70,12 +71,6 @@ class TripTrackingService : Service() {
     @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
     @Volatile private var lastAcceptedProvider: String? = null
     @Volatile private var rejectedPointCount: Int = 0
-
-    private val locationListener = LocationListener { location ->
-        val tripId = currentTripId ?: return@LocationListener
-        lastCallbackAtEpochMillis = System.currentTimeMillis()
-        serviceScope.launch { pointMutex.withLock { handleLocation(tripId, location) } }
-    }
 
     override fun onCreate() {
         super.onCreate()
@@ -117,7 +112,8 @@ class TripTrackingService : Service() {
             }
         }
         healthMonitorJob?.cancel()
-        runCatching { locationManager.removeUpdates(locationListener) }
+        runCatching { locationSource?.stop() }
+        locationSource = null
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -195,19 +191,26 @@ class TripTrackingService : Service() {
             recordEvent(tripId, TripDiagnosticEventType.PROVIDER_DISABLED, provider = LocationManager.NETWORK_PROVIDER)
         }
 
-        val providers = buildList {
-            if (fineGranted && gpsEnabled) add(LocationManager.GPS_PROVIDER)
-            if (coarseGranted && networkEnabled) add(LocationManager.NETWORK_PROVIDER)
-        }.distinct()
-
-        if (providers.isEmpty()) {
+        val hasUsableProvider =
+            (fineGranted && gpsEnabled) || (coarseGranted && networkEnabled)
+        if (!hasUsableProvider) {
             serviceScope.launch { interruptForRepair(tripId, TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED) }
             return
         }
 
         val registration = runCatching {
-            providers.forEach { provider ->
-                locationManager.requestLocationUpdates(provider, SAMPLE_INTERVAL_MS, SAMPLE_DISTANCE_METERS, locationListener, Looper.getMainLooper())
+            locationSource?.stop()
+            FusedTripLocationSource(applicationContext).also { source ->
+                locationSource = source
+                source.start callback@{ location ->
+                    val activeTripId = currentTripId ?: return@callback
+                    lastCallbackAtEpochMillis = System.currentTimeMillis()
+                    serviceScope.launch {
+                        pointMutex.withLock {
+                            handleLocation(activeTripId, location)
+                        }
+                    }
+                }
             }
         }
         registration.exceptionOrNull()?.let { error ->
@@ -215,7 +218,7 @@ class TripTrackingService : Service() {
                 recordEvent(
                     tripId,
                     TripDiagnosticEventType.LOCATION_REGISTRATION_FAILED,
-                    detail = error::class.java.simpleName.take(MAX_DETAIL_LENGTH)
+                    detail = "fused:${error::class.java.simpleName}".take(MAX_DETAIL_LENGTH)
                 )
                 markInterrupted(tripId)
                 stopTrackingAndSelf()
@@ -441,7 +444,8 @@ class TripTrackingService : Service() {
     private fun stopTrackingAndSelf() {
         healthMonitorJob?.cancel()
         healthMonitorJob = null
-        runCatching { locationManager.removeUpdates(locationListener) }
+        runCatching { locationSource?.stop() }
+        locationSource = null
         currentTripId = null
         tripStartedAtEpochMillis = 0L
         currentDistanceMeters = 0.0
@@ -559,6 +563,7 @@ class TripTrackingService : Service() {
         val providerText = when (lastAcceptedProvider) {
             LocationManager.GPS_PROVIDER -> "GPS"
             LocationManager.NETWORK_PROVIDER -> "网络定位"
+            "fused" -> "融合定位"
             null -> null
             else -> lastAcceptedProvider
         }
@@ -594,9 +599,6 @@ class TripTrackingService : Service() {
         private const val WARNING_CHANNEL_ID = "trip_warnings"
         private const val NOTIFICATION_ID = 2201
         private const val REPAIR_NOTIFICATION_ID = 2202
-        private const val SAMPLE_INTERVAL_MS = 4_000L
-        // Keep callback liveness time-based; TripSamplingRules owns stationary write throttling.
-        private const val SAMPLE_DISTANCE_METERS = 0f
         private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
         private const val MAX_DETAIL_LENGTH = 160
 
