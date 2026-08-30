@@ -1,6 +1,9 @@
 package com.evchargebook.ui.trip
 
 import android.os.SystemClock
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -31,6 +34,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,8 +57,9 @@ import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
-import kotlinx.coroutines.delay
 import java.util.Locale
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * Completed-Trip playback surface for the current no-basemap renderer.
@@ -283,9 +288,29 @@ private fun PlaybackCanvasV06(
     accent: androidx.compose.ui.graphics.Color
 ) {
     val endColor = MaterialTheme.colorScheme.error
-    var zoom by remember(points.firstOrNull()?.tripId) { mutableFloatStateOf(1f) }
-    var pan by remember(points.firstOrNull()?.tripId) { mutableStateOf(Offset.Zero) }
+    val viewportKey = points.firstOrNull()?.tripId
+    var zoom by remember(viewportKey) { mutableFloatStateOf(1f) }
+    var pan by remember(viewportKey) { mutableStateOf(Offset.Zero) }
+    val scope = rememberCoroutineScope()
     val viewportChanged = zoom > 1.001f || pan != Offset.Zero
+
+    fun animateBackToFullRoute() {
+        val startZoom = zoom
+        val startPan = pan
+        scope.launch {
+            animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            ) { fraction, _ ->
+                zoom = startZoom + (1f - startZoom) * fraction
+                pan = Offset(
+                    x = startPan.x * (1f - fraction),
+                    y = startPan.y * (1f - fraction)
+                )
+            }
+        }
+    }
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -296,7 +321,7 @@ private fun PlaybackCanvasV06(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (viewportChanged) {
-                TextButton(onClick = { zoom = 1f; pan = Offset.Zero }) {
+                TextButton(onClick = ::animateBackToFullRoute) {
                     Text("回到全程", style = MaterialTheme.typography.labelSmall)
                 }
             }
@@ -306,15 +331,23 @@ private fun PlaybackCanvasV06(
             Modifier
                 .fillMaxWidth()
                 .height(190.dp)
-                .pointerInput(points, zoom, pan) {
-                    detectTransformGestures(panZoomLock = true) { _, gesturePan, gestureZoom, _ ->
-                        val newZoom = (zoom * gestureZoom).coerceIn(1f, 6f)
+                .pointerInput(viewportKey) {
+                    detectTransformGestures(panZoomLock = true) { centroid, gesturePan, gestureZoom, _ ->
+                        val oldZoom = zoom.coerceAtLeast(1f)
+                        val newZoom = (oldZoom * gestureZoom).coerceIn(1f, 6f)
+                        val ratio = newZoom / oldZoom
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        val anchoredPan = Offset(
+                            x = centroid.x - center.x - (centroid.x - center.x - pan.x) * ratio,
+                            y = centroid.y - center.y - (centroid.y - center.y - pan.y) * ratio
+                        )
                         val maxPanX = size.width.toFloat() * (newZoom - 1f) * 0.5f
                         val maxPanY = size.height.toFloat() * (newZoom - 1f) * 0.5f
+
                         zoom = newZoom
                         pan = Offset(
-                            x = (pan.x + gesturePan.x).coerceIn(-maxPanX, maxPanX),
-                            y = (pan.y + gesturePan.y).coerceIn(-maxPanY, maxPanY)
+                            x = (anchoredPan.x + gesturePan.x).coerceIn(-maxPanX, maxPanX),
+                            y = (anchoredPan.y + gesturePan.y).coerceIn(-maxPanY, maxPanY)
                         )
                     }
                 }
