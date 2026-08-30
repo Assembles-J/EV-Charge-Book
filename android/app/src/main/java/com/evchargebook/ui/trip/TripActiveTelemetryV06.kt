@@ -1,6 +1,7 @@
 package com.evchargebook.ui.trip
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,13 +16,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -29,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.domain.trip.TripGeoPoint
+import com.evchargebook.domain.trip.TripRouteGeometry
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
@@ -105,7 +113,16 @@ internal fun TripActiveTelemetryV06(
                     Text("实时轨迹", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.weight(1f))
                     Text(
-                        if (geometry == null) "等待轨迹" else "${geometry.points.size} 点 · ${geometry.segments.size} 段",
+                        when {
+                            geometry == null -> "等待轨迹"
+                            speedSamples.isNotEmpty() -> String.format(
+                                Locale.US,
+                                "%.1f km/h · %d 点",
+                                speedSamples.last().value,
+                                geometry.points.size
+                            )
+                            else -> "${geometry.points.size} 点 · ${geometry.segments.size} 段"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -121,44 +138,7 @@ internal fun TripActiveTelemetryV06(
                         Text("不会用虚拟路线填充空白", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    Canvas(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(150.dp)
-                            .semantics {
-                                contentDescription = "当前真实行程轨迹；绿色播放标记为起点，轨迹断开表示 GPS 长缺口"
-                            }
-                    ) {
-                        val pad = 12.dp.toPx()
-                        val width = (size.width - pad * 2).coerceAtLeast(1f)
-                        val height = (size.height - pad * 2).coerceAtLeast(1f)
-                        fun offset(x: Float, y: Float) = Offset(pad + x * width, pad + y * height)
-
-                        geometry.segments.forEach { segment ->
-                            segment.zipWithNext().forEach { (from, to) ->
-                                drawLine(
-                                    color = accent.copy(alpha = 0.78f),
-                                    start = offset(from.x, from.y),
-                                    end = offset(to.x, to.y),
-                                    strokeWidth = 3.dp.toPx(),
-                                    cap = StrokeCap.Round
-                                )
-                            }
-                        }
-
-                        val start = geometry.points.first().let { offset(it.x, it.y) }
-                        val current = geometry.points.last().let { offset(it.x, it.y) }
-                        val marker = 7.dp.toPx()
-                        val triangle = Path().apply {
-                            moveTo(start.x - marker * .45f, start.y - marker)
-                            lineTo(start.x + marker, start.y)
-                            lineTo(start.x - marker * .45f, start.y + marker)
-                            close()
-                        }
-                        drawPath(triangle, accent)
-                        drawCircle(accent.copy(alpha = .22f), 6.dp.toPx(), current)
-                        drawCircle(accent, 3.dp.toPx(), current)
-                    }
+                    ActiveRouteCanvasV06(geometry = geometry, accent = accent)
                 }
 
                 if ((geometry?.gapCount ?: 0) > 0) {
@@ -186,6 +166,95 @@ internal fun TripActiveTelemetryV06(
                 modifier = Modifier.fillMaxWidth(),
                 emptyText = "暂无可信海拔"
             )
+        }
+    }
+}
+
+@Composable
+private fun ActiveRouteCanvasV06(
+    geometry: TripRouteGeometry,
+    accent: androidx.compose.ui.graphics.Color
+) {
+    var zoom by remember(geometry.points.size) { mutableFloatStateOf(1f) }
+    var pan by remember(geometry.points.size) { mutableStateOf(Offset.Zero) }
+    val viewportChanged = zoom > 1.001f || pan != Offset.Zero
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "双指缩放 · 拖动查看 · 轨迹越亮/越粗表示可信速度越高",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (viewportChanged) {
+                TextButton(onClick = { zoom = 1f; pan = Offset.Zero }) {
+                    Text("回到全程", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(170.dp)
+                .pointerInput(geometry, zoom, pan) {
+                    detectTransformGestures(panZoomLock = true) { _, gesturePan, gestureZoom, _ ->
+                        val newZoom = (zoom * gestureZoom).coerceIn(1f, 6f)
+                        val maxPanX = size.width.toFloat() * (newZoom - 1f) * 0.5f
+                        val maxPanY = size.height.toFloat() * (newZoom - 1f) * 0.5f
+                        zoom = newZoom
+                        pan = Offset(
+                            x = (pan.x + gesturePan.x).coerceIn(-maxPanX, maxPanX),
+                            y = (pan.y + gesturePan.y).coerceIn(-maxPanY, maxPanY)
+                        )
+                    }
+                }
+                .semantics {
+                    contentDescription = "可拖动缩放的当前真实行程轨迹；轨迹亮度和粗细表示可信速度，绿色标记为起点和当前点，断开表示 GPS 长缺口"
+                }
+        ) {
+            val pad = 12.dp.toPx()
+            val width = (size.width - pad * 2).coerceAtLeast(1f)
+            val height = (size.height - pad * 2).coerceAtLeast(1f)
+            val center = Offset(size.width / 2f, size.height / 2f)
+
+            fun offset(x: Float, y: Float): Offset {
+                val base = Offset(pad + x * width, pad + y * height)
+                return Offset(
+                    x = center.x + (base.x - center.x) * zoom + pan.x,
+                    y = center.y + (base.y - center.y) * zoom + pan.y
+                )
+            }
+
+            geometry.segments.forEach { segment ->
+                segment.zipWithNext().forEach { (from, to) ->
+                    val speedMps = to.speedMps ?: from.speedMps
+                    val normalized = speedMps?.let { (it * 3.6 / 120.0).toFloat().coerceIn(0f, 1f) } ?: 0f
+                    val alpha = if (speedMps == null) 0.32f else 0.45f + normalized * 0.5f
+                    val stroke = (2.5f + normalized * 2.0f).dp.toPx()
+                    drawLine(
+                        color = accent.copy(alpha = alpha),
+                        start = offset(from.x, from.y),
+                        end = offset(to.x, to.y),
+                        strokeWidth = stroke,
+                        cap = StrokeCap.Round
+                    )
+                }
+            }
+
+            val start = geometry.points.first().let { offset(it.x, it.y) }
+            val current = geometry.points.last().let { offset(it.x, it.y) }
+            val marker = 7.dp.toPx()
+            val triangle = Path().apply {
+                moveTo(start.x - marker * .45f, start.y - marker)
+                lineTo(start.x + marker, start.y)
+                lineTo(start.x - marker * .45f, start.y + marker)
+                close()
+            }
+            drawPath(triangle, accent)
+            drawCircle(accent.copy(alpha = .22f), 6.dp.toPx(), current)
+            drawCircle(accent, 3.dp.toPx(), current)
         }
     }
 }
