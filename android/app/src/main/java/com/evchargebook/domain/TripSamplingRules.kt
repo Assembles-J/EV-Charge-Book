@@ -14,7 +14,9 @@ object TripSamplingRules {
     const val MAX_IMPLIED_SPEED_MPS = 90.0
     const val MOVING_SPEED_MPS = 1.0
     const val MOVING_DISTANCE_METERS = 5.0
-    const val STATIONARY_STORE_INTERVAL_SECONDS = 15L
+    // Keep a short stationary heartbeat so active speed/stopped time does not look frozen,
+    // while still avoiding one Room write for every 1 Hz provider callback at a long stop.
+    const val STATIONARY_STORE_INTERVAL_SECONDS = 2L
 
     fun decide(
         deltaSeconds: Long,
