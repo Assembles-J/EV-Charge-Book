@@ -138,7 +138,11 @@ internal fun TripActiveTelemetryV06(
                         Text("不会用虚拟路线填充空白", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 } else {
-                    ActiveRouteCanvasV06(geometry = geometry, accent = accent)
+                    ActiveRouteCanvasV06(
+                        geometry = geometry,
+                        accent = accent,
+                        viewportKey = points.firstOrNull()?.tripId
+                    )
                 }
 
                 if ((geometry?.gapCount ?: 0) > 0) {
@@ -173,10 +177,11 @@ internal fun TripActiveTelemetryV06(
 @Composable
 private fun ActiveRouteCanvasV06(
     geometry: TripRouteGeometry,
-    accent: androidx.compose.ui.graphics.Color
+    accent: androidx.compose.ui.graphics.Color,
+    viewportKey: Long?
 ) {
-    var zoom by remember(geometry.points.size) { mutableFloatStateOf(1f) }
-    var pan by remember(geometry.points.size) { mutableStateOf(Offset.Zero) }
+    var zoom by remember(viewportKey) { mutableFloatStateOf(1f) }
+    var pan by remember(viewportKey) { mutableStateOf(Offset.Zero) }
     val viewportChanged = zoom > 1.001f || pan != Offset.Zero
 
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
