@@ -39,6 +39,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.evchargebook.data.entity.TripSessionEntity
+import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.location.AndroidGeocoderAddressResolver
 import com.evchargebook.ui.theme.EVDesignTokens
 import java.text.SimpleDateFormat
@@ -56,6 +57,8 @@ fun DashboardRecentTripCard(
         return
     }
 
+    val isActive = trip.status == TripStatus.RECORDING
+    val isInterrupted = trip.status == TripStatus.INTERRUPTED
     val context = androidx.compose.ui.platform.LocalContext.current
     val resolver = remember(context) { AndroidGeocoderAddressResolver(context) }
     var startAddress by remember(trip.id) { mutableStateOf<String?>(null) }
@@ -64,19 +67,33 @@ fun DashboardRecentTripCard(
 
     LaunchedEffect(
         trip.id,
+        trip.status,
         trip.startLatitude,
         trip.startLongitude,
-        trip.endLatitude,
-        trip.endLongitude
+        if (isActive) null else trip.endLatitude,
+        if (isActive) null else trip.endLongitude
     ) {
         resolving = true
         startAddress = resolveEndpoint(resolver, trip.startLatitude, trip.startLongitude)
         endAddress = when {
+            isActive -> null
             trip.endLatitude == null || trip.endLongitude == null -> null
             trip.startLatitude == trip.endLatitude && trip.startLongitude == trip.endLongitude -> startAddress
             else -> resolveEndpoint(resolver, trip.endLatitude, trip.endLongitude)
         }
         resolving = false
+    }
+
+    val statusText = when {
+        isActive -> "进行中"
+        isInterrupted -> "已中断"
+        else -> "已完成"
+    }
+    val statusColor = if (isInterrupted) MaterialTheme.colorScheme.error else EVDesignTokens.Energy.green
+    val endText = if (isActive) {
+        if (trip.endLatitude != null && trip.endLongitude != null) "当前位置 · 持续更新" else "等待当前位置"
+    } else {
+        endpointText(endAddress, trip.endLatitude, trip.endLongitude, resolving)
     }
 
     Surface(
@@ -93,7 +110,9 @@ fun DashboardRecentTripCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onOpenTrip(trip.id) }
+                    .clickable {
+                        if (trip.status == TripStatus.COMPLETED) onOpenTrip(trip.id) else onViewAll()
+                    }
                     .padding(top = 1.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
@@ -111,13 +130,13 @@ fun DashboardRecentTripCard(
                     )
                     Surface(
                         shape = CircleShape,
-                        color = EVDesignTokens.Energy.green.copy(alpha = 0.10f)
+                        color = statusColor.copy(alpha = 0.10f)
                     ) {
                         Text(
-                            "已完成",
+                            statusText,
                             modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = EVDesignTokens.Energy.green
+                            color = statusColor
                         )
                     }
                 }
@@ -135,9 +154,7 @@ fun DashboardRecentTripCard(
                         TripEndpointRow(
                             address = endpointText(startAddress, trip.startLatitude, trip.startLongitude, resolving)
                         )
-                        TripEndpointRow(
-                            address = endpointText(endAddress, trip.endLatitude, trip.endLongitude, resolving)
-                        )
+                        TripEndpointRow(address = endText)
                     }
                 }
 
@@ -153,7 +170,11 @@ fun DashboardRecentTripCard(
                     MetricSeparator()
                     TripMetric(formatConsumptionValue(trip.averageConsumptionKwhPer100Km), "kWh/100km", Modifier.weight(1.15f))
                     MetricSeparator()
-                    TripMetric(formatSocConsumed(trip.startSoc, trip.endSoc), "SOC", Modifier.weight(1f))
+                    TripMetric(
+                        value = if (isActive) trip.startSoc?.let { "$it%" } ?: "--" else formatSocConsumed(trip.startSoc, trip.endSoc),
+                        label = if (isActive) "起始SOC" else "SOC",
+                        modifier = Modifier.weight(1f)
+                    )
                 }
             }
         }
@@ -229,23 +250,22 @@ private fun TripEndpointRow(address: String) {
 
 @Composable
 private fun TripRouteRail() {
-    val markerColor = MaterialTheme.colorScheme.onSurfaceVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "起点",
-            tint = markerColor.copy(alpha = 0.92f),
+            tint = EVDesignTokens.Energy.green,
             modifier = Modifier.size(16.dp)
         )
         Box(
             Modifier
                 .size(width = 1.dp, height = 28.dp)
-                .background(markerColor.copy(alpha = 0.38f))
+                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
         )
         Icon(
             imageVector = Icons.Default.Flag,
-            contentDescription = "终点",
-            tint = markerColor.copy(alpha = 0.82f),
+            contentDescription = "终点或当前位置",
+            tint = MaterialTheme.colorScheme.error,
             modifier = Modifier.size(15.dp)
         )
     }
@@ -305,7 +325,7 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "完成第一段行程后，这里会显示距离、SOC 与可信的能耗估算。",
+                        "开始或完成第一段行程后，这里会显示当前进度、距离、SOC 与可信的能耗估算。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
