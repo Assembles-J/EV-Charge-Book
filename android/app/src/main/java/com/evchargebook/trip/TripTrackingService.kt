@@ -80,7 +80,6 @@ class TripTrackingService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
-            // Legacy/stale notification PendingIntents must never bypass the end-SOC completion flow.
             ACTION_STOP -> Unit
             ACTION_START -> {
                 val tripId = intent.getLongExtra(EXTRA_TRIP_ID, 0L)
@@ -191,8 +190,7 @@ class TripTrackingService : Service() {
             recordEvent(tripId, TripDiagnosticEventType.PROVIDER_DISABLED, provider = LocationManager.NETWORK_PROVIDER)
         }
 
-        val hasUsableProvider =
-            (fineGranted && gpsEnabled) || (coarseGranted && networkEnabled)
+        val hasUsableProvider = (fineGranted && gpsEnabled) || (coarseGranted && networkEnabled)
         if (!hasUsableProvider) {
             serviceScope.launch { interruptForRepair(tripId, TripTrackingRepairReason.LOCATION_PROVIDER_DISABLED) }
             return
@@ -206,9 +204,7 @@ class TripTrackingService : Service() {
                     val activeTripId = currentTripId ?: return@callback
                     lastCallbackAtEpochMillis = System.currentTimeMillis()
                     serviceScope.launch {
-                        pointMutex.withLock {
-                            handleLocation(activeTripId, location)
-                        }
+                        pointMutex.withLock { handleLocation(activeTripId, location) }
                     }
                 }
             }
@@ -345,7 +341,7 @@ class TripTrackingService : Service() {
 
         val newMovingSeconds = TripSamplingRules.movingSeconds(session.movingSeconds ?: 0, statsDeltaSeconds, decision.moving)
         val newStoppedSeconds = TripSamplingRules.stoppedSeconds(session.stoppedSeconds ?: 0, statsDeltaSeconds, decision.moving)
-        val newDistance = session.distanceMeters + trustedSegmentDistance
+        val newDistance = session.distanceMeters + if (decision.moving) trustedSegmentDistance else 0.0
         val altitude = location.altitude.takeIf { location.hasAltitude() }
 
         val point = TripPointEntity(

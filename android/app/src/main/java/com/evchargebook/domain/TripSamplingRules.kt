@@ -38,7 +38,14 @@ object TripSamplingRules {
             return TripSamplingDecision(false, false, "GPS 跳点")
         }
 
-        val moving = (reportedSpeedMps ?: 0.0) >= MOVING_SPEED_MPS || segmentDistanceMeters >= MOVING_DISTANCE_METERS
+        // When a trusted device speed is present, use it as the primary motion signal. This keeps
+        // several metres of normal stationary GNSS coordinate drift from turning a red-light stop
+        // into fake movement. Distance remains the fallback only when no trusted speed is present.
+        val moving = if (reportedSpeedMps != null) {
+            reportedSpeedMps >= MOVING_SPEED_MPS
+        } else {
+            segmentDistanceMeters >= MOVING_DISTANCE_METERS
+        }
         if (!moving && deltaSeconds in 1 until STATIONARY_STORE_INTERVAL_SECONDS) {
             return TripSamplingDecision(false, false, "静止降频")
         }
