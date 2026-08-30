@@ -1,6 +1,8 @@
 package com.evchargebook.ui.trip
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -10,14 +12,25 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.evchargebook.ui.theme.EVDesignTokens
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.max
 
 internal data class TripTrendSampleV06(
@@ -26,8 +39,11 @@ internal data class TripTrendSampleV06(
 )
 
 /**
- * Lightweight Compose-native trend plot used by active and completed Trip surfaces.
- * Text values remain authoritative; the chart never smooths or bridges long GPS gaps.
+ * Interactive Compose-native trend plot used by active and completed Trip surfaces.
+ *
+ * The chart renders persisted samples only, never smooths across missing data and never bridges
+ * long GPS gaps. Horizontal pan / pinch zoom only change the viewport; tapping resolves to the
+ * nearest real sample.
  */
 @Composable
 internal fun TripTrendPlotV06(
@@ -40,19 +56,52 @@ internal fun TripTrendPlotV06(
 
     val accent = EVDesignTokens.Energy.green
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
-    val minValue = samples.minOf { it.value }
-    val maxValue = samples.maxOf { it.value }
-    val valueRange = max(1.0, maxValue - minValue)
-    val midValue = minValue + valueRange / 2.0
     val minTime = samples.first().timestamp
     val maxTime = samples.last().timestamp
     val timeRangeMs = max(1L, maxTime - minTime)
-    val midElapsedMs = timeRangeMs / 2
+
+    var zoom by remember(samples) { mutableFloatStateOf(1f) }
+    var viewportStartFraction by remember(samples) { mutableFloatStateOf(0f) }
+    var selectedTimestamp by remember(samples) { mutableStateOf<Long?>(null) }
+
+    val visibleFraction = (1f / zoom).coerceIn(0.125f, 1f)
+    val maxViewportStart = (1f - visibleFraction).coerceAtLeast(0f)
+    val clampedStartFraction = viewportStartFraction.coerceIn(0f, maxViewportStart)
+    val visibleStartTime = minTime + (timeRangeMs * clampedStartFraction).toLong()
+    val visibleEndTime = minTime + (timeRangeMs * (clampedStartFraction + visibleFraction)).toLong()
+    val visibleValueSamples = samples.filter { it.timestamp in visibleStartTime..visibleEndTime }.ifEmpty { samples }
+
+    val minValue = visibleValueSamples.minOf { it.value }
+    val maxValue = visibleValueSamples.maxOf { it.value }
+    val valueRange = max(1.0, maxValue - minValue)
+    val midValue = minValue + valueRange / 2.0
+    val selectedSample = selectedTimestamp?.let { timestamp -> samples.minByOrNull { abs(it.timestamp - timestamp) } }
+    val viewportChanged = zoom > 1.001f || clampedStartFraction > 0.001f
 
     Column(modifier = modifier.fillMaxWidth()) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(
+                text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, minTime, unit) }
+                    ?: "拖动/缩放查看 · 点击读取真实点",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+            if (viewportChanged) {
+                TextButton(
+                    onClick = {
+                        zoom = 1f
+                        viewportStartFraction = 0f
+                    }
+                ) {
+                    Text("全程", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.width(44.dp).height(76.dp),
+                modifier = Modifier.width(44.dp).height(104.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 AxisValue(formatTripTrendAxisValue(maxValue, unit))
@@ -60,9 +109,40 @@ internal fun TripTrendPlotV06(
                 AxisValue(formatTripTrendAxisValue(minValue, unit))
             }
 
-            Canvas(Modifier.weight(1f).height(76.dp)) {
+            Canvas(
+                Modifier
+                    .weight(1f)
+                    .height(104.dp)
+                    .pointerInput(samples, zoom, clampedStartFraction) {
+                        detectTransformGestures(panZoomLock = true) { centroid, pan, gestureZoom, _ ->
+                            val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
+                            val oldZoom = zoom
+                            val oldVisible = (1f / oldZoom).coerceIn(0.125f, 1f)
+                            val newZoom = (oldZoom * gestureZoom).coerceIn(1f, 8f)
+                            val newVisible = (1f / newZoom).coerceIn(0.125f, 1f)
+                            val focus = (centroid.x / canvasWidth).coerceIn(0f, 1f)
+                            val focusGlobal = viewportStartFraction + focus * oldVisible
+                            val panShift = (pan.x / canvasWidth) * newVisible
+                            val newMaxStart = (1f - newVisible).coerceAtLeast(0f)
+
+                            zoom = newZoom
+                            viewportStartFraction = (focusGlobal - focus * newVisible - panShift)
+                                .coerceIn(0f, newMaxStart)
+                        }
+                    }
+                    .pointerInput(samples, zoom, clampedStartFraction) {
+                        detectTapGestures { tap ->
+                            val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
+                            val localFraction = (tap.x / canvasWidth).coerceIn(0f, 1f)
+                            val globalFraction = clampedStartFraction + localFraction * visibleFraction
+                            val targetTimestamp = minTime + (timeRangeMs * globalFraction).toLong()
+                            selectedTimestamp = samples.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
+                        }
+                    }
+            ) {
                 val padY = 5.dp.toPx()
                 val usableHeight = (size.height - padY * 2).coerceAtLeast(1f)
+                val visibleDurationMs = max(1L, visibleEndTime - visibleStartTime)
 
                 listOf(0f, 0.5f, 1f).forEach { fraction ->
                     val y = padY + fraction * usableHeight
@@ -75,13 +155,15 @@ internal fun TripTrendPlotV06(
                 }
 
                 fun point(sample: TripTrendSampleV06): Offset {
-                    val x = ((sample.timestamp - minTime).toDouble() / timeRangeMs.toDouble()).toFloat() * size.width
+                    val x = ((sample.timestamp - visibleStartTime).toDouble() / visibleDurationMs.toDouble()).toFloat() * size.width
                     val normalized = ((sample.value - minValue) / valueRange).toFloat().coerceIn(0f, 1f)
                     return Offset(x, padY + (1f - normalized) * usableHeight)
                 }
 
                 samples.zipWithNext().forEach { (from, to) ->
-                    if (to.timestamp - from.timestamp <= longGapMs) {
+                    if (to.timestamp - from.timestamp <= longGapMs &&
+                        to.timestamp >= visibleStartTime && from.timestamp <= visibleEndTime
+                    ) {
                         drawLine(
                             color = accent.copy(alpha = 0.82f),
                             start = point(from),
@@ -90,6 +172,18 @@ internal fun TripTrendPlotV06(
                             cap = StrokeCap.Round
                         )
                     }
+                }
+
+                selectedSample?.takeIf { it.timestamp in visibleStartTime..visibleEndTime }?.let { sample ->
+                    val selected = point(sample)
+                    drawLine(
+                        color = gridColor.copy(alpha = 0.75f),
+                        start = Offset(selected.x, 0f),
+                        end = Offset(selected.x, size.height),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawCircle(accent.copy(alpha = 0.22f), radius = 6.dp.toPx(), center = selected)
+                    drawCircle(accent, radius = 3.dp.toPx(), center = selected)
                 }
             }
         }
@@ -100,9 +194,9 @@ internal fun TripTrendPlotV06(
                 modifier = Modifier.weight(1f),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                AxisTime("0s", TextAlign.Start)
-                AxisTime(formatTripTrendElapsed(midElapsedMs), TextAlign.Center)
-                AxisTime(formatTripTrendElapsed(timeRangeMs), TextAlign.End)
+                AxisTime(formatTripTrendElapsed(visibleStartTime - minTime), TextAlign.Start)
+                AxisTime(formatTripTrendElapsed((visibleStartTime + visibleEndTime) / 2 - minTime), TextAlign.Center)
+                AxisTime(formatTripTrendElapsed(visibleEndTime - minTime), TextAlign.End)
             }
         }
     }
@@ -126,6 +220,19 @@ private fun AxisTime(value: String, align: TextAlign) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = align
     )
+}
+
+private fun formatSelectedTrendSample(sample: TripTrendSampleV06, tripStart: Long, unit: String): String {
+    val elapsed = formatTripTrendElapsed(sample.timestamp - tripStart)
+    val clock = DateTimeFormatter.ofPattern("HH:mm:ss")
+        .withZone(ZoneId.systemDefault())
+        .format(Instant.ofEpochMilli(sample.timestamp))
+    val value = when (unit) {
+        "km/h" -> String.format(Locale.US, "%.1f km/h", sample.value)
+        "m" -> String.format(Locale.US, "%.1f m", sample.value)
+        else -> String.format(Locale.US, "%.2f %s", sample.value, unit)
+    }
+    return "T+$elapsed · $clock · $value"
 }
 
 private fun formatTripTrendAxisValue(value: Double, unit: String): String =
