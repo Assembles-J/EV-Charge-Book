@@ -32,7 +32,8 @@ object TripSpeedTrustRules {
         speedAccuracyMps: Double?
     ): Boolean {
         if (reportedSpeedMps == null || !reportedSpeedMps.isFinite() || reportedSpeedMps < 0.0) return false
-        if (!provider.equals("gps", ignoreCase = true)) return false
+        val trustedProvider = provider.equals("gps", ignoreCase = true) || provider.equals("fused", ignoreCase = true)
+        if (!trustedProvider) return false
 
         val horizontalAccuracy = horizontalAccuracyMeters ?: return false
         if (!horizontalAccuracy.isFinite() || horizontalAccuracy < 0.0 || horizontalAccuracy > MAX_TRUSTED_HORIZONTAL_ACCURACY_METERS) {
