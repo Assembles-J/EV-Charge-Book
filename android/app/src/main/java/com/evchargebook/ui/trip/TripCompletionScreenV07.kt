@@ -1,8 +1,12 @@
 package com.evchargebook.ui.trip
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -37,6 +42,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,6 +57,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
@@ -60,6 +68,8 @@ import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 
 /**
  * Trip v0.7 completion surface.
@@ -313,52 +323,88 @@ private fun CompactSocWheelV07(
     modifier: Modifier = Modifier
 ) {
     val accent = EVDesignTokens.Energy.green
-    val thresholdPx = with(LocalDensity.current) { 24.dp.toPx() }
-    var accumulatedDrag by remember(value) { mutableFloatStateOf(0f) }
-    val previous = (value - 1).coerceAtLeast(0)
-    val next = (value + 1).coerceAtMost(100)
+    val stepPx = with(LocalDensity.current) { 34.dp.toPx() }
+    val scope = rememberCoroutineScope()
+    val currentValue by rememberUpdatedState(value)
+    val currentOnValueChange by rememberUpdatedState(onValueChange)
+    var dragOffsetPx by remember { mutableFloatStateOf(0f) }
+
+    fun settle(snapToNearest: Boolean) {
+        val startOffset = dragOffsetPx
+        if (snapToNearest && abs(startOffset) >= stepPx * 0.45f) {
+            val targetValue = if (startOffset > 0f) currentValue - 1 else currentValue + 1
+            val clamped = targetValue.coerceIn(0, 100)
+            if (clamped != currentValue) {
+                currentOnValueChange(clamped)
+                dragOffsetPx = startOffset + if (startOffset > 0f) -stepPx else stepPx
+            }
+        }
+        val settleFrom = dragOffsetPx
+        scope.launch {
+            animate(
+                initialValue = settleFrom,
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 150, easing = FastOutSlowInEasing)
+            ) { animated, _ -> dragOffsetPx = animated }
+        }
+    }
 
     Column(
         modifier = modifier
             .semantics { contentDescription = "$label $value%，上下滑动调整" }
-            .pointerInput(value) {
+            .pointerInput(Unit) {
                 detectVerticalDragGestures(
                     onVerticalDrag = { change, dragAmount ->
                         change.consume()
-                        accumulatedDrag += dragAmount
-                        if (abs(accumulatedDrag) >= thresholdPx) {
-                            val newValue = if (accumulatedDrag > 0f) value - 1 else value + 1
-                            onValueChange(newValue.coerceIn(0, 100))
-                            accumulatedDrag = 0f
+                        var offset = dragOffsetPx + dragAmount
+                        val steps = (abs(offset) / stepPx).toInt()
+                        if (steps > 0) {
+                            val direction = if (offset > 0f) -1 else 1
+                            val target = (currentValue + direction * steps).coerceIn(0, 100)
+                            val consumedSteps = abs(target - currentValue)
+                            if (consumedSteps > 0) {
+                                currentOnValueChange(target)
+                                offset += if (offset > 0f) -stepPx * consumedSteps else stepPx * consumedSteps
+                            }
                         }
+                        dragOffsetPx = offset.coerceIn(-stepPx, stepPx)
                     },
-                    onDragEnd = { accumulatedDrag = 0f },
-                    onDragCancel = { accumulatedDrag = 0f }
+                    onDragEnd = { settle(snapToNearest = true) },
+                    onDragCancel = { settle(snapToNearest = false) }
                 )
             }
             .padding(horizontal = 4.dp, vertical = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(1.dp)
+        verticalArrangement = Arrangement.spacedBy(3.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(
-            if (value > 0) previous.toString() else "",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .42f)
-        )
-        Surface(shape = MaterialTheme.shapes.medium, color = accent.copy(alpha = .10f)) {
-            Text(
-                "$value%",
-                modifier = Modifier.padding(horizontal = 18.dp, vertical = 7.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = accent
-            )
+        Box(modifier = Modifier.fillMaxWidth().height(102.dp), contentAlignment = Alignment.Center) {
+            Surface(
+                modifier = Modifier.fillMaxWidth().height(38.dp),
+                shape = MaterialTheme.shapes.medium,
+                color = accent.copy(alpha = .10f)
+            ) {}
+            Column(
+                modifier = Modifier.offset { IntOffset(0, dragOffsetPx.roundToInt()) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                SocWheelValueV07((value - 1).takeIf { it >= 0 }, selected = false, accent = accent)
+                SocWheelValueV07(value, selected = true, accent = accent)
+                SocWheelValueV07((value + 1).takeIf { it <= 100 }, selected = false, accent = accent)
+            }
         }
+    }
+}
+
+@Composable
+private fun SocWheelValueV07(value: Int?, selected: Boolean, accent: Color) {
+    Box(modifier = Modifier.height(34.dp), contentAlignment = Alignment.Center) {
         Text(
-            if (value < 100) next.toString() else "",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .42f)
+            text = value?.let { if (selected) "$it%" else it.toString() } ?: "",
+            style = if (selected) MaterialTheme.typography.titleMedium else MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .48f)
         )
     }
 }
