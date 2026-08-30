@@ -1,6 +1,7 @@
 package com.evchargebook.ui.trip
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -42,8 +44,8 @@ internal data class TripTrendSampleV06(
  * Interactive Compose-native trend plot used by active and completed Trip surfaces.
  *
  * The chart renders persisted samples only, never smooths across missing data and never bridges
- * long GPS gaps. Horizontal pan / pinch zoom only change the viewport; tapping resolves to the
- * nearest real sample.
+ * long GPS gaps. Two-finger pan / pinch zoom only change the viewport; tap or long-press drag
+ * resolves continuously to the nearest real sample.
  */
 @Composable
 internal fun TripTrendPlotV06(
@@ -59,10 +61,11 @@ internal fun TripTrendPlotV06(
     val minTime = samples.first().timestamp
     val maxTime = samples.last().timestamp
     val timeRangeMs = max(1L, maxTime - minTime)
+    val viewportKey = samples.first().timestamp
 
-    var zoom by remember(samples) { mutableFloatStateOf(1f) }
-    var viewportStartFraction by remember(samples) { mutableFloatStateOf(0f) }
-    var selectedTimestamp by remember(samples) { mutableStateOf<Long?>(null) }
+    var zoom by remember(viewportKey) { mutableFloatStateOf(1f) }
+    var viewportStartFraction by remember(viewportKey) { mutableFloatStateOf(0f) }
+    var selectedTimestamp by remember(viewportKey) { mutableStateOf<Long?>(null) }
 
     val visibleFraction = (1f / zoom).coerceIn(0.125f, 1f)
     val maxViewportStart = (1f - visibleFraction).coerceAtLeast(0f)
@@ -78,11 +81,15 @@ internal fun TripTrendPlotV06(
     val selectedSample = selectedTimestamp?.let { timestamp -> samples.minByOrNull { abs(it.timestamp - timestamp) } }
     val viewportChanged = zoom > 1.001f || clampedStartFraction > 0.001f
 
+    val currentSamples by rememberUpdatedState(samples)
+    val currentVisibleFraction by rememberUpdatedState(visibleFraction)
+    val currentStartFraction by rememberUpdatedState(clampedStartFraction)
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, minTime, unit) }
-                    ?: "拖动/缩放查看 · 点击读取真实点",
+                    ?: "双指平移/缩放 · 点按或长按拖动读点",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
@@ -113,7 +120,7 @@ internal fun TripTrendPlotV06(
                 Modifier
                     .weight(1f)
                     .height(104.dp)
-                    .pointerInput(samples, zoom, clampedStartFraction) {
+                    .pointerInput(viewportKey) {
                         detectTransformGestures(panZoomLock = true) { centroid, pan, gestureZoom, _ ->
                             val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
                             val oldZoom = zoom
@@ -130,14 +137,41 @@ internal fun TripTrendPlotV06(
                                 .coerceIn(0f, newMaxStart)
                         }
                     }
-                    .pointerInput(samples, zoom, clampedStartFraction) {
-                        detectTapGestures { tap ->
+                    .pointerInput(viewportKey) {
+                        fun selectNearestAt(x: Float) {
+                            val sampleList = currentSamples
+                            if (sampleList.isEmpty()) return
                             val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
-                            val localFraction = (tap.x / canvasWidth).coerceIn(0f, 1f)
-                            val globalFraction = clampedStartFraction + localFraction * visibleFraction
-                            val targetTimestamp = minTime + (timeRangeMs * globalFraction).toLong()
-                            selectedTimestamp = samples.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
+                            val localFraction = (x / canvasWidth).coerceIn(0f, 1f)
+                            val globalFraction = currentStartFraction + localFraction * currentVisibleFraction
+                            val currentMinTime = sampleList.first().timestamp
+                            val currentRangeMs = max(1L, sampleList.last().timestamp - currentMinTime)
+                            val targetTimestamp = currentMinTime + (currentRangeMs * globalFraction).toLong()
+                            selectedTimestamp = sampleList.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
                         }
+
+                        detectTapGestures { tap -> selectNearestAt(tap.x) }
+                    }
+                    .pointerInput(viewportKey) {
+                        fun selectNearestAt(x: Float) {
+                            val sampleList = currentSamples
+                            if (sampleList.isEmpty()) return
+                            val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
+                            val localFraction = (x / canvasWidth).coerceIn(0f, 1f)
+                            val globalFraction = currentStartFraction + localFraction * currentVisibleFraction
+                            val currentMinTime = sampleList.first().timestamp
+                            val currentRangeMs = max(1L, sampleList.last().timestamp - currentMinTime)
+                            val targetTimestamp = currentMinTime + (currentRangeMs * globalFraction).toLong()
+                            selectedTimestamp = sampleList.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
+                        }
+
+                        detectDragGesturesAfterLongPress(
+                            onDragStart = { start -> selectNearestAt(start.x) },
+                            onDrag = { change, _ ->
+                                change.consume()
+                                selectNearestAt(change.position.x)
+                            }
+                        )
                     }
             ) {
                 val padY = 5.dp.toPx()
