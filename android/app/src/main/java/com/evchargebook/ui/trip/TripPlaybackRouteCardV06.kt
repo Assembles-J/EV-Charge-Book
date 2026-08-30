@@ -2,6 +2,7 @@ package com.evchargebook.ui.trip
 
 import android.os.SystemClock
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +38,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,7 @@ import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.TripPlaybackFrame
 import com.evchargebook.domain.TripPlaybackSample
 import com.evchargebook.domain.TripPlaybackTimeline
+import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.domain.trip.TripGeoPoint
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
@@ -85,7 +88,7 @@ internal fun TripPlaybackRouteCardV06(
                     latitude = it.latitude,
                     longitude = it.longitude,
                     capturedAtEpochMillis = it.capturedAtEpochMillis,
-                    speedMps = it.speedMps
+                    speedMps = trustedPlaybackSpeed(it)
                 )
             }
         )
@@ -101,6 +104,10 @@ internal fun TripPlaybackRouteCardV06(
     val frame = remember(samples, elapsedMillis) {
         TripPlaybackTimeline.frameAt(samples, elapsedMillis)
     }
+    val currentTrustedSpeedKph = frame
+        ?.let { playbackPoints.getOrNull(it.currentSampleIndex) }
+        ?.let(::trustedPlaybackSpeed)
+        ?.times(3.6)
 
     LaunchedEffect(playing, speed, totalMillis) {
         if (!playing || totalMillis <= 0L) return@LaunchedEffect
@@ -139,7 +146,11 @@ internal fun TripPlaybackRouteCardV06(
                         when {
                             !playable -> "当前轨迹不足以进行可信回放"
                             playbackMode && frame?.isLongGap == true -> "GPS 缺口 · 保持最后真实定位点"
-                            playbackMode -> "${formatPlaybackTime(elapsedMillis)} / ${formatPlaybackTime(totalMillis)} · ${formatPlaybackSpeed(speed)}"
+                            playbackMode -> listOfNotNull(
+                                "${formatPlaybackTime(elapsedMillis)} / ${formatPlaybackTime(totalMillis)}",
+                                formatPlaybackSpeed(speed),
+                                currentTrustedSpeedKph?.let { String.format(Locale.US, "%.1f km/h", it) }
+                            ).joinToString(" · ")
                             else -> "${playbackPoints.size} 个 GPS 点 · 按真实时间推进"
                         },
                         style = MaterialTheme.typography.labelSmall,
@@ -272,114 +283,172 @@ private fun PlaybackCanvasV06(
     accent: androidx.compose.ui.graphics.Color
 ) {
     val endColor = MaterialTheme.colorScheme.error
-    Canvas(
-        Modifier
-            .fillMaxWidth()
-            .height(170.dp)
-            .semantics {
-                contentDescription = if (frame?.isLongGap == true) {
-                    "行程轨迹回放；当前处于 GPS 缺口，车辆位置保持在最后真实定位点"
-                } else {
-                    "行程轨迹回放；移动标记沿真实定位时间推进"
+    var zoom by remember(points.firstOrNull()?.tripId) { mutableFloatStateOf(1f) }
+    var pan by remember(points.firstOrNull()?.tripId) { mutableStateOf(Offset.Zero) }
+    val viewportChanged = zoom > 1.001f || pan != Offset.Zero
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "双指缩放 · 拖动查看 · 轨迹越亮/越粗表示可信速度越高",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (viewportChanged) {
+                TextButton(onClick = { zoom = 1f; pan = Offset.Zero }) {
+                    Text("回到全程", style = MaterialTheme.typography.labelSmall)
                 }
             }
-    ) {
-        if (points.isEmpty()) return@Canvas
-        val pad = 12.dp.toPx()
-        val width = (size.width - pad * 2).coerceAtLeast(1f)
-        val height = (size.height - pad * 2).coerceAtLeast(1f)
-        val latSpan = (maxLatitude - minLatitude).takeIf { it > 0.0 } ?: 1.0
-        val lonSpan = (maxLongitude - minLongitude).takeIf { it > 0.0 } ?: 1.0
-        val startTime = points.first().capturedAtEpochMillis
-        val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
-
-        fun project(latitude: Double, longitude: Double): Offset {
-            val x = ((longitude - minLongitude) / lonSpan).toFloat().coerceIn(0f, 1f)
-            val y = (1.0 - (latitude - minLatitude) / latSpan).toFloat().coerceIn(0f, 1f)
-            return Offset(pad + x * width, pad + y * height)
         }
 
-        points.zipWithNext().forEach { (from, to) ->
-            val delta = to.capturedAtEpochMillis - from.capturedAtEpochMillis
-            if (delta <= 0L || delta >= longGapMillis) return@forEach
-            val start = project(from.latitude, from.longitude)
-            val end = project(to.latitude, to.longitude)
-            drawLine(
-                color = accent.copy(alpha = .18f),
-                start = start,
-                end = end,
-                strokeWidth = 3.dp.toPx(),
-                cap = StrokeCap.Round
-            )
+        Canvas(
+            Modifier
+                .fillMaxWidth()
+                .height(190.dp)
+                .pointerInput(points, zoom, pan) {
+                    detectTransformGestures(panZoomLock = true) { _, gesturePan, gestureZoom, _ ->
+                        val newZoom = (zoom * gestureZoom).coerceIn(1f, 6f)
+                        val maxPanX = size.width.toFloat() * (newZoom - 1f) * 0.5f
+                        val maxPanY = size.height.toFloat() * (newZoom - 1f) * 0.5f
+                        zoom = newZoom
+                        pan = Offset(
+                            x = (pan.x + gesturePan.x).coerceIn(-maxPanX, maxPanX),
+                            y = (pan.y + gesturePan.y).coerceIn(-maxPanY, maxPanY)
+                        )
+                    }
+                }
+                .semantics {
+                    contentDescription = if (frame?.isLongGap == true) {
+                        "可拖动缩放的行程轨迹回放；当前处于 GPS 缺口，车辆位置保持在最后真实定位点"
+                    } else {
+                        "可拖动缩放的行程轨迹回放；轨迹亮度和粗细表示可信速度，移动标记沿真实定位时间推进"
+                    }
+                }
+        ) {
+            if (points.isEmpty()) return@Canvas
+            val pad = 12.dp.toPx()
+            val width = (size.width - pad * 2).coerceAtLeast(1f)
+            val height = (size.height - pad * 2).coerceAtLeast(1f)
+            val latSpan = (maxLatitude - minLatitude).takeIf { it > 0.0 } ?: 1.0
+            val lonSpan = (maxLongitude - minLongitude).takeIf { it > 0.0 } ?: 1.0
+            val startTime = points.first().capturedAtEpochMillis
+            val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
+            val center = Offset(size.width / 2f, size.height / 2f)
 
-            val fromElapsed = (from.capturedAtEpochMillis - startTime).coerceAtLeast(0L)
-            val toElapsed = (to.capturedAtEpochMillis - startTime).coerceAtLeast(fromElapsed)
-            when {
-                elapsedMillis >= toElapsed -> drawLine(
-                    color = accent.copy(alpha = .82f),
+            fun project(latitude: Double, longitude: Double): Offset {
+                val x = ((longitude - minLongitude) / lonSpan).toFloat().coerceIn(0f, 1f)
+                val y = (1.0 - (latitude - minLatitude) / latSpan).toFloat().coerceIn(0f, 1f)
+                val base = Offset(pad + x * width, pad + y * height)
+                return Offset(
+                    x = center.x + (base.x - center.x) * zoom + pan.x,
+                    y = center.y + (base.y - center.y) * zoom + pan.y
+                )
+            }
+
+            fun segmentStyle(from: TripPointEntity, to: TripPointEntity): Pair<androidx.compose.ui.graphics.Color, Float> {
+                val speedMps = trustedPlaybackSpeed(to) ?: trustedPlaybackSpeed(from)
+                val normalized = speedMps?.let { (it * 3.6 / 120.0).toFloat().coerceIn(0f, 1f) } ?: 0f
+                val alpha = if (speedMps == null) 0.32f else 0.45f + normalized * 0.5f
+                val stroke = (2.5f + normalized * 2.0f).dp.toPx()
+                return accent.copy(alpha = alpha) to stroke
+            }
+
+            points.zipWithNext().forEach { (from, to) ->
+                val delta = to.capturedAtEpochMillis - from.capturedAtEpochMillis
+                if (delta <= 0L || delta >= longGapMillis) return@forEach
+                val start = project(from.latitude, from.longitude)
+                val end = project(to.latitude, to.longitude)
+                val (segmentColor, segmentStroke) = segmentStyle(from, to)
+                drawLine(
+                    color = segmentColor.copy(alpha = segmentColor.alpha * .30f),
                     start = start,
                     end = end,
-                    strokeWidth = 3.dp.toPx(),
+                    strokeWidth = segmentStroke,
                     cap = StrokeCap.Round
                 )
 
-                elapsedMillis > fromElapsed && toElapsed > fromElapsed -> {
-                    val fraction = ((elapsedMillis - fromElapsed).toDouble() / (toElapsed - fromElapsed).toDouble())
-                        .coerceIn(0.0, 1.0)
-                    val partial = Offset(
-                        x = start.x + (end.x - start.x) * fraction.toFloat(),
-                        y = start.y + (end.y - start.y) * fraction.toFloat()
-                    )
-                    drawLine(
-                        color = accent.copy(alpha = .82f),
+                val fromElapsed = (from.capturedAtEpochMillis - startTime).coerceAtLeast(0L)
+                val toElapsed = (to.capturedAtEpochMillis - startTime).coerceAtLeast(fromElapsed)
+                when {
+                    elapsedMillis >= toElapsed -> drawLine(
+                        color = segmentColor,
                         start = start,
-                        end = partial,
-                        strokeWidth = 3.dp.toPx(),
+                        end = end,
+                        strokeWidth = segmentStroke,
                         cap = StrokeCap.Round
                     )
+
+                    elapsedMillis > fromElapsed && toElapsed > fromElapsed -> {
+                        val fraction = ((elapsedMillis - fromElapsed).toDouble() / (toElapsed - fromElapsed).toDouble())
+                            .coerceIn(0.0, 1.0)
+                        val partial = Offset(
+                            x = start.x + (end.x - start.x) * fraction.toFloat(),
+                            y = start.y + (end.y - start.y) * fraction.toFloat()
+                        )
+                        drawLine(
+                            color = segmentColor,
+                            start = start,
+                            end = partial,
+                            strokeWidth = segmentStroke,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+            }
+
+            val startPoint = project(points.first().latitude, points.first().longitude)
+            val endPoint = project(points.last().latitude, points.last().longitude)
+            val markerSize = 6.dp.toPx()
+            val startTriangle = Path().apply {
+                moveTo(startPoint.x - markerSize * .45f, startPoint.y - markerSize)
+                lineTo(startPoint.x + markerSize, startPoint.y)
+                lineTo(startPoint.x - markerSize * .45f, startPoint.y + markerSize)
+                close()
+            }
+            drawPath(startTriangle, accent)
+
+            val poleHeight = 13.dp.toPx()
+            val flagWidth = 9.dp.toPx()
+            val flagHeight = 6.dp.toPx()
+            drawLine(endColor, endPoint, Offset(endPoint.x, endPoint.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
+            val flag = Path().apply {
+                moveTo(endPoint.x, endPoint.y - poleHeight)
+                lineTo(endPoint.x + flagWidth, endPoint.y - poleHeight)
+                lineTo(endPoint.x + flagWidth, endPoint.y - poleHeight + flagHeight)
+                lineTo(endPoint.x, endPoint.y - poleHeight + flagHeight)
+                close()
+            }
+            drawPath(flag, endColor)
+
+            frame?.let { current ->
+                val currentOffset = project(current.latitude, current.longitude)
+                val direction = current.bearingDegrees?.takeIf { it.isFinite() }?.toFloat() ?: 0f
+                val vehicleSize = 7.dp.toPx()
+                val vehicle = Path().apply {
+                    moveTo(currentOffset.x, currentOffset.y - vehicleSize)
+                    lineTo(currentOffset.x + vehicleSize * .68f, currentOffset.y + vehicleSize * .65f)
+                    lineTo(currentOffset.x, currentOffset.y + vehicleSize * .30f)
+                    lineTo(currentOffset.x - vehicleSize * .68f, currentOffset.y + vehicleSize * .65f)
+                    close()
+                }
+                rotate(degrees = direction, pivot = currentOffset) {
+                    drawPath(vehicle, accent)
                 }
             }
         }
+    }
+}
 
-        val startPoint = project(points.first().latitude, points.first().longitude)
-        val endPoint = project(points.last().latitude, points.last().longitude)
-        val markerSize = 6.dp.toPx()
-        val startTriangle = Path().apply {
-            moveTo(startPoint.x - markerSize * .45f, startPoint.y - markerSize)
-            lineTo(startPoint.x + markerSize, startPoint.y)
-            lineTo(startPoint.x - markerSize * .45f, startPoint.y + markerSize)
-            close()
-        }
-        drawPath(startTriangle, accent)
-
-        val poleHeight = 13.dp.toPx()
-        val flagWidth = 9.dp.toPx()
-        val flagHeight = 6.dp.toPx()
-        drawLine(endColor, endPoint, Offset(endPoint.x, endPoint.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
-        val flag = Path().apply {
-            moveTo(endPoint.x, endPoint.y - poleHeight)
-            lineTo(endPoint.x + flagWidth, endPoint.y - poleHeight)
-            lineTo(endPoint.x + flagWidth, endPoint.y - poleHeight + flagHeight)
-            lineTo(endPoint.x, endPoint.y - poleHeight + flagHeight)
-            close()
-        }
-        drawPath(flag, endColor)
-
-        frame?.let { current ->
-            val currentOffset = project(current.latitude, current.longitude)
-            val direction = current.bearingDegrees?.takeIf { it.isFinite() }?.toFloat() ?: 0f
-            val vehicleSize = 7.dp.toPx()
-            val vehicle = Path().apply {
-                moveTo(currentOffset.x, currentOffset.y - vehicleSize)
-                lineTo(currentOffset.x + vehicleSize * .68f, currentOffset.y + vehicleSize * .65f)
-                lineTo(currentOffset.x, currentOffset.y + vehicleSize * .30f)
-                lineTo(currentOffset.x - vehicleSize * .68f, currentOffset.y + vehicleSize * .65f)
-                close()
-            }
-            rotate(degrees = direction, pivot = currentOffset) {
-                drawPath(vehicle, accent)
-            }
-        }
+private fun trustedPlaybackSpeed(point: TripPointEntity): Double? {
+    val value = point.speedMps ?: return null
+    return value.takeIf {
+        TripSpeedTrustRules.eligibleForMeasuredSpeed(
+            reportedSpeedMps = value,
+            provider = point.provider,
+            horizontalAccuracyMeters = point.horizontalAccuracyMeters,
+            speedAccuracyMps = point.speedAccuracyMps
+        )
     }
 }
 
