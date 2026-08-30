@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.domain.TripSpeedTrustRules
+import com.evchargebook.domain.trip.TripElevationAnalytics
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 
@@ -30,8 +31,8 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
         }
     }
     val altitudeSamples = remember(points) {
-        points.mapNotNull { point ->
-            trustedDetailAltitudeV06(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it) }
+        TripElevationAnalytics.filteredSeries(points).map { sample ->
+            TripTrendSampleV06(sample.capturedAtEpochMillis, sample.altitudeMeters)
         }
     }
 
@@ -53,7 +54,7 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     Text(
-                        "横轴为行程时间，纵轴为可信样本值；超过 2 分钟的缺口保持断开。",
+                        "横轴为行程时间，纵轴为可信样本值；海拔使用稳健滤波，超过 2 分钟的缺口保持断开。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -160,15 +161,6 @@ private fun trustedDetailSpeedV06(point: TripPointEntity): Double? {
             speedAccuracyMps = point.speedAccuracyMps
         )
     }
-}
-
-private fun trustedDetailAltitudeV06(point: TripPointEntity): Double? {
-    val altitude = point.altitudeMeters?.takeIf { it.isFinite() } ?: return null
-    val verticalAccuracy = point.verticalAccuracyMeters
-    if (verticalAccuracy != null && (!verticalAccuracy.isFinite() || verticalAccuracy > 50.0)) return null
-    val horizontalAccuracy = point.horizontalAccuracyMeters
-    if (horizontalAccuracy != null && (!horizontalAccuracy.isFinite() || horizontalAccuracy > 80.0)) return null
-    return altitude
 }
 
 private fun formatDetailTrendValueV06(value: Double, unit: String): String =
