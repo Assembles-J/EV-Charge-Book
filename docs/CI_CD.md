@@ -1,69 +1,141 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v1.4.0
-更新时间: 2026-08-27
-状态: Authority Subdocument
+版本: v2.0.1
+更新时间: 2026-08-31
+状态: CI / Production Release authority
 
-## 1. 目标
+## 1. 文档职责
 
-遵循 Assembles-J 组织发布思路：CI 与 Production Release 分离、signed APK、Actions Artifact、production Environment、服务器不可变 release 与原子激活。
+本文件只负责 Android CI / Production Release 的稳定规则。
 
-新增原则：**正式 APK 版本只在真正执行 Production Release 时生成。普通业务提交、PR、Debug CI 和文档提交不升级正式版本。**
+各 GitHub Actions workflow 的具体职责、trigger 与 deployment boundary 见 `WORKFLOW_OWNERSHIP.md`。
 
-APK 自动升级详细设计见 `APK_AUTO_UPDATE.md`。
+当前 PR/head/run 状态不写死在本文件，统一以 current GitHub state / `CURRENT_STATUS_AUTHORITY.md` 为准。
+
+核心原则：
+
+- Android CI 与 Production Release 分离；
+- 正式 APK 版本只在明确触发 Production Release 时生成；
+- 普通 commit / PR / Debug CI / docs change 不生成新的正式版本；
+- CI Green 不等于真机验收；
+- Production workflow 成功也不自动等于 old-production -> new-production 真机覆盖升级已验收。
 
 ---
 
 ## 2. Android Build Baseline
 
-当前统一构建参数：
+当前稳定构建参数：
 
-- JDK 17
-- compile/target SDK 36
-- CI Android platform 36
-- Build Tools 36.0.0
-- Gradle Wrapper 9.5.0
+- JDK 17；
+- compileSdk 36；
+- targetSdk 36；
+- CI Android platform 36；
+- Build Tools 36.0.0；
+- Gradle Wrapper 9.5.0；
+- wrapper 实际路径：`android/gradlew`；
+- wrapper distribution：`android/gradle/wrapper/gradle-wrapper.properties`。
 
-CI 与 Release 必须使用仓库 `./gradlew`。
-
-开发/普通 CI 使用 `build.gradle.kts` 默认 dev 版本：
+普通开发/CI 默认版本来自 `android/app/build.gradle.kts`：
 
 ```text
 versionCode = 1
 versionName = 0.1.0-dev
 ```
 
-这些值不是正式发布版本，不应随业务 commit 修改。
-
----
-
-## 3. CI 流程
+Debug build 额外使用：
 
 ```text
-push / pull request Android change
- -> Checkout
- -> Validate build + wrapper
- -> JDK 17
- -> Android SDK 36 / Build Tools 36
- -> Gradle cache
- -> ./gradlew testDebugUnitTest :app:assembleDebug
- -> Debug APK Artifact
+applicationIdSuffix = .debug
+versionNameSuffix = -debug
 ```
 
-Android Build 只验证代码，不产生正式版本号，不更新线上 `latest.json`。
+因此 Debug 与 Production APK 可并存，不应再通过修改 production applicationId 来解决调试安装冲突。
 
 ---
 
-## 4. Production Release
+## 3. Android CI
 
-Production Release 继续保持 `workflow_dispatch` 手动门禁。
+Workflow：`.github/workflows/android-build.yml`
+
+Workflow name：`Android Build`
+
+Job/check name：`Android CI`
+
+### Trigger
+
+PR / `main` push 仅在以下路径变化时运行：
+
+- `android/**`
+- `.github/workflows/android-build.yml`
+
+同时支持 manual `workflow_dispatch`。
+
+### Current build contract
+
+```text
+checkout
+ -> validate Android repository baseline
+ -> enforce packaged Hero WebP size budget
+ -> JDK 17
+ -> Android SDK 36 / Build Tools 36.0.0
+ -> Gradle cache
+ -> cd android
+ -> ./gradlew --no-daemon testDebugUnitTest :app:assembleDebug
+ -> upload Debug APK artifact
+```
+
+Debug APK artifact retention 当前为 7 天。
+
+### CI authority
+
+Android CI 可以证明：
+
+- 当前 PR head 能完成配置的自动化测试；
+- Debug APK 能构建；
+- workflow 内显式 guardrail 通过。
+
+Android CI **不能证明**：
+
+- 真机后台/锁屏行为；
+- GPS/provider/OEM 差异；
+- 视觉/交互验收；
+- Production signing；
+- production server publish；
+- old-production -> new-production 覆盖升级。
+
+---
+
+## 4. Current-head merge evidence
+
+Repository governance 目标由 #75 跟踪。
+
+对于会触发 Android Build 的 runtime PR：
+
+1. 必须确认 PR 当前 base/stack 关系；
+2. 必须检查当前 changed files / effective diff；
+3. required evidence 应来自当前 PR head；
+4. 如果 sync/rebase/merge `main` 改变了 head/effective code，旧 Green run 不能继续当最终 merge evidence；
+5. 需要重新获得当前 head 的 `Android CI` 成功；
+6. stacked child 不能复用 parent 的 CI 作为自己的最终 merge evidence。
+
+Docs-only change 如果不命中 Android workflow path filter，可以没有 Android CI；不要为了“形式统一”强制无关 Android 构建。
+
+---
+
+## 5. Production Release
+
+Workflow：`.github/workflows/android-release.yml`
+
+Workflow name：`Android Release`
+
+Trigger：**manual `workflow_dispatch` only**。
 
 输入：
 
-- `ref`: 要发布的 commit / branch / tag
-- `release_series`: 产品阶段版本，例如 `0.4`
+- `ref` — 要发布的 git ref；
+- `release_series` — 产品阶段版本，例如 `0.4`。
 
-Release workflow 内部才生成：
+Workflow 内部生成：
 
 ```text
 VERSION_CODE = github.run_number
@@ -71,127 +143,151 @@ VERSION_NAME = <release_series>.<github.run_number>
 APK_FILE = ev-charge-book-<VERSION_NAME>.apk
 ```
 
-示例：Android Release Run #12 + release_series `0.4` => `0.4.12`。
+Release workflow 使用 `environment: production`。
 
-正式流程：
+### Production build contract
 
 ```text
-人工确认需要下发 APK
- -> Run Android Release
- -> Checkout ref
+manual release decision
+ -> checkout requested ref
  -> resolve real commit SHA
- -> inject production version
- -> restore production signing key
- -> assembleRelease
+ -> validate release baseline / secrets
+ -> verify current public update discovery route
+ -> ensure Android SDK 36 / Build Tools 36.0.0
+ -> restore production signing keystore
+ -> cd android
+ -> ./gradlew --no-daemon --build-cache :app:assembleRelease
  -> apksigner verify
  -> SHA-256
- -> Actions Artifact
- -> SCP *.part
- -> server SHA verification
- -> immutable releases/<version>.apk
- -> per-version env/json metadata
- -> update latest.env
- -> update latest APK symlink
- -> atomic replace release-meta/latest.json LAST
+ -> prepare immutable/atomic upload
+ -> publish release files / metadata
 ```
 
-只有 `latest.json` 最终替换成功后，App 才能发现新版本。
+具体 server upload / atomic activation 以 current `android-release.yml` 为实现事实。
 
 ---
 
-## 5. APK 自动升级发现
+## 6. Version Rules
 
-生产 App 默认读取：
+1. 普通 commit 不修改正式 `versionCode/versionName`。
+2. Android Build 不生成正式 release version。
+3. 只有明确触发 Android Release 时才生成正式版本。
+4. `versionCode` 必须单调增加；当前使用 release workflow run number。
+5. `versionName` 当前由 `release_series + run_number` 组成。
+6. Release 失败允许跳号；未成功激活的版本不能被客户端当作可用最新版本。
+7. `release_series` 只在产品阶段变化时调整，不随普通 feature PR 增长。
+
+---
+
+## 7. Production Signing
+
+Production Release 依赖：
+
+- `ANDROID_KEYSTORE_BASE64`
+- `ANDROID_KEYSTORE_PASSWORD`
+- `ANDROID_KEY_ALIAS`
+- `ANDROID_KEY_PASSWORD`
+
+以及发布服务器相关 secret：
+
+- `COMMON_SERVER_HOST`
+- `COMMON_SERVER_USER`
+- `COMMON_SSH_PRIVATE_KEY`
+
+Production signing key 必须长期保持一致，否则旧正式 APK 无法被新版 APK 原地覆盖升级。
+
+签名 secret 不应被写入仓库文档、Issue、PR body 或日志。
+
+---
+
+## 8. App Update Discovery
+
+Production App 默认 update manifest：
 
 ```text
 https://groupim.cn/ev-charge-book/release-meta/latest.json
 ```
 
-该地址通过 `BuildConfig.UPDATE_MANIFEST_URL` 注入；Release 环境可用 `APP_UPDATE_MANIFEST_URL` 覆盖。
+BuildConfig 入口：`UPDATE_MANIFEST_URL`。
 
-App 仅在 `release` build 检查更新：
+Release 环境可以通过 `APP_UPDATE_MANIFEST_URL` 覆盖。
+
+客户端核心判断：
 
 ```text
 latest.versionCode > BuildConfig.VERSION_CODE
- -> 提示用户升级
- -> DownloadManager 下载 immutable APK
- -> SHA-256 校验
- -> Android 系统安装器确认覆盖安装
+ -> prompt
+ -> DownloadManager
+ -> SHA-256 verify
+ -> Android system installer
 ```
 
-更新检查失败必须静默降级，不影响 Local First 核心功能。
+更新服务不可用时必须 non-blocking，不能影响 Local First 核心功能。
+
+Updater 的 runtime/physical owner 见 `APK_AUTO_UPDATE.md` 与 #102。
 
 ---
 
-## 6. 版本规则
+## 9. Production Release Gate
 
-1. 普通 commit 不修改正式 `versionName/versionCode`。
-2. Android Build 不发布正式版本。
-3. 只有明确需要给用户下发新 APK 时才触发 Android Release。
-4. `versionCode` 是 Android 升级顺序依据，必须单调增加；Release workflow run number 满足该要求。
-5. `versionName` 用于用户展示，由 `release_series + release run number` 组成。
-6. Release 失败允许跳号；未成功原子激活的版本不对客户端可见。
-7. product series 只在产品阶段变化时修改，例如 `0.4 -> 0.5`。
+执行 Production Release 前至少确认：
 
----
+- 目标 ref/commit 是明确的；
+- applicable Android CI 已通过；
+- production signing secrets 可用；
+- public update discovery route 当前可验证；
+- assembleRelease 成功；
+- `apksigner verify` 成功；
+- SHA-256 生成；
+- server/staging 有足够权限和空间；
+- atomic metadata activation 逻辑未被绕过。
 
-## 7. Secrets
-
-Production Environment / organization secrets：
-
-- ANDROID_KEYSTORE_BASE64
-- ANDROID_KEYSTORE_PASSWORD
-- ANDROID_KEY_ALIAS
-- ANDROID_KEY_PASSWORD
-- COMMON_SERVER_HOST
-- COMMON_SERVER_USER
-- COMMON_SSH_PRIVATE_KEY
-
-生产 signing key 必须长期保持一致，否则 Android 不允许旧版 App 被新版 APK 覆盖安装。
+如果目标 ref 在最后一次 CI 后发生改变，应重新验证 current effective commit；不要用旧 CI run 给新的 release ref 背书。
 
 ---
 
-## 8. 发布门禁
+## 10. Production Acceptance
 
-Production Release 前至少满足：
+Production workflow success 证明“发布流程执行成功”，但 App 升级产品能力还需要真实设备验收：
 
-- 目标 commit 的 Android CI Green
-- Debug APK 可用
-- release signing secrets 可用
-- assembleRelease Green
-- apksigner verify Green
-- server directory 可写
+- old production APK 发现 newer production；
+- 下载 / restart recovery；
+- SHA-256；
+- unknown-source permission；
+- same-signing-key in-place install；
+- 用户数据保留；
+- service failure non-blocking。
 
-升级功能额外验收：
-
-- `release-meta/latest.json` 公网可访问
-- JSON 指向 immutable APK
-- SHA-256 与服务器 APK 一致
-- 旧正式 APK 能发现更高 versionCode
-- 下载后校验成功才进入安装器
-- 签名一致，可完成覆盖安装
+该验收由 #102 跟踪。
 
 ---
 
-## 9. 历史故障
+## 11. Other Repository Workflows
 
-2026-08-26 Android Build Run #41 曾因 workflow 请求不存在的 `platforms;android-37` 在 SDK 安装阶段失败。现已统一到 SDK 36；该故障与业务代码无关。
+Hero / catalog / admin workflows 不属于 Android Production Release。
+
+完整职责见 `WORKFLOW_OWNERSHIP.md`。当前基线包括：
+
+- `hero-admin.yml` — integrated resource-admin validation；
+- `hero-admin-deploy.yml` — production resource-admin deployment；
+- `hero-assets-publish.yml` — Hero package validation；
+- `admin-resource-workbench.yml` — unified one-vehicle resource-bundle workbench validation；
+- `admin-batch-image-upload.yml` — retained focused/legacy batch-helper regression validation；
+- `admin-prompt-library.yml` — single-item + full-bundle prompt contract validation；
+- `vehicle-catalog-admin-tools.yml` — catalog admin tools/import-export validation。
+
+其中 PR #264 已将“新车型完整资源 onboarding”的产品入口收敛到 Resource Workbench；旧 split batch 面板退出主 UI，但其 focused helper workflow 仍存在，当前应理解为兼容/回归验证，而不是新的产品 authority。
+
+不要因为多个 workflow 命中相同目录就自动判断它们重复；先看 responsibility / deployment authority / 当前产品入口。
 
 ---
 
-## 10. 变更记录
+## 12. Repository Governance Relationship
 
-### v1.4.0
+- #75 — `main` protection + required current-head applicable CI；
+- #265 — stale branch cleanup + merge-time branch deletion；
+- `BRANCH_AND_PR_GOVERNANCE.md` — PR/branch/stack rules；
+- `WORKFLOW_OWNERSHIP.md` — workflow responsibility；
+- `CURRENT_STATUS_AUTHORITY.md` — 当前 runtime/PR/CI snapshot。
 
-- 正式版本改为仅在 Production Release 生成
-- Release 增加 `release_series`
-- server publish `latest.json` update manifest
-- latest.json 作为客户端最后原子发现指针
-- 增加 App release-only 自动检查 / 下载 / SHA 校验 / 系统安装流程
-- 新增 `APK_AUTO_UPDATE.md`
-
-### v1.3.0
-
-- Gradle Wrapper 已实际提交
-- SDK 统一到项目 SDK 36
-- CI / Release 统一使用仓库 wrapper
+仓库保护未真正启用前，不得因为文档写了“必须 CI”就假装 GitHub 已经强制执行。
