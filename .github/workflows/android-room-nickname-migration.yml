@@ -1,0 +1,28 @@
+name: Android Room Nickname Migration
+
+on:
+  pull_request:
+    paths:
+      - 'android/app/src/main/java/com/evchargebook/data/database/AppDatabase.kt'
+      - 'android/app/src/main/java/com/evchargebook/data/entity/VehicleEntity.kt'
+      - '.github/workflows/android-room-nickname-migration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'android/app/src/main/java/com/evchargebook/data/database/AppDatabase.kt'
+      - 'android/app/src/main/java/com/evchargebook/data/entity/VehicleEntity.kt'
+      - '.github/workflows/android-room-nickname-migration.yml'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify nickname migration matches Room schema
+        run: |
+          set -euo pipefail
+          DB='android/app/src/main/java/com/evchargebook/data/database/AppDatabase.kt'
+          ENTITY='android/app/src/main/java/com/evchargebook/data/entity/VehicleEntity.kt'
+          grep -F 'ALTER TABLE vehicles ADD COLUMN nickname TEXT DEFAULT NULL' "$DB"
+          grep -F '@ColumnInfo(defaultValue = "NULL")' "$ENTITY"
+          grep -F 'val nickname: String? = null' "$ENTITY"
