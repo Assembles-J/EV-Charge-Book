@@ -1,0 +1,56 @@
+name: Admin Prompt Library
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/static/prompt-library.html'
+      - 'hero-admin/templates/index.html'
+      - '.github/workflows/admin-prompt-library.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/static/prompt-library.html'
+      - 'hero-admin/templates/index.html'
+      - '.github/workflows/admin-prompt-library.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify copy center contract
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          from pathlib import Path
+          index = Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
+          page = Path('hero-admin/static/prompt-library.html').read_text(encoding='utf-8')
+          required_index = [
+              '规范与提示词 · Logo / Hero 一键复制',
+              'static/prompt-library.html',
+          ]
+          required_page = [
+              '品牌 Logo 标准',
+              'EV Charge Book Hero 完整模板',
+              '一键复制',
+              '生成并复制',
+              '{{车型名称}}',
+              '{{颜色}}',
+              '1600 × 1100',
+              'X = 180 ～ 1420 px',
+              '512 × 512 px',
+              '256 KiB',
+              "navigator.clipboard.writeText",
+              "localStorage.setItem('evcb-copy-center-v1'",
+          ]
+          for marker in required_index:
+              assert marker in index, f'missing index marker: {marker}'
+          for marker in required_page:
+              assert marker in page, f'missing prompt library marker: {marker}'
+          print('Prompt library contract OK')
+          PY
