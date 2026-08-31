@@ -1,6 +1,6 @@
 # EV Charge Book CI/CD 与发布设计
 
-版本: v2.0.0
+版本: v2.0.1
 更新时间: 2026-08-31
 状态: CI / Production Release authority
 
@@ -266,16 +266,19 @@ Production workflow success 证明“发布流程执行成功”，但 App 升�
 
 Hero / catalog / admin workflows 不属于 Android Production Release。
 
-完整职责见 `WORKFLOW_OWNERSHIP.md`：
+完整职责见 `WORKFLOW_OWNERSHIP.md`。当前基线包括：
 
 - `hero-admin.yml` — integrated resource-admin validation；
-- `hero-admin-deploy.yml` — production admin deployment；
+- `hero-admin-deploy.yml` — production resource-admin deployment；
 - `hero-assets-publish.yml` — Hero package validation；
-- `admin-batch-image-upload.yml` — batch image browser-contract validation；
-- `admin-prompt-library.yml` — prompt/copy-center validation；
-- `vehicle-catalog-admin-tools.yml` — catalog admin tools validation。
+- `admin-resource-workbench.yml` — unified one-vehicle resource-bundle workbench validation；
+- `admin-batch-image-upload.yml` — retained focused/legacy batch-helper regression validation；
+- `admin-prompt-library.yml` — single-item + full-bundle prompt contract validation；
+- `vehicle-catalog-admin-tools.yml` — catalog admin tools/import-export validation。
 
-不要因为多个 workflow 命中相同目录就自动判断它们重复；先看它们的 responsibility / deployment authority。
+其中 PR #264 已将“新车型完整资源 onboarding”的产品入口收敛到 Resource Workbench；旧 split batch 面板退出主 UI，但其 focused helper workflow 仍存在，当前应理解为兼容/回归验证，而不是新的产品 authority。
+
+不要因为多个 workflow 命中相同目录就自动判断它们重复；先看 responsibility / deployment authority / 当前产品入口。
 
 ---
 
