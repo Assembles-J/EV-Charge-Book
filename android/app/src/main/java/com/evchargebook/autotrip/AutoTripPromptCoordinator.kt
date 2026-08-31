@@ -11,10 +11,13 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.evchargebook.MainActivity
+import com.evchargebook.bluetooth.BluetoothPromptPreferences
+import com.evchargebook.bluetooth.VehicleBluetoothBinding
 import com.evchargebook.bluetooth.VehicleBluetoothBindingPreferences
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.AutoTripDetectionSessionEntity
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.security.MessageDigest
@@ -33,6 +36,7 @@ class AutoTripPromptCoordinator(private val context: Context) {
     private val tripDao = database.tripDao()
     private val vehicleDao = database.vehicleDao()
     private val bindingPreferences = VehicleBluetoothBindingPreferences(context)
+    private val legacyPreferences = BluetoothPromptPreferences(context)
     private val notifications = AutoTripNotificationController(context)
 
     suspend fun onBluetoothConnected(
@@ -40,6 +44,8 @@ class AutoTripPromptCoordinator(private val context: Context) {
         deviceName: String?,
         now: Long = System.currentTimeMillis(),
     ): AutoTripCandidateResult = connectionMutex.withLock {
+        synchronizeSingleVehicleLegacyBinding()
+
         val normalizedAddress = VehicleBluetoothBindingPreferences.normalizeAddress(deviceAddress)
         val binding = bindingPreferences.bindings.first().firstOrNull {
             it.enabled && it.deviceAddress.equals(normalizedAddress, ignoreCase = true)
@@ -98,6 +104,21 @@ class AutoTripPromptCoordinator(private val context: Context) {
             updatedAtEpochMillis = now,
         )
         notifications.cancel(session.id)
+    }
+
+    private suspend fun synchronizeSingleVehicleLegacyBinding() {
+        val activeVehicles = vehicleDao.observeActive().first()
+        if (activeVehicles.size != 1) return
+        val legacy = legacyPreferences.settings.first()
+        val address = legacy.deviceAddress?.takeIf { it.isNotBlank() } ?: return
+        bindingPreferences.save(
+            VehicleBluetoothBinding(
+                vehicleId = activeVehicles.single().id,
+                enabled = legacy.enabled,
+                deviceAddress = address,
+                deviceName = legacy.deviceName,
+            )
+        )
     }
 
     companion object {
