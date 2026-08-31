@@ -18,8 +18,14 @@ data class ChargingRecordEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
     val vehicleId: Long,
+    /** Start/occurrence time. Legacy records may only know this one timestamp. */
     val chargeTimeEpochMillis: Long,
+    /** Explicit completion time when known. Legacy/manual records may leave it unknown. */
+    val endedAtEpochMillis: Long? = null,
+    /** Charger/meter billed energy. */
     val energyKwh: Double,
+    /** Explicit vehicle-side received energy when the user has a trustworthy external value. */
+    val vehicleEnergyKwh: Double? = null,
     val cost: Double,
     val startSoc: Int,
     val endSoc: Int,
