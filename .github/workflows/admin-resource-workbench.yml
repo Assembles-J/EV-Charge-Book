@@ -7,6 +7,7 @@ on:
       - 'hero-admin/static/resource-workbench.css'
       - 'hero-admin/static/resource-workbench.js'
       - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
       - 'hero-admin/templates/index.html'
       - 'docs/RESOURCE_BUNDLE_WORKFLOW.md'
       - '.github/workflows/admin-resource-workbench.yml'
@@ -17,6 +18,7 @@ on:
       - 'hero-admin/static/resource-workbench.css'
       - 'hero-admin/static/resource-workbench.js'
       - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
       - 'hero-admin/templates/index.html'
       - 'docs/RESOURCE_BUNDLE_WORKFLOW.md'
       - '.github/workflows/admin-resource-workbench.yml'
@@ -63,12 +65,14 @@ jobs:
           workbench=Path('hero-admin/static/resource-workbench.html').read_text(encoding='utf-8')
           js=Path('hero-admin/static/resource-workbench.js').read_text(encoding='utf-8')
           prompt=Path('hero-admin/static/asset-bundle-prompt.html').read_text(encoding='utf-8')
+          builder=Path('hero-admin/static/asset-bundle-builder.js').read_text(encoding='utf-8')
           index=Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
           doc=Path('docs/RESOURCE_BUNDLE_WORKFLOW.md').read_text(encoding='utf-8')
           groups = {
               'workbench': (workbench, ['车型资源工作台','单车型资源包 JSON','Logo + Hero 统一投递','resourceQueue','configUpdateConfirm','heroUpdateConfirm','确认并发布整套资源']),
               'behavior': (js, ['ev-charge-book-resource-bundle','target-select','__custom__','手动选择品牌 / Hero Key','heroVariantKey','api/brand/logo','api/publish','api/catalog/save','服务器保存：','第一张优先']),
-              'prompt': (prompt, ['全量资产包 Prompt','prompt-library.html','catalogImport','needsSource','updateIntent','当前已有 Hero 语义 Key','Light Hero 变体规则','brand_','hero_','_light.webp','_dark.webp']),
+              'builder-page': (prompt, ['新车型全量资产包','Web 自动生成 Resource JSON','指定 Hero Key（手工输入','AI 图片生成 Prompt','asset-bundle-builder.js']),
+              'builder-logic': (builder, ['ev-charge-book-resource-bundle','catalogImport','needsSource','updateIntent','reuseExisting','heroArtworkKey:heroKey','_dark.png','_light.png','不要输出车型配置 JSON']),
               'index': (index, ['static/resource-workbench.html','static/asset-bundle-prompt.html','单项规范 / Prompt']),
               'docs': (doc, ['Hero semantic key and variants','automatic matching is only a suggestion','explicit confirmation','-dark','-light']),
           }
@@ -76,5 +80,5 @@ jobs:
               for marker in markers:
                   if marker not in text:
                       raise SystemExit(f'missing {group} marker: {marker}')
-          print('Resource Workbench Web contract OK')
+          print('Resource Workbench + Web builder contract OK')
           PY
