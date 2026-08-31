@@ -1,11 +1,62 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": 1,
+  "catalogVersion": 2,
   "updatedAtEpochMillis": 0,
+  "brands": [
+    {
+      "brandId": "leapmotor",
+      "name": "零跑",
+      "englishName": "Leapmotor",
+      "logoKey": "brand-leapmotor",
+      "logoLightUrl": null,
+      "logoLightVersion": 0,
+      "logoDarkUrl": null,
+      "logoDarkVersion": 0,
+      "isActive": true,
+      "sourceUpdatedAtEpochMillis": 0
+    },
+    {
+      "brandId": "xiaomi",
+      "name": "小米",
+      "englishName": "Xiaomi EV",
+      "logoKey": "brand-xiaomi",
+      "logoLightUrl": null,
+      "logoLightVersion": 0,
+      "logoDarkUrl": null,
+      "logoDarkVersion": 0,
+      "isActive": true,
+      "sourceUpdatedAtEpochMillis": 0
+    },
+    {
+      "brandId": "tesla",
+      "name": "特斯拉",
+      "englishName": "Tesla",
+      "logoKey": "brand-tesla",
+      "logoLightUrl": null,
+      "logoLightVersion": 0,
+      "logoDarkUrl": null,
+      "logoDarkVersion": 0,
+      "isActive": true,
+      "sourceUpdatedAtEpochMillis": 0
+    },
+    {
+      "brandId": "byd",
+      "name": "比亚迪",
+      "englishName": "BYD",
+      "logoKey": "brand-byd",
+      "logoLightUrl": null,
+      "logoLightVersion": 0,
+      "logoDarkUrl": null,
+      "logoDarkVersion": 0,
+      "isActive": true,
+      "sourceUpdatedAtEpochMillis": 0
+    }
+  ],
   "vehicles": [
     {
       "catalogId": "leap-c16-2026-reev-67",
       "source": "managed-v1",
+      "brandId": "leapmotor",
       "brand": "零跑",
       "series": "C16",
       "modelName": "C16 2026款",
@@ -14,6 +65,7 @@
       "powertrainType": "REEV",
       "batteryCapacityKwh": 67.7,
       "rangeKm": 520,
+      "rangeStandard": "CLTC",
       "heroArtworkKey": "leapmotor-c16-2026",
       "isActive": true,
       "sourceUpdatedAtEpochMillis": 0
@@ -21,6 +73,7 @@
     {
       "catalogId": "xiaomi-su7-2024-max",
       "source": "managed-v1",
+      "brandId": "xiaomi",
       "brand": "小米",
       "series": "SU7",
       "modelName": "SU7 2024款",
@@ -29,6 +82,7 @@
       "powertrainType": "BEV",
       "batteryCapacityKwh": 101.0,
       "rangeKm": 800,
+      "rangeStandard": "CLTC",
       "heroArtworkKey": "xiaomi-su7-2024",
       "isActive": true,
       "sourceUpdatedAtEpochMillis": 0
@@ -36,6 +90,7 @@
     {
       "catalogId": "tesla-model-y-2025-long-range",
       "source": "managed-v1",
+      "brandId": "tesla",
       "brand": "特斯拉",
       "series": "Model Y",
       "modelName": "Model Y 2025款",
@@ -44,6 +99,7 @@
       "powertrainType": "BEV",
       "batteryCapacityKwh": 78.4,
       "rangeKm": 719,
+      "rangeStandard": "CLTC",
       "heroArtworkKey": null,
       "isActive": true,
       "sourceUpdatedAtEpochMillis": 0
@@ -51,6 +107,7 @@
     {
       "catalogId": "byd-seal-2025-650",
       "source": "managed-v1",
+      "brandId": "byd",
       "brand": "比亚迪",
       "series": "海豹",
       "modelName": "海豹 2025款",
@@ -59,6 +116,7 @@
       "powertrainType": "BEV",
       "batteryCapacityKwh": 80.6,
       "rangeKm": 650,
+      "rangeStandard": "CLTC",
       "heroArtworkKey": "byd-seal-2025",
       "isActive": true,
       "sourceUpdatedAtEpochMillis": 0

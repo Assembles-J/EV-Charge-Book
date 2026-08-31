@@ -60,6 +60,7 @@ import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.LocalCockpitColors
 import com.evchargebook.ui.vehicle.HeroArtworkManifestRepository
+import com.evchargebook.ui.vehicle.ManagedBrandLogo
 import com.evchargebook.ui.vehicle.OfficialVehicleImageCatalog
 import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
@@ -109,8 +110,6 @@ fun HeroVehicleCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        // The source remains 1600x1100. A taller stage intentionally trades a
-                        // modest symmetric side crop for the stronger Hero presence approved on device.
                         .aspectRatio(1.24f)
                 ) {
                     VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
@@ -131,7 +130,7 @@ fun HeroVehicleCard(
                     )
 
                     Text(
-                        text = vehicle?.let { "${it.brand}  ${it.model}" } ?: "EV Charge Book",
+                        text = vehicle?.displayName ?: "EV Charge Book",
                         modifier = Modifier
                             .align(Alignment.TopStart)
                             .padding(
@@ -164,11 +163,10 @@ fun HeroVehicleCard(
                                     },
                                 contentAlignment = Alignment.Center
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.DirectionsCar,
-                                    contentDescription = if (vehicleSwitchEnabled) "切换车辆" else "行程进行中不可切换车辆",
-                                    tint = Color.White.copy(alpha = if (vehicleSwitchEnabled) 0.94f else 0.45f),
-                                    modifier = Modifier.size(20.dp)
+                                ManagedBrandLogo(
+                                    catalogVehicleId = vehicle.catalogVehicleId,
+                                    modifier = Modifier.size(22.dp),
+                                    darkSurface = true,
                                 )
                             }
 
@@ -179,17 +177,26 @@ fun HeroVehicleCard(
                                 selectableVehicles.forEach { candidate ->
                                     DropdownMenuItem(
                                         text = {
-                                            Column {
-                                                Text(
-                                                    candidate.model,
-                                                    style = MaterialTheme.typography.bodyLarge,
-                                                    fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                ManagedBrandLogo(
+                                                    catalogVehicleId = candidate.catalogVehicleId,
+                                                    modifier = Modifier.size(28.dp),
                                                 )
-                                                Text(
-                                                    candidate.brand,
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
+                                                Spacer(Modifier.size(10.dp))
+                                                Column {
+                                                    Text(
+                                                        candidate.displayName,
+                                                        style = MaterialTheme.typography.bodyLarge,
+                                                        fontWeight = if (candidate.id == vehicle.id) FontWeight.SemiBold else FontWeight.Normal
+                                                    )
+                                                    Text(
+                                                        "${candidate.brand} ${candidate.model}",
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                }
                                             }
                                         },
                                         onClick = {

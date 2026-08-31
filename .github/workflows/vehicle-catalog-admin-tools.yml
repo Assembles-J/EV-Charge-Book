@@ -1,0 +1,64 @@
+name: Vehicle Catalog Admin Tools
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/templates/index.html'
+      - 'hero-admin/static/catalog-tools.js'
+      - 'hero-admin/static/catalog-tools.css'
+      - 'docs/VEHICLE_CATALOG_IMPORT_EXPORT.md'
+      - '.github/workflows/vehicle-catalog-admin-tools.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/templates/index.html'
+      - 'hero-admin/static/catalog-tools.js'
+      - 'hero-admin/static/catalog-tools.css'
+      - 'docs/VEHICLE_CATALOG_IMPORT_EXPORT.md'
+      - '.github/workflows/vehicle-catalog-admin-tools.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate catalog admin browser contract
+        shell: bash
+        run: |
+          set -eu
+          node --check hero-admin/static/catalog-tools.js
+          python3 - <<'PY'
+          from pathlib import Path
+          html = Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
+          js = Path('hero-admin/static/catalog-tools.js').read_text(encoding='utf-8')
+          for marker in [
+              'brandLogoBrandSelect',
+              'brandLogoLightButton',
+              'brandLogoDarkButton',
+              'downloadCatalogTemplate',
+              'exportCatalogCsv',
+              'exportCatalogJson',
+              'importCatalog',
+              'catalogImportFile',
+              'vehicleHeroKeySelect',
+              'manageHeroFromVehicle',
+              'static/catalog-tools.js',
+          ]:
+              if marker not in html:
+                  raise SystemExit(f'missing HTML marker: {marker}')
+          for marker in [
+              'ev-charge-book-vehicle-catalog',
+              'normalizeJsonImport',
+              'normalizeCsvImport',
+              'importCatalogPackage',
+              'renderVehicleHeroKeyOptions',
+              'renderBrandLogoCenter',
+              "chooseBrandLogo(brand,'light')",
+              "chooseBrandLogo(brand,'dark')",
+          ]:
+              if marker not in js:
+                  raise SystemExit(f'missing JS marker: {marker}')
+          PY

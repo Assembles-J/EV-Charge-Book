@@ -32,7 +32,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
         VehicleStateEntity::class,
         AutoTripDetectionSessionEntity::class,
     ],
-    version = 14,
+    version = 15,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -203,6 +203,17 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN brandId TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN rangeStandard TEXT")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN brandLogoLightUrl TEXT")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN brandLogoLightVersion INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN brandLogoDarkUrl TEXT")
+                db.execSQL("ALTER TABLE vehicle_catalog ADD COLUMN brandLogoDarkVersion INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -227,6 +238,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_11_12,
                         MIGRATION_12_13,
                         MIGRATION_13_14,
+                        MIGRATION_14_15,
                     )
                     .build()
                     .also { instance = it }

@@ -1,36 +1,66 @@
-# EV Charge Book Hero Admin
+# EV Charge Book Vehicle Resource Admin
 
-A deliberately small web publisher for **existing vehicle Hero artwork**.
+Protected Web Admin for the managed vehicle catalog, brand Logos and vehicle Hero artwork.
 
-Daily workflow after one-time deployment:
+## Product boundary
 
-1. Open `https://groupim.cn/ev-charge-book/hero-admin/`.
-2. Sign in with HTTP Basic credentials configured in `HERO_ADMIN_USER` / `HERO_ADMIN_PASSWORD`.
-3. Select an existing artwork key.
-4. Drop a PNG or WebP Hero image.
-5. Click **发布 Hero**.
+The Web Admin is the authority for **which brands and models are supported**. Android consumes a validated local Room cache and must not contain a supported-brand/model whitelist.
 
-The service then:
+From the admin page an operator can:
 
-- accepts PNG / WebP only;
-- requires a landscape source close to the current Dashboard contract (`1.40:1` to `1.55:1`, recommended `1600 x 1100`);
-- requires at least `1200 x 800` source pixels;
-- converts the source to a real `1600 x 1100` WebP;
-- starts at quality 88 and only lowers quality when required by the 2.5 MiB hard ceiling;
-- creates an immutable filename such as `leapmotor_c16_2026_v2.webp`;
-- writes the image before switching the manifest pointer;
-- increments the selected artwork version automatically;
-- atomically updates `/opt/ev-charge-book/release-meta/hero-assets-v1.json`;
-- keeps the previous manifest as `hero-assets-v1.json.bak`;
-- never writes Hero image binaries to Git.
+- create/edit/retire brands;
+- publish light-surface and dark-surface brand Logo variants;
+- create/edit/retire standard vehicle models;
+- maintain model year, trim, powertrain, battery, rated range/range standard and Hero key;
+- publish and roll back Hero artwork.
 
-The v1 admin intentionally does **not** create new Android vehicle mappings. Adding a brand-new vehicle still needs one Android/catalog change. Later artwork replacements are admin-page only.
+Adding a new brand/model or replacing a Logo/Hero must not require an Android release.
 
-## One-time server setup
+## Brand Logo contract
 
-### 1. Create the admin password file
+The implementation follows `docs/BRAND_LOGO_STANDARD.md`:
 
-Do not commit this file.
+- PNG/WebP source upload;
+- normalized public artifact is exactly `512 x 512` transparent WebP;
+- transparent bounds are trimmed before normalization;
+- square/vertical marks are contained inside `384 x 384`;
+- horizontal wordmarks are contained inside `416 x 192`;
+- no crop/stretch;
+- 256 KiB hard ceiling;
+- immutable filename `brand_<brandId>_<variant>_vN.webp`;
+- binary is written before the catalog pointer is updated;
+- light/dark variants are versioned independently.
+
+The operator is responsible for uploading an official brand asset with appropriate provenance. The service does not redraw, recolor or fabricate a trademark.
+
+## Hero contract
+
+Hero publishing:
+
+- PNG/WebP source;
+- landscape ratio `1.40:1` to `1.55:1`;
+- minimum `1200 x 800`;
+- normalized to real `1600 x 1100` WebP;
+- 2.5 MiB hard ceiling;
+- immutable `_vN.webp` output;
+- previous manifest/version remains available for rollback.
+
+## Runtime files
+
+The service uses:
+
+```text
+/data/release-meta/vehicle-catalog-v1.json
+/data/release-meta/hero-assets-v1.json
+/data/releases/brand-logos/*.webp
+/data/releases/hero-assets/*.webp
+```
+
+`vehicle-catalog-v1.json` contains root-level `brands` plus `vehicles`. Vehicles reference brands using stable `brandId`; the duplicated vehicle `brand` text remains a compatibility snapshot for older clients.
+
+If an older server catalog has no `brands`, the admin performs a compatibility upgrade in memory and persists the normalized structure on the next catalog mutation.
+
+## Environment
 
 ```bash
 mkdir -p /opt/ev-charge-book
@@ -38,57 +68,72 @@ cat > /opt/ev-charge-book/hero-admin.env <<'EOF'
 HERO_ADMIN_USER=admin
 HERO_ADMIN_PASSWORD=CHANGE_ME_TO_A_LONG_RANDOM_PASSWORD
 HERO_PUBLIC_ORIGIN=https://groupim.cn
+HERO_PUBLIC_ASSET_BASE=https://groupim.cn/ev-charge-book/releases/hero-assets
+BRAND_LOGO_PUBLIC_ASSET_BASE=https://groupim.cn/ev-charge-book/releases/brand-logos
 EOF
 chmod 600 /opt/ev-charge-book/hero-admin.env
 ```
 
-### 2. Put this `hero-admin/` directory on the server
+Optional seed overrides:
 
-Recommended path:
+```text
+HERO_MANIFEST_SEED_URL
+VEHICLE_CATALOG_SEED_URL
+HERO_RELEASE_ROOT
+HERO_META_ROOT
+```
+
+## Docker deployment
+
+Recommended source path:
 
 ```text
 /opt/ev-charge-book/hero-admin-src
 ```
 
-Build it once:
+Build:
 
 ```bash
 cd /opt/ev-charge-book/hero-admin-src
 docker build -t ev-charge-book-hero-admin:local .
 ```
 
-### 3. Add the service to the existing `/opt/app/docker-compose.yml`
-
-The current production compose already has `app-network` and mounts `/opt/ev-charge-book` into Nginx. Add:
+Compose service:
 
 ```yaml
-  hero-admin:
-    image: ev-charge-book-hero-admin:local
-    container_name: ev-charge-book-hero-admin
-    env_file:
-      - /opt/ev-charge-book/hero-admin.env
-    volumes:
-      - /opt/ev-charge-book/releases:/data/releases
-      - /opt/ev-charge-book/release-meta:/data/release-meta
-    networks:
-      - app-network
-    restart: unless-stopped
+hero-admin:
+  image: ev-charge-book-hero-admin:local
+  container_name: ev-charge-book-hero-admin
+  env_file:
+    - /opt/ev-charge-book/hero-admin.env
+  volumes:
+    - /opt/ev-charge-book/releases:/data/releases
+    - /opt/ev-charge-book/release-meta:/data/release-meta
+  networks:
+    - app-network
+  restart: unless-stopped
 ```
 
-No public container port is required. Nginx reaches the service over the existing Docker network.
+No public container port is required; Nginx reaches `hero-admin:8080` on the existing Docker network.
 
-### 4. Add two Nginx locations inside the existing `groupim.cn` HTTPS server
+## Nginx
 
-The existing `/ev-charge-book/releases/` location can stay as-is. Add:
+The existing `/ev-charge-book/releases/` static location serves both `hero-assets/` and `brand-logos/` immutable files.
+
+The mutable runtime pointers must not be cached as immutable:
 
 ```nginx
-# Public runtime Hero manifest. Mutable pointer: never cache it as immutable.
 location = /ev-charge-book/release-meta/hero-assets-v1.json {
     alias /opt/ev-charge-book/release-meta/hero-assets-v1.json;
     default_type application/json;
-
     add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
-    add_header Pragma "no-cache" always;
+    expires -1;
+}
+
+location = /ev-charge-book/release-meta/vehicle-catalog-v1.json {
+    alias /opt/ev-charge-book/release-meta/vehicle-catalog-v1.json;
+    default_type application/json;
+    add_header Cache-Control "no-store, no-cache, must-revalidate, max-age=0" always;
     expires -1;
 }
 
@@ -96,10 +141,8 @@ location = /ev-charge-book/hero-admin {
     return 301 /ev-charge-book/hero-admin/;
 }
 
-# Protected application. Authentication is enforced by the Hero Admin service itself.
 location ^~ /ev-charge-book/hero-admin/ {
     client_max_body_size 12m;
-
     proxy_pass http://hero-admin:8080/;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
@@ -107,11 +150,9 @@ location ^~ /ev-charge-book/hero-admin/ {
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Authorization $http_authorization;
-
     proxy_connect_timeout 10s;
     proxy_send_timeout 60s;
     proxy_read_timeout 60s;
-
     add_header Cache-Control "no-store" always;
 }
 ```
@@ -124,26 +165,25 @@ docker compose up -d hero-admin
 docker compose restart nginx
 ```
 
-### 5. Verify
+## Verification
+
+Without credentials the admin should return `401`:
 
 ```bash
-curl -I https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
-curl https://groupim.cn/ev-charge-book/hero-admin/ -I
+curl -I https://groupim.cn/ev-charge-book/hero-admin/
 ```
 
-The admin URL should return `401` without credentials. That is expected.
+Public runtime documents should return successfully:
 
-The first time the server manifest is missing, the service seeds it from the small GitHub `hero-assets/manifest-v1.json`. This lets existing artwork continue working while individual vehicles are migrated to first-party CDN URLs through the admin page.
+```bash
+curl https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json
+curl https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
+```
 
-## Android runtime follow-up
-
-This PR deliberately does **not** switch Android to the first-party manifest yet. Keep the current GitHub Raw manifest endpoint until the server setup above is deployed and verified.
-
-After both checks are green:
+After publishing a Logo, verify its immutable URL under:
 
 ```text
-https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json
-https://groupim.cn/ev-charge-book/hero-admin/
+https://groupim.cn/ev-charge-book/releases/brand-logos/
 ```
 
-make a separate one-line Android PR changing the default `HERO_ARTWORK_MANIFEST_URL` to the first-party manifest. This keeps deployment order explicit and prevents a partially configured server from becoming a runtime dependency.
+Android keeps the last valid Room catalog and Coil disk cache, so catalog/Logo network failures must not erase existing offline data.
