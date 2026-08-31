@@ -49,15 +49,15 @@
       <div>
         <div class="eyebrow">STEP 2 · ALL IMAGES</div>
         <h2>Logo + Hero 统一投递</h2>
-        <p>一个入口即可。推荐文件名：<code>brand_&lt;brandId&gt;_light.webp</code>、<code>brand_&lt;brandId&gt;_dark.webp</code>、<code>hero_&lt;heroKey&gt;_dark.webp</code>、<code>hero_&lt;heroKey&gt;_light.webp</code>。后缀中的 v2 / 日期 / final 不影响匹配。</p>
+        <p>一个入口即可。推荐文件名：<code>brand_&lt;brandId&gt;_light.webp</code>、<code>brand_&lt;brandId&gt;_dark.webp</code>、<code>hero_&lt;heroKey&gt;_dark.webp</code>、<code>hero_&lt;heroKey&gt;_light.webp</code>。如果源图是 PNG 也可以直接上传：工作台会识别 PNG，发布端自动转换成 WebP，无需手工转格式。后缀中的 v2 / 日期 / final 不影响匹配。</p>
       </div>
     </div>
 
     <div class="drop-zone" id="resourceDrop" tabindex="0" role="button">
       <input id="resourceFiles" type="file" multiple accept="image/png,image/webp,.png,.webp" />
       <strong>拖入整套图片，或点击多选</strong>
-      <span>品牌 Logo 与车型 Hero 可以混在一起上传；前端先校验和匹配，再统一发布。</span>
-      <small>PNG / WebP · Logo 校验透明背景与对比度 · Hero 校验尺寸与 1.45:1 比例</small>
+      <span>品牌 Logo 与车型 Hero 可以混在一起上传；PNG 会自动转 WebP，前端先校验和匹配，再统一发布。</span>
+      <small>PNG → WebP 自动转换 · WebP 直接标准化 · Logo 校验透明背景与对比度 · Hero 校验尺寸与 1.45:1 比例</small>
     </div>
 
     <div class="queue-toolbar">
@@ -76,7 +76,7 @@
     <div>
       <div class="eyebrow">STEP 3 · REVIEW & PUBLISH</div>
       <h2>确认并发布整套资源</h2>
-      <p>执行顺序：品牌配置 → 车型配置 → Logo → Hero。任何未匹配、校验失败或未确认的重复 Hero 都会阻止误发布；图片原始文件名不会直接落盘。</p>
+      <p>执行顺序：品牌配置 → 车型配置 → Logo → Hero。任何未匹配、校验失败或未确认的重复 Hero 都会阻止误发布；PNG / WebP 都会由发布端输出成规范 WebP，图片原始文件名不会直接落盘。</p>
     </div>
     <div class="publish-actions">
       <button id="refreshState" class="secondary">刷新线上状态</button>
@@ -86,5 +86,6 @@
   </section>
 </main>
 <script src="resource-workbench.js"></script>
+<script src="png-auto-webp.js"></script>
 </body>
 </html>
