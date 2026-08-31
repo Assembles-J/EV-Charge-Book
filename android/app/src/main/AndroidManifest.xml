@@ -31,6 +31,12 @@
             android:foregroundServiceType="location"
             android:stopWithTask="false" />
         <activity
+            android:name=".autotrip.AutoTripConfirmationActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
