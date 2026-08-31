@@ -14,6 +14,7 @@ data class VehicleBluetoothBinding(
     val enabled: Boolean,
     val deviceAddress: String,
     val deviceName: String?,
+    val autoStartOnConnect: Boolean = false,
 )
 
 private val Context.vehicleBluetoothBindingDataStore by preferencesDataStore("vehicle_bluetooth_bindings")
@@ -62,6 +63,7 @@ class VehicleBluetoothBindingPreferences(private val context: Context) {
                         enabled = legacy.enabled,
                         deviceAddress = normalizeAddress(legacy.deviceAddress),
                         deviceName = legacy.deviceName,
+                        autoStartOnConnect = legacy.autoStartOnConnect,
                     )
                 )
             )
@@ -90,6 +92,7 @@ class VehicleBluetoothBindingPreferences(private val context: Context) {
                                 enabled = item.optBoolean("enabled", false),
                                 deviceAddress = normalizeAddress(address),
                                 deviceName = deviceName,
+                                autoStartOnConnect = item.optBoolean("autoStartOnConnect", false),
                             )
                         )
                     }
@@ -106,6 +109,7 @@ class VehicleBluetoothBindingPreferences(private val context: Context) {
                         .put("enabled", binding.enabled)
                         .put("deviceAddress", normalizeAddress(binding.deviceAddress))
                         .put("deviceName", binding.deviceName ?: JSONObject.NULL)
+                        .put("autoStartOnConnect", binding.autoStartOnConnect)
                 )
             }
             return array.toString()
