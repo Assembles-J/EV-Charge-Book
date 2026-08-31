@@ -171,8 +171,41 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     fun openTripDetail(tripId: Long) { selectedTripId.value = tripId }
     fun closeTripDetail() { selectedTripId.value = null; _uiState.value = _uiState.value.copy(selectedTripId = null, selectedTripPoints = emptyList()) }
     fun deleteTrip(trip: TripSessionEntity) { viewModelScope.launch { runCatching { repository.deleteTrip(trip) }.onSuccess { if (selectedTripId.value == trip.id) closeTripDetail() }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法删除行程") } } }
-    fun saveVehicle(brand: String, model: String, battery: Double, range: Int) { val current = _uiState.value.vehicle ?: return; viewModelScope.launch { runCatching { repository.saveVehicle(current.copy(brand = brand.trim(), model = model.trim(), batteryCapacityKwh = battery, rangeKm = range)) }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
-    fun addVehicle(brand: String, model: String, battery: Double, range: Int, catalogVehicleId: String? = null) { viewModelScope.launch { runCatching { repository.addVehicle(brand, model, battery, range, catalogVehicleId) }.onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }.onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) } } }
+
+    fun saveVehicleNickname(nickname: String?) {
+        val current = _uiState.value.vehicle ?: return
+        val normalized = nickname?.trim()?.takeIf { it.isNotEmpty() }
+        viewModelScope.launch {
+            runCatching { repository.saveVehicle(current.copy(nickname = normalized)) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆名称已保存") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法保存车辆名称") }
+        }
+    }
+
+    fun addVehicle(catalogVehicle: VehicleCatalogEntity, nickname: String?) {
+        val normalized = nickname?.trim()?.takeIf { it.isNotEmpty() }
+        viewModelScope.launch {
+            runCatching {
+                require(catalogVehicle.isActive) { "该车型已下架，请刷新车型库后重试" }
+                val battery = catalogVehicle.batteryCapacityKwh ?: error("车型标准电池参数缺失，请先在 Web 管理端补全")
+                val range = catalogVehicle.rangeKm ?: error("车型标准续航参数缺失，请先在 Web 管理端补全")
+                repository.addVehicle(
+                    brand = catalogVehicle.brand,
+                    model = catalogVehicle.modelName,
+                    battery = battery,
+                    range = range,
+                    catalogVehicleId = catalogVehicle.catalogId
+                )
+                if (normalized != null) {
+                    val addedVehicle = repository.vehicles.first().maxByOrNull { it.id }
+                        ?: error("车辆添加后未找到本地车辆记录")
+                    repository.saveVehicle(addedVehicle.copy(nickname = normalized))
+                }
+            }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "车辆已添加并切换") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法添加车辆") }
+        }
+    }
 
     fun selectVehicle(vehicleId: Long) {
         val activeTrip = _uiState.value.activeTrip
