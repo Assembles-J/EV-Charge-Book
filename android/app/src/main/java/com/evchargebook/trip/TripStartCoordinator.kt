@@ -129,19 +129,19 @@ class TripStartCoordinator(
             PreparedResult.Created(tripId, detectionSession?.id)
         }
 
-        when (prepared) {
+        val created = when (prepared) {
             is PreparedResult.Existing -> return TripStartResult.AlreadyActive(prepared.tripId)
             is PreparedResult.Blocked -> return TripStartResult.Blocked(prepared.reason)
-            is PreparedResult.Created -> Unit
+            is PreparedResult.Created -> prepared
         }
 
         return try {
-            TripTrackingService.start(context, prepared.tripId)
-            if (prepared.detectionSessionId != null) {
+            TripTrackingService.start(context, created.tripId)
+            if (created.detectionSessionId != null) {
                 database.withTransaction {
-                    detectionDao.getById(prepared.detectionSessionId)?.let { session ->
+                    detectionDao.getById(created.detectionSessionId)?.let { session ->
                         if (
-                            session.tripId == prepared.tripId &&
+                            session.tripId == created.tripId &&
                             session.state == AutoTripDetectionState.STARTING.name
                         ) {
                             detectionDao.update(
@@ -154,17 +154,17 @@ class TripStartCoordinator(
                     }
                 }
             }
-            TripStartResult.Started(prepared.tripId)
+            TripStartResult.Started(created.tripId)
         } catch (error: Throwable) {
             database.withTransaction {
-                tripDao.getSession(prepared.tripId)?.let { trip ->
+                tripDao.getSession(created.tripId)?.let { trip ->
                     if (trip.status == TripStatus.RECORDING) {
                         tripDao.updateSession(trip.copy(status = TripStatus.INTERRUPTED))
                     }
                 }
-                prepared.detectionSessionId?.let { sessionId ->
+                created.detectionSessionId?.let { sessionId ->
                     detectionDao.getById(sessionId)?.let { session ->
-                        if (session.tripId == prepared.tripId) {
+                        if (session.tripId == created.tripId) {
                             detectionDao.update(
                                 session.copy(
                                     state = AutoTripDetectionState.START_FAILED.name,
@@ -176,7 +176,7 @@ class TripStartCoordinator(
                 }
             }
             TripStartResult.Failed(
-                tripId = prepared.tripId,
+                tripId = created.tripId,
                 reason = error.message ?: "无法启动行程记录服务",
                 cause = error,
             )
