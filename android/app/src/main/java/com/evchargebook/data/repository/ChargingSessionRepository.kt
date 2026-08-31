@@ -25,7 +25,11 @@ data class StartChargingSessionRequest(
     val locationAccuracyMeters: Double? = null,
 )
 
-/** Final facts supplied by the completion/maintenance editor. */
+/**
+ * Final completion facts. The completion editor must pass its final visible values, including the
+ * session defaults it kept. Null coordinates intentionally mean "no coordinates" so manually
+ * replacing an address never keeps stale coordinates behind the scenes.
+ */
 data class CompleteChargingSessionRequest(
     val sessionId: String,
     val startSoc: Int,
@@ -154,6 +158,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             require(session.status == ChargingSessionStatus.ACTIVE) { "只有进行中的充电可以完成" }
             validateCompletion(session, request)
 
+            val now = System.currentTimeMillis()
             val recordId = chargingRecordDao.insert(
                 ChargingRecordEntity(
                     vehicleId = session.vehicleId,
@@ -164,14 +169,14 @@ class ChargingSessionRepository(private val database: AppDatabase) {
                     cost = request.totalCost,
                     startSoc = request.startSoc,
                     endSoc = request.endSoc,
-                    chargerType = request.chargerType.cleanText() ?: session.chargerType,
-                    location = request.location.cleanText() ?: session.location,
-                    remark = request.remark.cleanText() ?: session.remark,
+                    chargerType = request.chargerType.cleanText(),
+                    location = request.location.cleanText(),
+                    remark = request.remark.cleanText(),
                     odometerKm = request.odometerKm,
-                    latitude = request.latitude ?: session.latitude,
-                    longitude = request.longitude ?: session.longitude,
-                    locationAccuracyMeters = request.locationAccuracyMeters ?: session.locationAccuracyMeters,
-                    updatedAtEpochMillis = System.currentTimeMillis(),
+                    latitude = request.latitude,
+                    longitude = request.longitude,
+                    locationAccuracyMeters = request.locationAccuracyMeters,
+                    updatedAtEpochMillis = now,
                 )
             )
 
@@ -180,7 +185,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
                     status = ChargingSessionStatus.COMPLETED,
                     endedAtEpochMillis = request.endedAtEpochMillis,
                     completedRecordId = recordId,
-                    updatedAtEpochMillis = System.currentTimeMillis(),
+                    updatedAtEpochMillis = now,
                 )
             )
             rebuildVehicleStateFromEvents(session.vehicleId)
