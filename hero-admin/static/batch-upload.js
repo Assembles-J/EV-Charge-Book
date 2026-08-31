@@ -59,6 +59,9 @@
     });
   }
 
+  globalThis.__evBatchUploadTest={normalizeToken,matchByLongestPrefix,planBatch};
+  if(typeof document==='undefined')return;
+
   function createQueueRows(root,plan){
     root.innerHTML='';
     if(!plan.length){root.innerHTML='<div class="batch-empty">尚未选择图片。</div>';return}
@@ -106,10 +109,10 @@
 
     let lightFiles=[],darkFiles=[],plan=[];
     const rebuild=()=>{
-      const light=planBatch(lightFiles,brandTargets(),'品牌').map(item=>({...item,variant:'light'}));
-      const dark=planBatch(darkFiles,brandTargets(),'品牌').map(item=>({...item,variant:'dark'}));
+      const light=planBatch(lightFiles,brandTargets(),'品牌').map(item=>({...item,variant:'light',message:`Light · ${item.message}`}));
+      const dark=planBatch(darkFiles,brandTargets(),'品牌').map(item=>({...item,variant:'dark',message:`Dark · ${item.message}`}));
       plan=[...light,...dark];
-      createQueueRows($('brandBatchQueue'),plan.map(item=>({...item,message:`${item.variant==='light'?'Light':'Dark'} · ${item.message}`})));
+      createQueueRows($('brandBatchQueue'),plan);
       const ready=plan.filter(item=>item.state==='ready').length;
       const skipped=plan.length-ready;
       $('brandBatchSummary').textContent=`已分析 ${plan.length} 张 · 可发布 ${ready} · 跳过 ${skipped}`;
