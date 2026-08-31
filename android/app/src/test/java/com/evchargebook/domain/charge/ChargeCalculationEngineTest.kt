@@ -13,7 +13,11 @@ class ChargeCalculationEngineTest {
             input = ChargeCalculationInput(
                 totalCost = 40.0,
                 unitPrice = 1.22,
-                meterEnergyKwh = 32.0
+                meterEnergyKwh = 32.0,
+                authoritativeBillingFields = setOf(
+                    ChargeBillingField.UNIT_PRICE,
+                    ChargeBillingField.METER_ENERGY
+                )
             ),
             field = ChargeBillingField.TOTAL_COST,
             value = 45.76
@@ -22,6 +26,8 @@ class ChargeCalculationEngineTest {
         assertEquals(45.76, result.input.totalCost!!, 0.000001)
         assertEquals(1.22, result.input.unitPrice!!, 0.000001)
         assertEquals(45.76 / 1.22, result.input.meterEnergyKwh!!, 0.000001)
+        assertTrue(ChargeBillingField.TOTAL_COST in result.input.authoritativeBillingFields)
+        assertFalse(ChargeBillingField.METER_ENERGY in result.input.authoritativeBillingFields)
         assertFalse(result.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
     }
 
@@ -31,7 +37,11 @@ class ChargeCalculationEngineTest {
             input = ChargeCalculationInput(
                 totalCost = 45.76,
                 unitPrice = 1.22,
-                meterEnergyKwh = 45.76 / 1.22
+                meterEnergyKwh = 45.76 / 1.22,
+                authoritativeBillingFields = setOf(
+                    ChargeBillingField.TOTAL_COST,
+                    ChargeBillingField.METER_ENERGY
+                )
             ),
             field = ChargeBillingField.UNIT_PRICE,
             value = 1.10
@@ -40,16 +50,22 @@ class ChargeCalculationEngineTest {
         assertEquals(45.76, result.input.totalCost!!, 0.000001)
         assertEquals(1.10, result.input.unitPrice!!, 0.000001)
         assertEquals(45.76 / 1.10, result.input.meterEnergyKwh!!, 0.000001)
+        assertTrue(ChargeBillingField.UNIT_PRICE in result.input.authoritativeBillingFields)
+        assertFalse(ChargeBillingField.METER_ENERGY in result.input.authoritativeBillingFields)
         assertFalse(result.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
     }
 
     @Test
-    fun `editing meter energy preserves higher priority cost and price and reports conflict`() {
+    fun `editing meter energy preserves authoritative cost and price and reports conflict`() {
         val result = ChargeCalculationEngine.editBilling(
             input = ChargeCalculationInput(
                 totalCost = 45.76,
                 unitPrice = 1.22,
-                meterEnergyKwh = 45.76 / 1.22
+                meterEnergyKwh = 45.76 / 1.22,
+                authoritativeBillingFields = setOf(
+                    ChargeBillingField.TOTAL_COST,
+                    ChargeBillingField.UNIT_PRICE
+                )
             ),
             field = ChargeBillingField.METER_ENERGY,
             value = 40.0
@@ -62,9 +78,37 @@ class ChargeCalculationEngineTest {
     }
 
     @Test
-    fun `meter energy can fill missing unit price without changing known total cost`() {
+    fun `calculated cost keeps following meter energy until user edits cost`() {
+        val first = ChargeCalculationEngine.editBilling(
+            input = ChargeCalculationInput(
+                unitPrice = 1.25,
+                authoritativeBillingFields = setOf(ChargeBillingField.UNIT_PRICE)
+            ),
+            field = ChargeBillingField.METER_ENERGY,
+            value = 30.0
+        )
+        val second = ChargeCalculationEngine.editBilling(
+            input = first.input,
+            field = ChargeBillingField.METER_ENERGY,
+            value = 32.0
+        )
+
+        assertEquals(40.0, second.input.totalCost!!, 0.000001)
+        assertEquals(1.25, second.input.unitPrice!!, 0.000001)
+        assertEquals(32.0, second.input.meterEnergyKwh!!, 0.000001)
+        assertFalse(ChargeBillingField.TOTAL_COST in second.input.authoritativeBillingFields)
+        assertTrue(ChargeBillingField.UNIT_PRICE in second.input.authoritativeBillingFields)
+        assertTrue(ChargeBillingField.METER_ENERGY in second.input.authoritativeBillingFields)
+        assertFalse(second.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
+    }
+
+    @Test
+    fun `meter energy can fill missing unit price without changing authoritative total cost`() {
         val result = ChargeCalculationEngine.editBilling(
-            input = ChargeCalculationInput(totalCost = 45.0),
+            input = ChargeCalculationInput(
+                totalCost = 45.0,
+                authoritativeBillingFields = setOf(ChargeBillingField.TOTAL_COST)
+            ),
             field = ChargeBillingField.METER_ENERGY,
             value = 30.0
         )
@@ -72,12 +116,16 @@ class ChargeCalculationEngineTest {
         assertEquals(45.0, result.input.totalCost!!, 0.000001)
         assertEquals(1.5, result.input.unitPrice!!, 0.000001)
         assertEquals(30.0, result.input.meterEnergyKwh!!, 0.000001)
+        assertFalse(ChargeBillingField.UNIT_PRICE in result.input.authoritativeBillingFields)
     }
 
     @Test
-    fun `meter energy can fill missing total cost from known unit price`() {
+    fun `meter energy can fill missing total cost from authoritative unit price`() {
         val result = ChargeCalculationEngine.editBilling(
-            input = ChargeCalculationInput(unitPrice = 1.25),
+            input = ChargeCalculationInput(
+                unitPrice = 1.25,
+                authoritativeBillingFields = setOf(ChargeBillingField.UNIT_PRICE)
+            ),
             field = ChargeBillingField.METER_ENERGY,
             value = 32.0
         )
@@ -85,6 +133,7 @@ class ChargeCalculationEngineTest {
         assertEquals(40.0, result.input.totalCost!!, 0.000001)
         assertEquals(1.25, result.input.unitPrice!!, 0.000001)
         assertEquals(32.0, result.input.meterEnergyKwh!!, 0.000001)
+        assertFalse(ChargeBillingField.TOTAL_COST in result.input.authoritativeBillingFields)
     }
 
     @Test
@@ -139,7 +188,11 @@ class ChargeCalculationEngineTest {
         val initial = ChargeCalculationInput(
             totalCost = 45.76,
             unitPrice = 1.22,
-            meterEnergyKwh = 45.76 / 1.22
+            meterEnergyKwh = 45.76 / 1.22,
+            authoritativeBillingFields = setOf(
+                ChargeBillingField.TOTAL_COST,
+                ChargeBillingField.UNIT_PRICE
+            )
         )
         val cheaper = ChargeCalculationEngine.editBilling(
             initial,
