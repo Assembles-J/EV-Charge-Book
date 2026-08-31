@@ -56,36 +56,70 @@ fun AppUpdatePrompt() {
     var downloadedUri by remember { mutableStateOf<Uri?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var downloadToken by remember { mutableIntStateOf(0) }
+    var resumeDownloadId by remember { mutableStateOf<Long?>(null) }
 
     LaunchedEffect(Unit) {
-        runCatching { manager.checkForUpdate() }
-            .onSuccess { info ->
-                if (info != null && processUpdatePromptSessionGate.tryClaim(info.versionCode)) {
-                    // The previous fix prevented a double render inside one composition. Keep a
-                    // process-level version claim as well so navigation/activity recreation cannot
-                    // consume the same discovery result again and show a second identical dialog.
-                    phase = UpdatePhase.DISCOVERED
-                    update = info
-                } else if (info != null) {
-                    Log.d(TAG, "Skip duplicate update prompt for versionCode=${info.versionCode}")
+        val restored = runCatching { manager.restorePendingDownload() }
+            .onFailure { error -> Log.w(TAG, "Failed to restore pending update download", error) }
+            .getOrNull()
+
+        when (restored) {
+            is RestoredUpdateDownload.Ready -> {
+                // A verified APK survives process death. On a fresh app process, surface the
+                // install action immediately instead of asking the user to download it again.
+                if (processReadyPromptSessionGate.tryClaim(restored.info.versionCode)) {
+                    update = restored.info
+                    downloadedUri = restored.uri
+                    phase = UpdatePhase.READY
                 }
             }
-            .onFailure { error ->
-                Log.w(TAG, "Update discovery failed for ${BuildConfig.UPDATE_MANIFEST_URL}", error)
+
+            is RestoredUpdateDownload.InProgress -> {
+                // Keep following the same DownloadManager row. Do not enqueue a second APK.
+                update = restored.info
+                phase = UpdatePhase.DOWNLOADING
+                resumeDownloadId = restored.downloadId
+                downloadToken += 1
             }
+
+            null -> {
+                runCatching { manager.checkForUpdate() }
+                    .onSuccess { info ->
+                        if (info != null && processUpdatePromptSessionGate.tryClaim(info.versionCode)) {
+                            phase = UpdatePhase.DISCOVERED
+                            update = info
+                        } else if (info != null) {
+                            Log.d(TAG, "Skip duplicate update prompt for versionCode=${info.versionCode}")
+                        }
+                    }
+                    .onFailure { error ->
+                        Log.w(TAG, "Update discovery failed for ${BuildConfig.UPDATE_MANIFEST_URL}", error)
+                    }
+            }
+        }
     }
 
     LaunchedEffect(downloadToken) {
         if (downloadToken <= 0) return@LaunchedEffect
         val info = update ?: return@LaunchedEffect
+        val existingDownloadId = resumeDownloadId
         errorMessage = null
         downloadedUri = null
-        runCatching { manager.downloadAndVerify(info) }
+        runCatching {
+            if (existingDownloadId != null) {
+                manager.resumeDownloadAndVerify(existingDownloadId, info)
+            } else {
+                manager.downloadAndVerify(info)
+            }
+        }
             .onSuccess { uri ->
+                resumeDownloadId = null
                 downloadedUri = uri
+                processReadyPromptSessionGate.tryClaim(info.versionCode)
                 phase = UpdatePhase.READY
             }
             .onFailure { error ->
+                resumeDownloadId = null
                 Log.w(TAG, "Background update download failed for ${info.versionName}", error)
                 errorMessage = error.message ?: "更新包下载失败，请稍后重试"
                 phase = UpdatePhase.FAILED
@@ -105,6 +139,7 @@ fun AppUpdatePrompt() {
         if (info == null) return
         // Hide the decision dialog synchronously before starting background work.
         phase = UpdatePhase.DOWNLOADING
+        resumeDownloadId = null
         downloadToken += 1
     }
 
@@ -148,7 +183,7 @@ fun AppUpdatePrompt() {
                 title = "${current.versionName} 已准备好",
                 lines = listOf(
                     "更新包已下载并通过 SHA-256 完整性校验。",
-                    "点击安装后会进入 Android 系统安装界面；安装前不会退出当前应用。"
+                    "点击安装后会进入 Android 系统安装界面；即使关闭并重新打开 App，也不会重复下载。"
                 ),
                 confirmText = "安装",
                 dismissText = if (current.mandatory) null else "稍后",
@@ -262,6 +297,7 @@ internal class UpdatePromptSessionGate {
 }
 
 private val processUpdatePromptSessionGate = UpdatePromptSessionGate()
+private val processReadyPromptSessionGate = UpdatePromptSessionGate()
 
 private enum class UpdatePhase {
     IDLE,
