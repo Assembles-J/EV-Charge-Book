@@ -30,7 +30,6 @@ private val CatalogHeroBrush = Brush.linearGradient(
 fun VehicleCatalogScreen(
     items: List<VehicleCatalogEntity>,
     onSelect: (VehicleCatalogEntity) -> Unit,
-    onCustom: () -> Unit,
     onBack: () -> Unit
 ) {
     var query by remember { mutableStateOf("") }
@@ -49,20 +48,12 @@ fun VehicleCatalogScreen(
                 title = {
                     Column {
                         Text("选择车型", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Text("VEHICLE CATALOG", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("MANAGED VEHICLE CATALOG", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 },
                 navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
-        },
-        bottomBar = {
-            Surface(color = MaterialTheme.colorScheme.background) {
-                OutlinedButton(
-                    onClick = onCustom,
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm)
-                ) { Text("没有找到？自定义添加车辆") }
-            }
         }
     ) { padding ->
         LazyColumn(
@@ -82,7 +73,11 @@ fun VehicleCatalogScreen(
                             Text("VEHICLE / FIND", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                         }
                         Text("找到你的车型", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                        Text("车型库保存在本机；有网络时会后台刷新，没有网络也可以正常使用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            "车型由 Web 后台统一维护；本机保存最后一次有效车型库，有网络时自动刷新，离线仍可选择已缓存车型。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         OutlinedTextField(
                             value = query,
                             onValueChange = { query = it },
@@ -92,7 +87,7 @@ fun VehicleCatalogScreen(
                             singleLine = true
                         )
                         Text(
-                            if (query.isBlank()) "车型库 ${activeItems.size} 条" else "找到 ${filtered.size} 条结果",
+                            if (query.isBlank()) "可选车型 ${activeItems.size} 条" else "找到 ${filtered.size} 条结果",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -103,8 +98,12 @@ fun VehicleCatalogScreen(
             if (filtered.isEmpty()) {
                 item {
                     Column(Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.lg)) {
-                        Text("没有匹配车型", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("修改关键词，或者使用底部的自定义添加。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("车型库中没有匹配项", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            "修改搜索关键词；如果车型尚未支持，需要先在 Web 管理端补充并发布车型库。App 不再创建自定义标准车型。",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
@@ -125,7 +124,12 @@ private fun CatalogVehicleRow(item: VehicleCatalogEntity, onSelect: (VehicleCata
         Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
                 Box(contentAlignment = Alignment.Center) {
-                    Text(item.brand.take(1).uppercase(), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text(
+                        item.brand.take(1).uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
                 }
             }
             Spacer(Modifier.width(MaterialTheme.spacing.sm))
