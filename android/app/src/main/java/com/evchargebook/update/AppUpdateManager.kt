@@ -79,22 +79,38 @@ class AppUpdateManager(private val context: Context) {
      *
      * A successful task is SHA-256 verified again before being exposed as installable. An active
      * task is returned so the UI can keep observing the same download instead of enqueueing a
-     * duplicate. Stale, failed, missing, already-installed, or corrupt tasks are forgotten.
+     * duplicate. Stale, failed, missing, already-installed, or corrupt tasks are forgotten and
+     * their app-private APK files are removed.
      */
     suspend fun restorePendingDownload(
         currentVersionCode: Int = BuildConfig.VERSION_CODE
     ): RestoredUpdateDownload? = withContext(Dispatchers.IO) {
-        val pending = readPendingDownload() ?: return@withContext null
+        val pending = readPendingDownload()
+        if (pending == null) {
+            // No recoverable task means every updater-owned APK in this private directory is stale,
+            // including files left behind by updater builds that predate persisted download ids.
+            cleanupHistoricalUpdatePackages()
+            return@withContext null
+        }
+
         val (downloadId, info) = pending
 
         if (info.versionCode <= currentVersionCode) {
+            // The downloaded package has already been installed. DownloadManager.remove() also
+            // removes the file it owns; the directory sweep covers legacy/orphaned APKs as well.
+            downloadManager.remove(downloadId)
             clearPendingDownload()
+            cleanupHistoricalUpdatePackages()
             return@withContext null
         }
+
+        val activeFileName = updateFileName(info)
+        cleanupHistoricalUpdatePackages(keepFileName = activeFileName)
 
         downloadManager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
             if (!cursor.moveToFirst()) {
                 clearPendingDownload()
+                cleanupHistoricalUpdatePackages()
                 return@withContext null
             }
 
@@ -104,6 +120,7 @@ class AppUpdateManager(private val context: Context) {
                     if (uri == null || !verifySha256(uri, info.sha256)) {
                         downloadManager.remove(downloadId)
                         clearPendingDownload()
+                        cleanupHistoricalUpdatePackages()
                         return@withContext null
                     }
                     RestoredUpdateDownload.Ready(info, uri)
@@ -114,12 +131,16 @@ class AppUpdateManager(private val context: Context) {
                 DownloadManager.STATUS_PAUSED -> RestoredUpdateDownload.InProgress(info, downloadId)
 
                 DownloadManager.STATUS_FAILED -> {
+                    downloadManager.remove(downloadId)
                     clearPendingDownload()
+                    cleanupHistoricalUpdatePackages()
                     null
                 }
 
                 else -> {
+                    downloadManager.remove(downloadId)
                     clearPendingDownload()
+                    cleanupHistoricalUpdatePackages()
                     null
                 }
             }
@@ -138,7 +159,11 @@ class AppUpdateManager(private val context: Context) {
     }
 
     suspend fun downloadAndVerify(info: AppUpdateInfo): Uri = withContext(Dispatchers.IO) {
-        val fileName = "ev-charge-book-${info.versionName}.apk"
+        // Starting a fresh task means there is no valid recoverable package. Remove updater-owned
+        // historical APKs first so repeated upgrades cannot accumulate hundreds of MB over time.
+        cleanupHistoricalUpdatePackages()
+
+        val fileName = updateFileName(info)
         val request = DownloadManager.Request(Uri.parse(info.apkUrl))
             .setTitle("EV Charge Book ${info.versionName}")
             .setDescription("正在下载应用更新")
@@ -154,6 +179,7 @@ class AppUpdateManager(private val context: Context) {
             savePendingDownload(downloadId, info)
         } catch (error: Throwable) {
             downloadManager.remove(downloadId)
+            cleanupHistoricalUpdatePackages()
             throw error
         }
         awaitDownloadAndVerify(downloadId, info)
@@ -163,6 +189,7 @@ class AppUpdateManager(private val context: Context) {
         // Refresh persisted metadata before resuming observation so another process recreation can
         // still recover the same task.
         savePendingDownload(downloadId, info)
+        cleanupHistoricalUpdatePackages(keepFileName = updateFileName(info))
         awaitDownloadAndVerify(downloadId, info)
     }
 
@@ -181,28 +208,35 @@ class AppUpdateManager(private val context: Context) {
             downloadManager.query(DownloadManager.Query().setFilterById(downloadId)).use { cursor ->
                 if (!cursor.moveToFirst()) {
                     clearPendingDownload()
+                    cleanupHistoricalUpdatePackages()
                     error("找不到更新下载任务")
                 }
                 when (cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS))) {
                     DownloadManager.STATUS_SUCCESSFUL -> {
                         val uri = downloadManager.getUriForDownloadedFile(downloadId)
                             ?: run {
+                                downloadManager.remove(downloadId)
                                 clearPendingDownload()
+                                cleanupHistoricalUpdatePackages()
                                 error("更新包下载完成但无法读取")
                             }
                         if (!verifySha256(uri, info.sha256)) {
                             downloadManager.remove(downloadId)
                             clearPendingDownload()
+                            cleanupHistoricalUpdatePackages()
                             error("更新包 SHA-256 校验失败")
                         }
-                        // Deliberately keep the persisted task. If the user closes the app before
-                        // installing, the next launch must recover this verified APK as READY.
+                        // Deliberately keep the persisted task and current APK. If the user closes
+                        // the app before installing, the next launch must recover it as READY.
+                        cleanupHistoricalUpdatePackages(keepFileName = updateFileName(info))
                         return uri
                     }
 
                     DownloadManager.STATUS_FAILED -> {
                         val reason = cursor.getInt(cursor.getColumnIndexOrThrow(DownloadManager.COLUMN_REASON))
+                        downloadManager.remove(downloadId)
                         clearPendingDownload()
+                        cleanupHistoricalUpdatePackages()
                         error("更新包下载失败（$reason）")
                     }
                 }
@@ -256,6 +290,19 @@ class AppUpdateManager(private val context: Context) {
         updatePrefs.edit().clear().apply()
     }
 
+    private fun cleanupHistoricalUpdatePackages(keepFileName: String? = null): Int {
+        val downloadsDir = context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: return 0
+        return downloadsDir.listFiles()?.count { file ->
+            file.isFile &&
+                isManagedUpdateApkFileName(file.name) &&
+                file.name != keepFileName &&
+                file.delete()
+        } ?: 0
+    }
+
+    private fun updateFileName(info: AppUpdateInfo): String =
+        "$UPDATE_APK_FILE_PREFIX${info.versionName}$APK_FILE_SUFFIX"
+
     private fun verifySha256(uri: Uri, expected: String): Boolean = runCatching {
         sha256(uri).equals(expected, ignoreCase = true)
     }.getOrDefault(false)
@@ -291,3 +338,9 @@ class AppUpdateManager(private val context: Context) {
         private const val KEY_MANDATORY = "mandatory"
     }
 }
+
+internal fun isManagedUpdateApkFileName(fileName: String): Boolean =
+    fileName.startsWith(UPDATE_APK_FILE_PREFIX) && fileName.endsWith(APK_FILE_SUFFIX, ignoreCase = true)
+
+private const val UPDATE_APK_FILE_PREFIX = "ev-charge-book-"
+private const val APK_FILE_SUFFIX = ".apk"
