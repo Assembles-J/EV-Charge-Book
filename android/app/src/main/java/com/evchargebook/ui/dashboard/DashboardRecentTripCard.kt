@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
@@ -34,6 +36,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,6 +92,11 @@ fun DashboardRecentTripCard(
         isInterrupted -> "已中断"
         else -> "已完成"
     }
+    val statusIcon = when {
+        isActive -> Icons.Default.PlayArrow
+        isInterrupted -> Icons.Default.ErrorOutline
+        else -> Icons.Default.CheckCircle
+    }
     val statusColor = if (isInterrupted) MaterialTheme.colorScheme.error else EVDesignTokens.Energy.green
     val endText = if (isActive) {
         if (trip.endLatitude != null && trip.endLongitude != null) "当前位置 · 持续更新" else "等待当前位置"
@@ -128,17 +136,11 @@ fun DashboardRecentTripCard(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Surface(
-                        shape = CircleShape,
-                        color = statusColor.copy(alpha = 0.10f)
-                    ) {
-                        Text(
-                            statusText,
-                            modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = statusColor
-                        )
-                    }
+                    TripStatusBadge(
+                        icon = statusIcon,
+                        text = statusText,
+                        color = statusColor
+                    )
                 }
 
                 Row(
@@ -177,6 +179,35 @@ fun DashboardRecentTripCard(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun TripStatusBadge(icon: ImageVector, text: String, color: Color) {
+    Surface(
+        shape = CircleShape,
+        color = color.copy(alpha = 0.10f)
+    ) {
+        Row(
+            modifier = Modifier
+                .height(24.dp)
+                .padding(horizontal = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(13.dp)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                color = color,
+                maxLines = 1
+            )
         }
     }
 }
