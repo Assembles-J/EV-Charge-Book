@@ -8,11 +8,11 @@ import android.location.LocationManager
 import android.os.Looper
 
 /**
- * Framework-only fallback for devices where Google Play services location is unavailable.
+ * Framework-only fallback for devices where Google Play services location is unavailable or stalls.
  *
- * Prefer the platform fused provider when the device exposes it; otherwise fall back to the
- * same GPS/network providers the app historically used. This keeps Trip recording functional
- * on non-GMS Android devices without changing Trip continuity or persistence rules.
+ * Do not prefer the framework provider named "fused" here. Some OEM/China ROMs expose that name
+ * and accept registration without ever producing fixes. The fallback deliberately returns to the
+ * historically proven GPS/network providers and registers every enabled provider independently.
  */
 class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
@@ -24,36 +24,33 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         val newListener = LocationListener(callback)
         listener = newListener
 
-        val providers = locationManager.allProviders
-        val fusedProvider = PLATFORM_FUSED_PROVIDER.takeIf { it in providers }
-        if (fusedProvider != null) {
-            val fusedRegistration = runCatching {
+        val providers = locationManager.allProviders.toSet()
+        val candidates = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .filter { provider ->
+                provider in providers && runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+            }
+
+        var successfulRegistrations = 0
+        var lastFailure: Throwable? = null
+        candidates.forEach { provider ->
+            runCatching {
                 locationManager.requestLocationUpdates(
-                    fusedProvider,
+                    provider,
                     SAMPLE_INTERVAL_MS,
                     0f,
                     newListener,
                     Looper.getMainLooper()
                 )
+            }.onSuccess {
+                successfulRegistrations += 1
+            }.onFailure { error ->
+                lastFailure = error
             }
-            if (fusedRegistration.isSuccess) return
         }
 
-        val fallbackProviders = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
-            .filter { it in providers }
-        if (fallbackProviders.isEmpty()) {
+        if (successfulRegistrations == 0) {
             listener = null
-            throw IllegalStateException("No platform location provider available")
-        }
-
-        fallbackProviders.forEach { provider ->
-            locationManager.requestLocationUpdates(
-                provider,
-                SAMPLE_INTERVAL_MS,
-                0f,
-                newListener,
-                Looper.getMainLooper()
-            )
+            throw IllegalStateException("No enabled platform GPS/network provider could be registered", lastFailure)
         }
     }
 
@@ -63,10 +60,6 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
     }
 
     private companion object {
-        // LocationManager.FUSED_PROVIDER is API 31, but the provider name itself has been used by
-        // Android's fused provider since earlier releases. Use the stable provider string because
-        // this app supports API 26+.
-        const val PLATFORM_FUSED_PROVIDER = "fused"
         const val SAMPLE_INTERVAL_MS = 1_000L
     }
 }
