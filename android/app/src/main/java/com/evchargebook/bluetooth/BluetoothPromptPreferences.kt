@@ -69,14 +69,16 @@ class BluetoothPromptPreferences(private val context: Context) {
         }
     }
 
-    suspend fun save(
-        enabled: Boolean,
-        address: String?,
-        name: String?,
-        autoStartOnConnect: Boolean = false,
-    ) {
+    suspend fun save(enabled: Boolean, address: String?, name: String?) {
         val vehicles = database.vehicleDao().observeActive().first()
         val selectedVehicle = vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
+        val currentBinding = selectedVehicle?.let { selected ->
+            bindingPreferences.bindings.first().firstOrNull { it.vehicleId == selected.id }
+        }
+        val legacy = legacySettings.first()
+        val preservedAutoStart = currentBinding?.autoStartOnConnect
+            ?: legacy.autoStartOnConnect.takeIf { vehicles.size == 1 }
+            ?: false
 
         if (selectedVehicle != null) {
             if (address.isNullOrBlank()) {
@@ -88,7 +90,7 @@ class BluetoothPromptPreferences(private val context: Context) {
                         enabled = enabled,
                         deviceAddress = address,
                         deviceName = name,
-                        autoStartOnConnect = autoStartOnConnect,
+                        autoStartOnConnect = preservedAutoStart,
                     )
                 )
             }
@@ -98,7 +100,7 @@ class BluetoothPromptPreferences(private val context: Context) {
         // guess ownership when multiple active vehicles exist.
         context.bluetoothPromptDataStore.edit { prefs ->
             prefs[enabledKey] = enabled
-            prefs[autoStartOnConnectKey] = autoStartOnConnect
+            prefs[autoStartOnConnectKey] = preservedAutoStart
             if (address.isNullOrBlank()) {
                 prefs.remove(addressKey)
                 prefs.remove(nameKey)
@@ -106,6 +108,18 @@ class BluetoothPromptPreferences(private val context: Context) {
                 prefs[addressKey] = VehicleBluetoothBindingPreferences.normalizeAddress(address)
                 prefs[nameKey] = name.orEmpty()
             }
+        }
+    }
+
+    suspend fun saveAutoStartOnConnect(enabled: Boolean) {
+        val vehicles = database.vehicleDao().observeActive().first()
+        val selectedVehicle = vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull() ?: return
+        val binding = bindingPreferences.bindings.first().firstOrNull { it.vehicleId == selectedVehicle.id }
+            ?: return
+
+        bindingPreferences.save(binding.copy(autoStartOnConnect = enabled))
+        context.bluetoothPromptDataStore.edit { prefs ->
+            prefs[autoStartOnConnectKey] = enabled
         }
     }
 }
