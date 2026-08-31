@@ -101,6 +101,7 @@ sealed class AutoTripDecision(open val reason: AutoTripReasonCode) {
  * - PROMPT_ONLY never returns Start.
  * - VERIFIED_AUTO_START fails closed when required capabilities are unavailable.
  * - FGS background-start denial downgrades to a user-visible prompt rather than a silent start.
+ * - Failed/terminal sessions never silently retry themselves.
  * - No Trip is created here; a future TripStartCoordinator owns that authority.
  */
 object AutoTripEligibilityPolicy {
@@ -132,6 +133,7 @@ object AutoTripEligibilityPolicy {
             AutoTripDetectionState.RECORDING,
             AutoTripDetectionState.POSSIBLE_END,
             AutoTripDetectionState.END_CONFIRMATION,
+            AutoTripDetectionState.START_FAILED,
             AutoTripDetectionState.BLOCKED,
             -> return AutoTripDecision.Block(AutoTripReasonCode.SESSION_NOT_ELIGIBLE)
 
