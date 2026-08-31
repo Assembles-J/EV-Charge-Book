@@ -23,6 +23,10 @@ import com.evchargebook.data.entity.VehicleStateUpdateSource
 import com.evchargebook.domain.ChargingRecordRules
 import com.evchargebook.domain.TripRules
 import com.evchargebook.domain.trip.TripEnergyCalculator
+import com.evchargebook.trip.TripStartCoordinator
+import com.evchargebook.trip.TripStartRequest
+import com.evchargebook.trip.TripStartResult
+import com.evchargebook.trip.TripStartSource
 import com.evchargebook.trip.TripTrackingService
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -53,6 +57,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val tripDao = database.tripDao()
     private val vehicleStateDao = database.vehicleStateDao()
     private val bluetoothPreferences = BluetoothPromptPreferences(context)
+    private val tripStartCoordinator = TripStartCoordinator(database, context)
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
     val catalogVehicles: Flow<List<VehicleCatalogEntity>> = vehicleCatalogDao.observeAll()
@@ -128,25 +133,26 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         }
     }
 
-    suspend fun startTrip(vehicleId: Long, startedAtEpochMillis: Long = System.currentTimeMillis()): Long {
-        val tripId = database.withTransaction {
-            val selectedVehicle = vehicleDao.observeActive().first().firstOrNull { it.id == vehicleId }
-                ?: error("当前车辆不可用")
-            TripRules.requireCanStart(tripDao.getActive() != null)
-            val state = vehicleStateDao.get(vehicleId)
-            tripDao.insertSession(
-                TripSessionEntity(
-                    vehicleId = selectedVehicle.id,
-                    startedAtEpochMillis = startedAtEpochMillis,
-                    startSoc = state?.currentSoc,
-                    startSocSnapshot = state?.currentSoc,
-                    startMileageKm = state?.currentMileage,
-                    status = TripStatus.RECORDING
+    suspend fun startTrip(
+        vehicleId: Long,
+        startedAtEpochMillis: Long = System.currentTimeMillis(),
+        bluetoothSessionId: String? = null,
+    ): Long {
+        val source = bluetoothSessionId?.let(TripStartSource::BluetoothPrompt) ?: TripStartSource.ManualUi
+        return when (
+            val result = tripStartCoordinator.start(
+                TripStartRequest(
+                    vehicleId = vehicleId,
+                    source = source,
+                    requestedAtEpochMillis = startedAtEpochMillis,
                 )
             )
+        ) {
+            is TripStartResult.Started -> result.tripId
+            is TripStartResult.AlreadyActive -> error("已有进行中的行程")
+            is TripStartResult.Blocked -> error(result.reason)
+            is TripStartResult.Failed -> throw (result.cause ?: IllegalStateException(result.reason))
         }
-        startTrackingOrInterrupt(tripId)
-        return tripId
     }
 
     suspend fun resumeTrip(tripId: Long) {
