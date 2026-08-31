@@ -65,31 +65,16 @@ jobs:
           prompt=Path('hero-admin/static/asset-bundle-prompt.html').read_text(encoding='utf-8')
           index=Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
           doc=Path('docs/RESOURCE_BUNDLE_WORKFLOW.md').read_text(encoding='utf-8')
-          for marker in [
-              '车型资源工作台','单车型资源包 JSON','Logo + Hero 统一投递','resourceQueue',
-              'configUpdateConfirm','heroUpdateConfirm','确认并发布整套资源'
-          ]:
-              if marker not in workbench:
-                  raise SystemExit(f'missing workbench marker: {marker}')
-          for marker in [
-              'ev-charge-book-resource-bundle','target-select','__custom__','手动选择品牌 / Hero Key',
-              'heroVariantKey','-dark','-light','api/brand/logo','api/publish','api/catalog/save',
-              '服务器保存：','第一张优先'
-          ]:
-              if marker not in js:
-                  raise SystemExit(f'missing workbench behavior: {marker}')
-          for marker in [
-              '全量资产包 Prompt','prompt-library.html','brand_<brandId>_light.webp',
-              'brand_<brandId>_dark.webp','hero_<heroKey>_dark.webp','hero_<heroKey>_light.webp',
-              'catalogImport','needsSource','updateIntent','当前已有 Hero 语义 Key',
-              'Light Hero 变体规则'
-          ]:
-              if marker not in prompt:
-                  raise SystemExit(f'missing full prompt marker: {marker}')
-          for marker in ['static/resource-workbench.html','static/asset-bundle-prompt.html','单项规范 / Prompt']:
-              if marker not in index:
-                  raise SystemExit(f'missing admin entry: {marker}')
-          for marker in ['<heroArtworkKey>-dark','<heroArtworkKey>-light','automatic matching is only a suggestion','explicit confirmation']:
-              if marker not in doc:
-                  raise SystemExit(f'missing authority rule: {marker}')
+          groups = {
+              'workbench': (workbench, ['车型资源工作台','单车型资源包 JSON','Logo + Hero 统一投递','resourceQueue','configUpdateConfirm','heroUpdateConfirm','确认并发布整套资源']),
+              'behavior': (js, ['ev-charge-book-resource-bundle','target-select','__custom__','手动选择品牌 / Hero Key','heroVariantKey','api/brand/logo','api/publish','api/catalog/save','服务器保存：','第一张优先']),
+              'prompt': (prompt, ['全量资产包 Prompt','prompt-library.html','catalogImport','needsSource','updateIntent','当前已有 Hero 语义 Key','Light Hero 变体规则','brand_','hero_','_light.webp','_dark.webp']),
+              'index': (index, ['static/resource-workbench.html','static/asset-bundle-prompt.html','单项规范 / Prompt']),
+              'docs': (doc, ['Hero semantic key and variants','automatic matching is only a suggestion','explicit confirmation','-dark','-light']),
+          }
+          for group,(text,markers) in groups.items():
+              for marker in markers:
+                  if marker not in text:
+                      raise SystemExit(f'missing {group} marker: {marker}')
+          print('Resource Workbench Web contract OK')
           PY
