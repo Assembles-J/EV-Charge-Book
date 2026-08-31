@@ -79,6 +79,24 @@
     }catch(error){setStatus(document.getElementById('heroStatus'),error.message||error,'error')}finally{updatePublishEnabled()}
   };
 
+  const legacyArtworkRenderer=renderArtworkDialog;
+  async function showArtworkVariant(vehicle,variant){
+    const base=stripVariant(vehicle.heroArtworkKey||'');
+    if(!base){await legacyArtworkRenderer(vehicle);return}
+    const info=heroInfo(base,variant),effectiveKey=info.legacy?base:info.key;
+    await legacyArtworkRenderer({...vehicle,heroArtworkKey:effectiveKey});
+    const root=document.getElementById('artworkDialogContent');
+    const toolbar=document.createElement('div');toolbar.className='status';toolbar.style.marginBottom='12px';
+    const select=document.createElement('select');select.innerHTML='<option value="dark">Dark Hero</option><option value="light">Light Hero</option>';select.value=variant;select.style.maxWidth='220px';
+    const text=document.createElement('div');text.className='meta';text.style.marginTop='8px';text.textContent=`语义 Key：${base} · 当前查看：${info.key}${info.legacy?'（使用旧 base Key 作为 Dark fallback）':''}`;
+    toolbar.append(select,text);root.prepend(toolbar);select.onchange=()=>void showArtworkVariant(vehicle,select.value);
+  }
+  renderArtworkDialog=async function(vehicle){
+    const base=stripVariant(vehicle.heroArtworkKey||'');
+    const initial=base&&heroInfo(base,'dark').current?'dark':base&&heroInfo(base,'light').current?'light':'dark';
+    await showArtworkVariant(vehicle,initial);
+  };
+
   globalThis.__evAdminHeroVariantTest={stripVariant,variantKey};
   renderHeroKeys();
 })();
