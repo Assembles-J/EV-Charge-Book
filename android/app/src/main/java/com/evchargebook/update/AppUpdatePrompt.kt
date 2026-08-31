@@ -65,13 +65,12 @@ fun AppUpdatePrompt() {
 
         when (restored) {
             is RestoredUpdateDownload.Ready -> {
-                // A verified APK survives process death. On a fresh app process, surface the
-                // install action immediately instead of asking the user to download it again.
-                if (processReadyPromptSessionGate.tryClaim(restored.info.versionCode)) {
-                    update = restored.info
-                    downloadedUri = restored.uri
-                    phase = UpdatePhase.READY
-                }
+                // Install-ready state is durable, so it must win over in-memory prompt dedupe.
+                // If Activity/Compose state is recreated while the verified APK still exists,
+                // always restore the install action rather than silently hiding the update.
+                update = restored.info
+                downloadedUri = restored.uri
+                phase = UpdatePhase.READY
             }
 
             is RestoredUpdateDownload.InProgress -> {
@@ -115,7 +114,6 @@ fun AppUpdatePrompt() {
             .onSuccess { uri ->
                 resumeDownloadId = null
                 downloadedUri = uri
-                processReadyPromptSessionGate.tryClaim(info.versionCode)
                 phase = UpdatePhase.READY
             }
             .onFailure { error ->
@@ -297,7 +295,6 @@ internal class UpdatePromptSessionGate {
 }
 
 private val processUpdatePromptSessionGate = UpdatePromptSessionGate()
-private val processReadyPromptSessionGate = UpdatePromptSessionGate()
 
 private enum class UpdatePhase {
     IDLE,
