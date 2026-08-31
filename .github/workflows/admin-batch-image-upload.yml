@@ -1,0 +1,72 @@
+name: Admin Batch Image Upload
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/templates/index.html'
+      - 'hero-admin/static/batch-upload.js'
+      - 'hero-admin/static/batch-upload.css'
+      - '.github/workflows/admin-batch-image-upload.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/templates/index.html'
+      - 'hero-admin/static/batch-upload.js'
+      - 'hero-admin/static/batch-upload.css'
+      - '.github/workflows/admin-batch-image-upload.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify batch upload contract
+        shell: bash
+        run: |
+          set -eu
+          node --check hero-admin/static/batch-upload.js
+          node - <<'NODE'
+          require('./hero-admin/static/batch-upload.js');
+          const assert=require('assert');
+          const {normalizeToken,matchByLongestPrefix,planBatch}=globalThis.__evBatchUploadTest;
+          assert.equal(normalizeToken('Xiaomi_SU7_Ultra_v4.WEBP'),'xiaomi-su7-ultra-v4');
+          const targets=[
+            {id:'xiaomi-su7',aliases:['xiaomi-su7']},
+            {id:'xiaomi-su7-ultra',aliases:['xiaomi-su7-ultra']},
+          ];
+          assert.equal(matchByLongestPrefix('xiaomi-su7-ultra_v4.webp',targets).target.id,'xiaomi-su7-ultra');
+          assert.equal(matchByLongestPrefix('xiaomi-su7_20260831.webp',targets).target.id,'xiaomi-su7');
+          const plan=planBatch([
+            {name:'xiaomi-su7_v1.webp',type:'image/webp'},
+            {name:'xiaomi-su7_v2.webp',type:'image/webp'},
+            {name:'unknown.webp',type:'image/webp'},
+          ],targets,'Hero Key');
+          assert.equal(plan[0].state,'ready');
+          assert.equal(plan[1].state,'duplicate');
+          assert.equal(plan[2].state,'unmatched');
+          NODE
+          python3 - <<'PY'
+          from pathlib import Path
+          html=Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
+          js=Path('hero-admin/static/batch-upload.js').read_text(encoding='utf-8')
+          for marker in ['static/batch-upload.css','static/batch-upload.js']:
+              if marker not in html:
+                  raise SystemExit(f'missing page asset: {marker}')
+          for marker in [
+              '品牌 Logo 批量上传',
+              'Hero 批量上传',
+              'brandLightBatchDrop',
+              'brandDarkBatchDrop',
+              'heroBatchDrop',
+              'input.multiple=true',
+              'matchByLongestPrefix',
+              '最先上传优先',
+              "api/brand/logo",
+              "api/publish",
+          ]:
+              if marker not in js:
+                  raise SystemExit(f'missing batch upload marker: {marker}')
+          PY
