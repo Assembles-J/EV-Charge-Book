@@ -19,8 +19,12 @@
         android:supportsRtl="true"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <receiver android:name=".bluetooth.BluetoothConnectionReceiver" android:exported="false">
-            <intent-filter><action android:name="android.bluetooth.device.action.ACL_CONNECTED" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
+                <action android:name="android.bluetooth.device.action.ACL_DISCONNECTED" />
+            </intent-filter>
         </receiver>
+        <receiver android:name=".autotrip.AutoTripActionReceiver" android:exported="false" />
         <service
             android:name=".trip.TripTrackingService"
             android:exported="false"
