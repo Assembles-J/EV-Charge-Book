@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>EV Charge Book · 规范与提示词</title>
+  <style>
+    :root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#07100d;color:#eef7f1}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#123326 0,#07100d 34%,#040806 100%);min-height:100vh}main{max-width:1180px;margin:0 auto;padding:36px 20px 72px}.eyebrow{font-size:12px;letter-spacing:.16em;color:#74d8a6;font-weight:700}h1{font-size:34px;margin:8px 0 8px}h2{margin:0;font-size:22px}.intro,.meta{color:#9fb1a7;line-height:1.7}.grid{display:grid;grid-template-columns:1fr 1.45fr;gap:18px;margin-top:24px}.card{background:rgba(13,26,20,.92);border:1px solid rgba(160,220,183,.14);border-radius:20px;padding:20px;box-shadow:0 18px 55px rgba(0,0,0,.22)}.card.wide{grid-column:1/-1}.head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px}.actions{display:flex;gap:8px;flex-wrap:wrap}button,a.button{border:1px solid rgba(160,220,183,.24);border-radius:10px;background:#163827;color:#effaf3;padding:9px 13px;font:inherit;font-weight:650;cursor:pointer;text-decoration:none}button.secondary,a.secondary{background:#0c1a14;color:#d6e6dc}button:hover,a.button:hover{filter:brightness(1.12)}textarea,input{width:100%;border:1px solid rgba(160,220,183,.18);background:#050b08;color:#eaf5ee;border-radius:12px;padding:13px;font:13px/1.65 ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}textarea{resize:vertical;min-height:340px}.logo-text{min-height:470px}.hero-text{min-height:920px}.vars{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;margin:12px 0}.status{min-height:24px;color:#74d8a6;font-size:13px;margin-top:8px}.callout{padding:12px 14px;border-radius:12px;background:#0a1812;border:1px solid rgba(116,216,166,.16);color:#c8d8cf;line-height:1.6}.back{display:inline-flex;margin-bottom:18px}@media(max-width:850px){.grid{grid-template-columns:1fr}.vars{grid-template-columns:1fr}.card.wide{grid-column:auto}.head{flex-direction:column}.hero-text{min-height:760px}}
+  </style>
+</head>
+<body>
+<main>
+  <a class="button secondary back" href="../">← 返回车辆资源管理</a>
+  <div class="eyebrow">EV CHARGE BOOK · COPY CENTER</div>
+  <h1>规范与提示词</h1>
+  <p class="intro">这里集中维护品牌 Logo 规范和汽车 Hero 生成模板。文本可直接编辑后复制；本机修改可保存到浏览器，下次继续使用。仓库内版本仍作为团队默认标准。</p>
+
+  <div class="grid">
+    <section class="card">
+      <div class="head"><div><h2>品牌 Logo 标准</h2><p class="meta">品牌级复用 · Light / Dark 两个语义版本</p></div><div class="actions"><button class="secondary" data-reset="logo">恢复标准</button><button data-copy="logo">一键复制</button></div></div>
+      <textarea id="logoText" class="logo-text" spellcheck="false">1. 运行格式：WebP，透明背景，sRGB
+2. 固定画布：512 × 512 px
+3. 绝对不能裁 Logo，使用 contain 等比缩放、居中
+4. 方形 / 圆形 / 纵向 Logo：主体最大 384 × 384 px，尽量四边至少留 64 px
+5. 横向 Wordmark：主体最大 416 × 192 px
+6. 建议文件 20–100 KB，软上限 160 KB，硬上限 256 KiB
+7. 不允许阴影、渐变、卡片底色、圆形 UI 底板、水印、宣传语
+8. 只能使用官方品牌 Logo / 官方 Wordmark，不能自己描，不能拿车型标识如 C16 / SU7 / Model Y 当品牌 Logo
+9. 支持 Light / Dark 两个语义版本；Android 不擅自给彩色品牌 Logo 改色
+10. 发布文件不可覆盖，采用类似 brand_leapmotor_dark_v3.webp 的版本化文件
+11. Android cache key 包含 brandId + variant + version，使用内存 + 磁盘缓存
+12. 网络失败继续使用已有缓存；首次离线且无 Logo 时才显示通用车辆图标
+13. Vehicle Switcher Logo 建议 32–40 dp；车型选择页 40–48 dp</textarea>
+      <div class="status" id="logoStatus"></div>
+    </section>
+
+    <section class="card">
+      <div class="head"><div><h2>Hero Prompt 快速生成</h2><p class="meta">输入车型和颜色，自动替换模板占位符</p></div><div class="actions"><button class="secondary" id="saveLocal">保存本机修改</button><button id="copyResolved">生成并复制</button></div></div>
+      <div class="vars"><input id="modelName" placeholder="车型名称，例如 Xiaomi SU7" /><input id="bodyColor" placeholder="车身颜色，例如 海湾蓝" /><button class="secondary" id="previewResolved">应用变量</button></div>
+      <div class="callout">长车规则会继续保留在模板中。车型为 SU7、BYD Seal、Taycan 等低趴长车时，生成要求会主动缩小车辆 8%～15%，优先保证中央 1.24:1 Crop 后整车完整。</div>
+      <div class="status" id="heroStatus"></div>
+    </section>
+
+    <section class="card wide">
+      <div class="head"><div><h2>EV Charge Book Hero 完整模板</h2><p class="meta">默认标准 · 1600×1100 · 中央 1360×1100 Crop 安全区</p></div><div class="actions"><button class="secondary" data-reset="hero">恢复标准</button><button data-copy="hero">复制原始模板</button></div></div>
+      <textarea id="heroText" class="hero-text" spellcheck="false">为 EV Charge Book 生成一张高质量汽车 Hero 背景图，用于 Android App 首页车辆卡片。
+
+【最终输出规格】
+
+- 格式：WebP
+- 尺寸：1600 × 1100 px
+- 横向构图
+- 高画质，优先质感，不要过度压缩
+- 保留车漆金属渐变、暗部层次、玻璃反射、环境光和背景纹理
+- 不要加入任何文字、Logo、水印、UI、按钮、车牌文字
+
+【最重要：真机 Crop 安全区】
+
+App 中实际使用的是 ContentScale.Crop，并且 Hero 容器比例约为 1.24:1。
+因此虽然最终图片是 1600×1100，但真机显示时左右区域会被裁掉。
+
+必须严格按照以下安全区构图：
+
+- 图片总宽：1600 px
+- 真机主要可视区域约为中央 1360 px
+- 左右至少各预留 120 px 以上纯背景裁切缓冲
+- 推荐更加安全地预留左右各 180 px
+- 车辆所有关键结构必须完整位于：X = 180 ～ 1420 px
+- 车头、车尾、前后保险杠、轮胎、后视镜、尾翼等绝对不能进入左右危险裁切区
+- 不允许车辆贴近画布左右边缘
+- 不允许车头或车尾被构图切断
+
+请把“中央 1.24:1 裁切窗口”视为真正的最终画面，而 1600×1100 外围区域只是 Crop 缓冲。
+
+【车辆主体比例】
+
+以 EV Charge Book 当前零跑 C16 Hero 真机效果作为视觉基准：
+
+- 车辆主体要足够大，有 Hero 感
+- 但必须完整展示整车
+- 不要为了让车显得更大而让车头或车尾超出安全区
+- 车辆主体横向宽度建议控制在画布宽度的约 68%～76%
+- 对于 SU7、海豹这类低趴长车，必须主动缩小一点车辆横向占比
+- 长车不能按照 SUV 的主体比例直接放大
+- 整车应集中在画面中央
+- 视觉重心略低于画面正中心
+- 保证车顶、车轮、车头、车尾均完整
+
+【纵向构图】
+
+推荐车辆主体主要位于：Y = 180 ～ 930 px
+
+要求：
+
+- 车顶上方保留适量环境空间
+- 轮胎下方保留少量地面空间
+- 不要把车辆放得过低
+- 不要让轮胎或底盘贴近下边缘
+- 上下都要保留自然呼吸空间
+
+【镜头】
+
+使用高级汽车广告摄影视角：
+
+- 3/4 前侧或 3/4 后侧视角
+- 轻微低机位
+- 镜头不要过于广角
+- 避免严重透视变形
+- 不要让靠近镜头的一侧车头被夸张放大
+- 整车比例必须自然
+- 车身长度视觉上不要被镜头进一步拉长
+- 优先选择约 50mm～85mm 等效焦段的视觉效果
+
+【车辆】
+
+车型：{{车型名称}}
+车身颜色：{{颜色}}
+
+必须保持车型外观特征准确：
+
+- 正确的车灯造型
+- 正确的车身轮廓
+- 正确的轮毂比例
+- 正确的车顶线条
+- 正确的前后比例
+- 不要自行创造不存在的空气动力学套件
+- 不要改变量产车整体设计语言
+
+车辆必须保持完整、干净、真实、有高级感。
+
+【背景风格】
+
+EV Charge Book 主视觉采用深色、高级、克制的新能源科技氛围。
+
+推荐背景：
+
+- 深黑 / 墨绿 / 深灰为主
+- 低饱和度
+- 可加入非常克制的极光、雾气、山体、道路、城市远景或科技环境光
+- 背景主要作用是衬托车辆，不抢主体
+- 背景边缘区域尽量简单，方便 Crop
+- 左右 180 px 缓冲区尽量不要出现重要视觉元素
+
+环境光可以带少量绿色，但：
+
+- 不要荧光绿
+- 不要高饱和绿色
+- 不要赛博朋克霓虹灯堆叠
+- 不要五颜六色
+- 不要廉价游戏海报感
+
+整体感觉应接近：高级汽车品牌官网 Hero、旗舰车型广告摄影、克制的新能源科技感。
+
+【光影】
+
+- 车辆轮廓必须清晰
+- 暗色背景下仍然能看清车身结构
+- 保留真实金属漆面渐变
+- 保留车门、翼子板、引擎盖、车顶等结构层次
+- 玻璃区域不要死黑
+- 轮毂和轮胎不能糊成一团
+- 光线应该自然地突出车身曲面
+- 可以有柔和轮廓光
+- 不要强烈炫光遮挡车身
+- 不要过曝
+- 不要把暗部压成纯黑
+
+【特别针对低趴长车】
+
+如果车型为 Xiaomi SU7、BYD Seal、Porsche Taycan 类似比例的轿跑或长车：
+
+必须额外执行：
+
+- 将车辆整体适当缩小约 8%～15%
+- 增加左右背景留白
+- 不允许车鼻或车尾靠近 X=180 / X=1420 边界
+- 宁可背景多一点，也不要裁车
+- 保证前后保险杠完整可见
+- 保证四个轮胎或至少主要轮廓完整
+- 不要使用极端近距离 3/4 镜头
+- 不要为了视觉冲击把车辆横向撑满 1600px
+
+【最终构图检查】
+
+生成前必须把画面想象成两个区域：
+
+完整源图：1600 × 1100
+真正 App 可视窗口：中央约 1360 × 1100
+
+最终必须确保：
+
+1. 在中央 1.24:1 裁切窗口中，车辆依然完整。
+2. 左右各裁掉约 120px 后，车头和车尾仍然有明显安全距离。
+3. 车辆主体不会因为 ContentScale.Crop 被截断。
+4. 不能只保证 1600×1100 完整，必须保证 1.24 Crop 后仍然完整。
+5. Hero 应该“填满视觉”，但不是“车辆填满画布”。
+6. 最终效果以 EV Charge Book 零跑 C16 当前真机 Hero 的完整度和视觉平衡为基准。
+
+【禁止】
+
+- cropped car
+- cut-off front bumper
+- cut-off rear bumper
+- vehicle touching image edges
+- oversized vehicle
+- extreme wide-angle distortion
+- fisheye
+- incomplete wheels
+- partial vehicle
+- text
+- watermark
+- logo overlay
+- UI elements
+- neon cyberpunk
+- oversaturated colors
+- blown highlights
+- crushed blacks
+- low-detail car paint
+- flat lighting
+- excessive empty space above the car
+- important background elements near left or right edges
+
+最终目标：
+
+生成一张即使在 Android App 中使用 1.24:1 的 ContentScale.Crop 进行中央裁切，车辆仍然完整、自然、视觉饱满、高级，并且达到零跑 C16 当前真机 Hero 卡片的完整度和沉浸感。</textarea>
+    </section>
+  </div>
+</main>
+<script>
+const defaults={logo:document.getElementById('logoText').value,hero:document.getElementById('heroText').value};
+const saved=JSON.parse(localStorage.getItem('evcb-copy-center-v1')||'{}');
+if(saved.logo)document.getElementById('logoText').value=saved.logo;if(saved.hero)document.getElementById('heroText').value=saved.hero;
+function status(id,text){const el=document.getElementById(id);el.textContent=text;setTimeout(()=>{if(el.textContent===text)el.textContent=''},2400)}
+async function copyText(value,statusId){try{await navigator.clipboard.writeText(value);status(statusId,'已复制到剪贴板')}catch(_){const ta=document.createElement('textarea');ta.value=value;document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();status(statusId,'已复制到剪贴板')}}
+document.querySelector('[data-copy="logo"]').onclick=()=>copyText(document.getElementById('logoText').value,'logoStatus');
+document.querySelector('[data-copy="hero"]').onclick=()=>copyText(document.getElementById('heroText').value,'heroStatus');
+document.querySelector('[data-reset="logo"]').onclick=()=>{document.getElementById('logoText').value=defaults.logo;status('logoStatus','已恢复仓库默认标准')};
+document.querySelector('[data-reset="hero"]').onclick=()=>{document.getElementById('heroText').value=defaults.hero;status('heroStatus','已恢复仓库默认模板')};
+function resolved(){const model=document.getElementById('modelName').value.trim()||'{{车型名称}}';const color=document.getElementById('bodyColor').value.trim()||'{{颜色}}';return document.getElementById('heroText').value.replaceAll('{{车型名称}}',model).replaceAll('{{颜色}}',color)}
+document.getElementById('previewResolved').onclick=()=>{document.getElementById('heroText').value=resolved();status('heroStatus','已将车型与颜色应用到当前文本，可继续微调')};
+document.getElementById('copyResolved').onclick=()=>copyText(resolved(),'heroStatus');
+document.getElementById('saveLocal').onclick=()=>{localStorage.setItem('evcb-copy-center-v1',JSON.stringify({logo:document.getElementById('logoText').value,hero:document.getElementById('heroText').value}));status('heroStatus','当前修改已保存到本机浏览器')};
+</script>
+</body>
+</html>
