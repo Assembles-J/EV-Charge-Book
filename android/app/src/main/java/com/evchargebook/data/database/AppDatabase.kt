@@ -8,12 +8,14 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.evchargebook.data.dao.AutoTripDetectionDao
 import com.evchargebook.data.dao.ChargingRecordDao
+import com.evchargebook.data.dao.ChargingSessionDao
 import com.evchargebook.data.dao.TripDao
 import com.evchargebook.data.dao.VehicleCatalogDao
 import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleStateDao
 import com.evchargebook.data.entity.AutoTripDetectionSessionEntity
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
@@ -25,6 +27,7 @@ import com.evchargebook.data.entity.VehicleStateEntity
     entities = [
         VehicleEntity::class,
         ChargingRecordEntity::class,
+        ChargingSessionEntity::class,
         VehicleCatalogEntity::class,
         TripSessionEntity::class,
         TripPointEntity::class,
@@ -32,13 +35,14 @@ import com.evchargebook.data.entity.VehicleStateEntity
         VehicleStateEntity::class,
         AutoTripDetectionSessionEntity::class,
     ],
-    version = 15,
+    version = 16,
     exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleDao(): VehicleDao
     abstract fun vehicleCatalogDao(): VehicleCatalogDao
     abstract fun chargingRecordDao(): ChargingRecordDao
+    abstract fun chargingSessionDao(): ChargingSessionDao
     abstract fun tripDao(): TripDao
     abstract fun vehicleStateDao(): VehicleStateDao
     abstract fun autoTripDetectionDao(): AutoTripDetectionDao
@@ -214,6 +218,41 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Legacy records only know one occurrence time and no explicit vehicle-side energy.
+                // Keep both new facts nullable rather than backfilling invented values.
+                db.execSQL("ALTER TABLE charging_records ADD COLUMN endedAtEpochMillis INTEGER")
+                db.execSQL("ALTER TABLE charging_records ADD COLUMN vehicleEnergyKwh REAL")
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS charging_sessions (
+                        id TEXT NOT NULL,
+                        vehicleId INTEGER NOT NULL,
+                        startedAtEpochMillis INTEGER NOT NULL,
+                        startSoc INTEGER,
+                        targetSoc INTEGER,
+                        chargerType TEXT,
+                        unitPricePerKwh REAL,
+                        location TEXT,
+                        remark TEXT,
+                        latitude REAL,
+                        longitude REAL,
+                        locationAccuracyMeters REAL,
+                        status TEXT NOT NULL,
+                        endedAtEpochMillis INTEGER,
+                        completedRecordId INTEGER,
+                        updatedAtEpochMillis INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_vehicleId ON charging_sessions(vehicleId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_status ON charging_sessions(status)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_startedAtEpochMillis ON charging_sessions(startedAtEpochMillis)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -239,6 +278,7 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_12_13,
                         MIGRATION_13_14,
                         MIGRATION_14_15,
+                        MIGRATION_15_16,
                     )
                     .build()
                     .also { instance = it }
