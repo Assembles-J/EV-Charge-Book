@@ -55,6 +55,17 @@ class AutoTripEligibilityPolicyTest {
     }
 
     @Test
+    fun `start failed session cannot silently retry`() {
+        val decision = decide(
+            detectionState = AutoTripDetectionState.START_FAILED,
+            hasTrustedMovement = true,
+            inVehicleDetected = true,
+        )
+
+        assertDecision<AutoTripDecision.Block>(decision, AutoTripReasonCode.SESSION_NOT_ELIGIBLE)
+    }
+
+    @Test
     fun `cooldown suppresses a new candidate`() {
         val decision = decide(cooldownActive = true)
 
