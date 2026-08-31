@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 sealed interface TripStartSource {
     data object ManualUi : TripStartSource
     data class BluetoothPrompt(val sessionId: String) : TripStartSource
+    data class BluetoothAuto(val sessionId: String) : TripStartSource
     data class VerifiedAuto(val sessionId: String) : TripStartSource
 }
 
@@ -30,8 +31,8 @@ sealed interface TripStartResult {
 /**
  * Single authority for creating a new Trip.
  *
- * UI, Bluetooth prompt actions and future verified automation must converge here so the active
- * Trip guard, VehicleState snapshot and detection-session linkage are evaluated in one Room
+ * UI, Bluetooth prompt actions and automatic Bluetooth starts converge here so the active Trip
+ * guard, VehicleState snapshot and detection-session linkage are evaluated in one Room
  * transaction. Tracking service startup happens only after the Trip is persisted; if Android
  * rejects service startup, the Trip becomes INTERRUPTED and an associated detection session
  * becomes START_FAILED rather than silently retrying or creating another Trip.
@@ -57,10 +58,12 @@ class TripStartCoordinator(
 
             val detectionSession = when (val source = request.source) {
                 TripStartSource.ManualUi -> null
+
                 is TripStartSource.BluetoothPrompt -> {
                     val session = detectionDao.getById(source.sessionId)
                         ?: return@withTransaction PreparedResult.Blocked("蓝牙行程提示已失效")
-                    if (session.closedAtEpochMillis != null ||
+                    if (
+                        session.closedAtEpochMillis != null ||
                         session.state != AutoTripDetectionState.BLUETOOTH_CANDIDATE.name
                     ) {
                         return@withTransaction PreparedResult.Blocked("蓝牙行程提示已过期，请重新开始")
@@ -71,10 +74,26 @@ class TripStartCoordinator(
                     session
                 }
 
+                is TripStartSource.BluetoothAuto -> {
+                    val session = detectionDao.getById(source.sessionId)
+                        ?: return@withTransaction PreparedResult.Blocked("蓝牙自动行程检测已失效")
+                    if (
+                        session.closedAtEpochMillis != null ||
+                        session.state != AutoTripDetectionState.BLUETOOTH_CANDIDATE.name
+                    ) {
+                        return@withTransaction PreparedResult.Blocked("蓝牙自动行程检测已过期")
+                    }
+                    if (session.vehicleId != vehicle.id) {
+                        return@withTransaction PreparedResult.Blocked("蓝牙自动行程车辆不一致")
+                    }
+                    session
+                }
+
                 is TripStartSource.VerifiedAuto -> {
                     val session = detectionDao.getById(source.sessionId)
                         ?: return@withTransaction PreparedResult.Blocked("自动行程检测已失效")
-                    if (session.closedAtEpochMillis != null ||
+                    if (
+                        session.closedAtEpochMillis != null ||
                         session.state != AutoTripDetectionState.READY_TO_START.name
                     ) {
                         return@withTransaction PreparedResult.Blocked("自动行程尚未达到可信启动条件")
