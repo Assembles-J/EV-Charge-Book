@@ -179,7 +179,7 @@ private fun BluetoothStatusCockpit(
                 }
                 Spacer(Modifier.width(MaterialTheme.spacing.sm))
                 Switch(
-                    checked = settings.autoStartOnConnect && enabled,
+                    checked = settings.autoStartOnConnect,
                     onCheckedChange = onAutoStartChange,
                     enabled = enabled,
                 )
