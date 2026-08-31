@@ -27,7 +27,7 @@ class ChargingMigration15To16ContractTest {
                     )
                     """.trimIndent()
                 )
-                ChargingMigration15To16.statements.forEach(statement::execute)
+                ChargingMigration15To16.statements.forEach { sql -> statement.execute(sql) }
             }
 
             db.createStatement().use { statement ->
