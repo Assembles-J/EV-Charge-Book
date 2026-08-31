@@ -10,11 +10,16 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.evchargebook.MainActivity
 import com.evchargebook.bluetooth.BluetoothPromptPreferences
 import com.evchargebook.bluetooth.VehicleBluetoothBinding
 import com.evchargebook.bluetooth.VehicleBluetoothBindingPreferences
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.AutoTripDetectionSessionEntity
+import com.evchargebook.trip.TripStartCoordinator
+import com.evchargebook.trip.TripStartRequest
+import com.evchargebook.trip.TripStartResult
+import com.evchargebook.trip.TripStartSource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -27,6 +32,12 @@ sealed interface AutoTripCandidateResult {
     data object ActiveTripExists : AutoTripCandidateResult
     data class Existing(val sessionId: String, val state: AutoTripDetectionState) : AutoTripCandidateResult
     data class Created(val sessionId: String, val notificationVisible: Boolean) : AutoTripCandidateResult
+    data class AutoStarted(val sessionId: String, val tripId: Long) : AutoTripCandidateResult
+    data class AutoStartFailed(
+        val sessionId: String,
+        val tripId: Long,
+        val notificationVisible: Boolean,
+    ) : AutoTripCandidateResult
 }
 
 class AutoTripPromptCoordinator(private val context: Context) {
@@ -37,6 +48,7 @@ class AutoTripPromptCoordinator(private val context: Context) {
     private val bindingPreferences = VehicleBluetoothBindingPreferences(context)
     private val legacyPreferences = BluetoothPromptPreferences(context)
     private val notifications = AutoTripNotificationController(context)
+    private val tripStartCoordinator = TripStartCoordinator(database, context)
 
     suspend fun onBluetoothConnected(
         deviceAddress: String,
@@ -77,17 +89,59 @@ class AutoTripPromptCoordinator(private val context: Context) {
 
         val vehicle = vehicleDao.observeActive().first().firstOrNull { it.id == binding.vehicleId }
         val vehicleLabel = vehicle?.let { "${it.brand} ${it.model}" } ?: binding.deviceName ?: "车辆"
-        val visible = notifications.showCandidate(session, vehicleLabel)
-        if (!visible) {
-            sessionDao.update(
-                session.copy(
-                    state = AutoTripDetectionState.BLOCKED.name,
-                    updatedAtEpochMillis = now,
+
+        if (binding.autoStartOnConnect) {
+            // A background receiver cannot request location permission. Preserve the user's
+            // explicit auto-start preference, but fall back to the visible confirmation path so
+            // MainActivity can request permission instead of creating an immediately interrupted Trip.
+            if (!hasLocationPermission()) {
+                return@withLock createVisibleCandidate(session, vehicleLabel, now)
+            }
+
+            return@withLock when (
+                val start = tripStartCoordinator.start(
+                    TripStartRequest(
+                        vehicleId = binding.vehicleId,
+                        source = TripStartSource.BluetoothAuto(session.id),
+                        requestedAtEpochMillis = now,
+                    )
                 )
-            )
+            ) {
+                is TripStartResult.Started ->
+                    AutoTripCandidateResult.AutoStarted(session.id, start.tripId)
+
+                is TripStartResult.AlreadyActive ->
+                    AutoTripCandidateResult.ActiveTripExists
+
+                is TripStartResult.Blocked -> {
+                    sessionDao.getById(session.id)?.let { current ->
+                        if (current.state == AutoTripDetectionState.BLUETOOTH_CANDIDATE.name) {
+                            sessionDao.update(
+                                current.copy(
+                                    state = AutoTripDetectionState.BLOCKED.name,
+                                    updatedAtEpochMillis = System.currentTimeMillis(),
+                                )
+                            )
+                        }
+                    }
+                    AutoTripCandidateResult.Existing(session.id, AutoTripDetectionState.BLOCKED)
+                }
+
+                is TripStartResult.Failed -> {
+                    val visible = notifications.showAutoStartFailed(
+                        sessionId = session.id,
+                        vehicleLabel = vehicleLabel,
+                    )
+                    AutoTripCandidateResult.AutoStartFailed(
+                        sessionId = session.id,
+                        tripId = start.tripId,
+                        notificationVisible = visible,
+                    )
+                }
+            }
         }
 
-        AutoTripCandidateResult.Created(session.id, visible)
+        createVisibleCandidate(session, vehicleLabel, now)
     }
 
     suspend fun onBluetoothDisconnected(
@@ -105,6 +159,29 @@ class AutoTripPromptCoordinator(private val context: Context) {
         notifications.cancel(session.id)
     }
 
+    private suspend fun createVisibleCandidate(
+        session: AutoTripDetectionSessionEntity,
+        vehicleLabel: String,
+        now: Long,
+    ): AutoTripCandidateResult.Created {
+        val visible = notifications.showCandidate(session, vehicleLabel)
+        if (!visible) {
+            sessionDao.update(
+                session.copy(
+                    state = AutoTripDetectionState.BLOCKED.name,
+                    updatedAtEpochMillis = now,
+                )
+            )
+        }
+        return AutoTripCandidateResult.Created(session.id, visible)
+    }
+
+    private fun hasLocationPermission(): Boolean =
+        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+
     private suspend fun synchronizeSingleVehicleLegacyBinding() {
         val activeVehicles = vehicleDao.observeActive().first()
         if (activeVehicles.size != 1) return
@@ -116,6 +193,7 @@ class AutoTripPromptCoordinator(private val context: Context) {
                 enabled = legacy.enabled,
                 deviceAddress = address,
                 deviceName = legacy.deviceName,
+                autoStartOnConnect = legacy.autoStartOnConnect,
             )
         )
     }
@@ -170,6 +248,32 @@ class AutoTripNotificationController(private val context: Context) {
         return true
     }
 
+    fun showAutoStartFailed(sessionId: String, vehicleLabel: String): Boolean {
+        createChannel()
+        if (!canPostNotifications()) return false
+
+        val openIntent = PendingIntent.getActivity(
+            context,
+            requestCode(sessionId, ACTION_OPEN_ACTIVE_TRIP),
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN_ACTIVE_TRIP, true),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        manager.notify(
+            notificationId(sessionId),
+            NotificationCompat.Builder(context, CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("$vehicleLabel 自动开始未完成")
+                .setContentText("点击打开行程并恢复记录。")
+                .setContentIntent(openIntent)
+                .addAction(android.R.drawable.ic_media_play, "打开行程", openIntent)
+                .setAutoCancel(true)
+                .build(),
+        )
+        return true
+    }
+
     fun cancel(sessionId: String) {
         manager.cancel(notificationId(sessionId))
     }
@@ -193,6 +297,7 @@ class AutoTripNotificationController(private val context: Context) {
         const val CHANNEL_ID = "vehicle_detection"
         const val ACTION_OPEN_CONFIRMATION = "com.evchargebook.autotrip.OPEN_CONFIRMATION"
         const val ACTION_IGNORE_SESSION = "com.evchargebook.autotrip.IGNORE_SESSION"
+        private const val ACTION_OPEN_ACTIVE_TRIP = "com.evchargebook.autotrip.OPEN_ACTIVE_TRIP"
         const val EXTRA_SESSION_ID = "auto_trip_session_id"
 
         fun notificationId(sessionId: String): Int = 31_000 + (sessionId.hashCode() and 0x0FFFFFFF) % 100_000
