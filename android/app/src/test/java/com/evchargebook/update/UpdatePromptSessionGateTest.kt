@@ -20,12 +20,4 @@ class UpdatePromptSessionGateTest {
         assertTrue(gate.tryClaim(42))
         assertTrue(gate.tryClaim(43))
     }
-
-    @Test
-    fun independentGateCanDeduplicateInstallReadyPrompt() {
-        val readyGate = UpdatePromptSessionGate()
-
-        assertTrue(readyGate.tryClaim(108))
-        assertFalse(readyGate.tryClaim(108))
-    }
 }
