@@ -7,6 +7,11 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
+import com.evchargebook.autotrip.AutoTripCandidateResult
+import com.evchargebook.autotrip.AutoTripPromptCoordinator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 object BluetoothConnectionStateChecker {
     fun check(context: Context, deviceAddress: String?, onResult: (Boolean) -> Unit) {
@@ -26,7 +31,7 @@ object BluetoothConnectionStateChecker {
             if (matched) return
             if (found) {
                 matched = true
-                onResult(true)
+                resolveCandidate(context, deviceAddress, onResult)
                 return
             }
             remaining -= 1
@@ -47,14 +52,33 @@ object BluetoothConnectionStateChecker {
                     finishOne(false)
                 }
             }
-            val requested = runCatching { adapter.getProfileProxy(context.applicationContext, listener, profile) }.getOrDefault(false)
+            val requested = runCatching {
+                adapter.getProfileProxy(context.applicationContext, listener, profile)
+            }.getOrDefault(false)
             if (!requested) finishOne(false)
+        }
+    }
+
+    private fun resolveCandidate(
+        context: Context,
+        deviceAddress: String,
+        onResult: (Boolean) -> Unit,
+    ) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = runCatching {
+                AutoTripPromptCoordinator(context.applicationContext)
+                    .onBluetoothConnected(deviceAddress, deviceName = null)
+            }.getOrNull()
+            val shouldShowForegroundPrompt = result is AutoTripCandidateResult.Created && result.notificationVisible
+            ContextCompat.getMainExecutor(context).execute {
+                onResult(shouldShowForegroundPrompt)
+            }
         }
     }
 
     private fun hasPermission(context: Context): Boolean =
         Build.VERSION.SDK_INT < 31 || ContextCompat.checkSelfPermission(
             context,
-            Manifest.permission.BLUETOOTH_CONNECT
+            Manifest.permission.BLUETOOTH_CONNECT,
         ) == PackageManager.PERMISSION_GRANTED
 }
