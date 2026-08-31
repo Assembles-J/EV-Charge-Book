@@ -5,6 +5,7 @@ on:
     paths:
       - 'hero-admin/static/prompt-library.html'
       - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
       - 'hero-admin/templates/index.html'
       - '.github/workflows/admin-prompt-library.yml'
   push:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'hero-admin/static/prompt-library.html'
       - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
       - 'hero-admin/templates/index.html'
       - '.github/workflows/admin-prompt-library.yml'
   workflow_dispatch:
@@ -33,6 +35,7 @@ jobs:
           index = Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
           page = Path('hero-admin/static/prompt-library.html').read_text(encoding='utf-8')
           bundle = Path('hero-admin/static/asset-bundle-prompt.html').read_text(encoding='utf-8')
+          builder = Path('hero-admin/static/asset-bundle-builder.js').read_text(encoding='utf-8')
           required_index = [
               '全量资产包 Prompt',
               '单项规范 / Prompt',
@@ -53,19 +56,27 @@ jobs:
               "navigator.clipboard.writeText",
               "localStorage.setItem('evcb-copy-center-v1'",
           ]
-          required_bundle = [
-              '新车型全量资产包 Prompt',
-              'prompt-library.html',
-              'Logo Light/Dark',
-              'Hero Dark/Light',
-              'ev-charge-book-resource-bundle',
-              'catalogImport',
+          required_bundle_page = [
+              '新车型全量资产包',
+              'Web 自动生成 Resource JSON',
+              '指定 Hero Key（手工输入',
+              'AI 图片生成 Prompt',
+              'asset-bundle-builder.js',
+          ]
+          required_builder = [
+              "format:'ev-charge-book-resource-bundle'",
+              "format:'ev-charge-book-vehicle-catalog'",
+              'heroArtworkKey:heroKey',
+              'reuseExisting',
+              '不要输出车型配置 JSON',
           ]
           for marker in required_index:
               assert marker in index, f'missing index marker: {marker}'
           for marker in required_page:
               assert marker in page, f'missing prompt library marker: {marker}'
-          for marker in required_bundle:
-              assert marker in bundle, f'missing full bundle prompt marker: {marker}'
-          print('Prompt library contract OK')
+          for marker in required_bundle_page:
+              assert marker in bundle, f'missing asset builder page marker: {marker}'
+          for marker in required_builder:
+              assert marker in builder, f'missing asset builder logic marker: {marker}'
+          print('Prompt library + Web asset builder contract OK')
           PY

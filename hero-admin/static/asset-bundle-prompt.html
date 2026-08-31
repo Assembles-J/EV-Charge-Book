@@ -1,57 +1,55 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>EV Charge Book · 全量资产包 Prompt</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>EV Charge Book · 全量资产包</title>
 <style>
-:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#07100d;color:#eef7f1}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#123326 0,#07100d 34%,#040806 100%);min-height:100vh}main{max-width:1180px;margin:0 auto;padding:34px 20px 72px}.eyebrow{font-size:12px;letter-spacing:.16em;color:#74d8a6;font-weight:700}h1{font-size:34px;margin:8px 0}h2{margin:0 0 6px}.intro,.meta{color:#9fb1a7;line-height:1.65}.links,.actions{display:flex;gap:8px;flex-wrap:wrap}.button,button{border:1px solid rgba(160,220,183,.24);border-radius:10px;background:#163827;color:#effaf3;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}.secondary{background:#0c1a14!important;color:#d6e6dc!important}.card{margin-top:18px;background:rgba(13,26,20,.92);border:1px solid rgba(160,220,183,.14);border-radius:20px;padding:20px}.form-grid{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:10px}.wide{grid-column:1/-1}input,select,textarea{width:100%;border:1px solid rgba(160,220,183,.18);background:#050b08;color:#eaf5ee;border-radius:12px;padding:12px;font:inherit;outline:none}textarea{min-height:740px;resize:vertical;font:12px/1.62 ui-monospace,SFMono-Regular,Consolas,monospace}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.status,.warning{margin-top:12px;padding:11px 13px;border:1px solid rgba(116,216,166,.18);border-radius:12px;background:#0a1812;color:#bcd0c4;line-height:1.55}.warning{border-color:rgba(243,191,104,.3);color:#f2ce92}.danger{border-color:rgba(255,120,120,.32);color:#ffb8b8}.confirm{display:flex;gap:9px;align-items:flex-start;margin-top:10px;color:#f2ce92}.hidden{display:none!important}@media(max-width:800px){.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}.head{display:grid}.actions button,.links .button{width:100%}}
+:root{color-scheme:dark;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;background:#07100d;color:#eef7f1}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top right,#123326 0,#07100d 34%,#040806 100%);min-height:100vh}main{max-width:1220px;margin:0 auto;padding:34px 20px 72px}.eyebrow{font-size:12px;letter-spacing:.16em;color:#74d8a6;font-weight:700}h1{font-size:34px;margin:8px 0}h2{margin:0 0 6px}.intro,.meta{color:#9fb1a7;line-height:1.65}.links,.actions{display:flex;gap:8px;flex-wrap:wrap}.button,button{border:1px solid rgba(160,220,183,.24);border-radius:10px;background:#163827;color:#effaf3;padding:9px 13px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}.secondary{background:#0c1a14!important;color:#d6e6dc!important}button:disabled{opacity:.4;cursor:not-allowed}.card{margin-top:18px;background:rgba(13,26,20,.92);border:1px solid rgba(160,220,183,.14);border-radius:20px;padding:20px}.form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.wide{grid-column:1/-1}.span2{grid-column:span 2}label{display:block;color:#cce0d4;font-size:13px;margin:0 0 6px}input,select,textarea{width:100%;border:1px solid rgba(160,220,183,.18);background:#050b08;color:#eaf5ee;border-radius:12px;padding:12px;font:inherit;outline:none}textarea{min-height:340px;resize:vertical;font:12px/1.62 ui-monospace,SFMono-Regular,Consolas,monospace}.prompt-output{min-height:620px}.head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}.status,.warning,.reuse{margin-top:12px;padding:11px 13px;border:1px solid rgba(116,216,166,.18);border-radius:12px;background:#0a1812;color:#bcd0c4;line-height:1.55}.warning{border-color:rgba(243,191,104,.3);color:#f2ce92}.danger{border-color:rgba(255,120,120,.32)!important;color:#ffb8b8!important}.ok{border-color:rgba(53,239,132,.28)!important;color:#b8f8d0!important}.confirm{display:flex;gap:9px;align-items:flex-start;margin-top:10px;color:#f2ce92}.confirm input{width:auto;margin-top:4px}.hidden{display:none!important}.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}.json-note{font-size:12px;color:#8fa49a;margin-top:8px;line-height:1.55}code{color:#b8f8d0}@media(max-width:860px){.form-grid,.two-col{grid-template-columns:1fr}.wide,.span2{grid-column:auto}.head{display:grid}.actions button,.links .button{width:100%}}
 </style>
 </head>
 <body><main>
 <div class="links"><a class="button secondary" href="resource-workbench.html">← 资源工作台</a><a class="button secondary" href="prompt-library.html">单项 Logo / Hero Prompt</a><a class="button secondary" href="../">车辆资源管理</a></div>
-<div class="eyebrow" style="margin-top:20px">EV CHARGE BOOK · FULL ASSET BUNDLE</div>
-<h1>新车型全量资产包 Prompt</h1>
-<p class="intro">用于“新增一个车型时一次生成整套交付约定”。Logo 标准和 Dark Hero 标准不是复制维护，而是从现有 Prompt Library 实时读取；单项维护仍继续使用原 Prompt 页面。</p>
+<div class="eyebrow" style="margin-top:20px">EV CHARGE BOOK · FULL ASSET BUNDLE BUILDER</div>
+<h1>新车型全量资产包</h1>
+<p class="intro">Web 负责生成稳定的 <code>brandId / catalogId / heroKey / resource JSON</code>，AI 只负责需要生成的 Logo / Hero 图片。已有品牌优先直接选择并复用现有 Logo，避免 AI 再创建随机品牌 ID。</p>
 
 <section class="card">
-  <div class="form-grid">
-    <div class="wide"><label>车型需求</label><input id="requestText" placeholder="例如：海豹08 / Xiaomi SU7 Ultra / 零跑 C16 2026款"/></div>
-    <div><label>车身颜色</label><input id="bodyColor" placeholder="例如：深海蓝；不指定可留空"/></div>
+  <div class="head"><div><h2>1 · 车型与资源 Key</h2><div class="meta">所有标准车型字段由这里明确填写。Hero Key 可以直接手工输入；已有 Key 会实时检测冲突。</div></div><button id="refreshState" class="secondary">刷新线上状态</button></div>
+  <div class="form-grid" style="margin-top:14px">
     <div><label>模式</label><select id="mode"><option value="create">新增车型</option><option value="update">更新已有车型</option></select></div>
-    <div><label>年款（可选）</label><input id="modelYear" placeholder="例如 2026"/></div>
-    <div><label>优先 brandId（可选）</label><input id="brandId" placeholder="例如 byd"/></div>
-    <div><label>指定 Hero Key（更新时推荐）</label><select id="heroKey"><option value="">让 AI 生成规范 Hero Key</option></select></div>
-    <div><label>补充要求（可选）</label><input id="notes" placeholder="例如：使用官方中文命名；轿跑比例"/></div>
+    <div class="span2"><label>品牌</label><select id="brandSelect"><option value="">正在读取品牌…</option></select></div>
+    <div id="newBrandIdWrap" class="hidden"><label>新品牌 brandId</label><input id="brandId" placeholder="例如 avatr" /></div>
+    <div id="newBrandNameWrap" class="hidden"><label>新品牌中文名称</label><input id="brandName" placeholder="例如 阿维塔" /></div>
+    <div id="newBrandEnglishWrap" class="hidden"><label>新品牌英文名称</label><input id="brandEnglish" placeholder="例如 AVATR" /></div>
+    <div><label>catalogId</label><input id="catalogId" placeholder="例如 byd-seal-08-ev-2026" /></div>
+    <div><label>车系</label><input id="series" placeholder="例如 海豹08" /></div>
+    <div><label>车型名称</label><input id="modelName" placeholder="例如 海豹08 EV 2026款" /></div>
+    <div><label>年款</label><input id="modelYear" type="number" min="1990" max="2100" placeholder="2026" /></div>
+    <div><label>配置 / Trim（可空）</label><input id="trimName" placeholder="例如 700km 长续航" /></div>
+    <div><label>动力类型</label><select id="powertrainType"><option value="BEV">BEV</option><option value="PHEV">PHEV</option><option value="REEV">REEV</option></select></div>
+    <div><label>电池容量 kWh（未知留空）</label><input id="batteryCapacityKwh" type="number" min="0" step="0.1" /></div>
+    <div><label>标准续航 km（未知留空）</label><input id="rangeKm" type="number" min="0" step="1" /></div>
+    <div><label>续航标准（未知留空）</label><input id="rangeStandard" placeholder="CLTC / WLTP / EPA" /></div>
+    <div class="span2"><label>指定 Hero Key（手工输入，不包含 -light / -dark）</label><input id="heroKey" list="heroKeyList" placeholder="例如 byd-seal-08-ev-2026" autocomplete="off" /><datalist id="heroKeyList"></datalist></div>
+    <div><label>车身颜色（仅用于 AI 图片 Prompt）</label><input id="bodyColor" placeholder="例如 深海蓝" /></div>
+    <div class="wide"><label>补充要求（仅用于 AI 图片 Prompt，可空）</label><input id="notes" placeholder="例如 轿跑比例，保持量产版轮毂" /></div>
   </div>
+  <div class="reuse" id="brandReuse">正在读取品牌 Logo 状态…</div>
   <div class="warning hidden" id="collisionWarning"></div>
-  <label class="confirm hidden" id="updateConfirmWrap"><input type="checkbox" id="updateConfirm"/><span>我确认这是维护已有 Hero Key，并希望 AI 明确列出变动点；不是误用重复 Key。</span></label>
-  <div class="actions" style="margin-top:14px"><button id="generate">生成全量 Prompt</button><button id="copy" class="secondary" disabled>一键复制到剪贴板</button></div>
-  <div class="status" id="status">正在读取当前 Logo / Hero 标准和线上 Key…</div>
+  <label class="confirm hidden" id="updateConfirmWrap"><input type="checkbox" id="updateConfirm" /><span>我确认这是更新已有 Hero Key / catalogId，已核对当前数据并允许生成下一不可变图片版本。</span></label>
+  <div class="status" id="builderStatus">正在读取 Catalog / Hero manifest…</div>
 </section>
 
 <section class="card">
-  <div class="head"><div><h2>生成结果</h2><div class="meta">复制给 AI。AI 的最终结果应包含：Hero Key、单车型导入 JSON、Logo Light/Dark、Hero Dark/Light 的命名与生成要求，以及可直接粘进资源工作台的 machine-readable bundle JSON。</div></div><button id="copyTop" disabled>复制 Prompt</button></div>
-  <textarea id="output" spellcheck="false" placeholder="点击“生成全量 Prompt”…"></textarea>
+  <div class="head"><div><h2>2 · Web 自动生成 Resource JSON</h2><div class="meta">不再要求 AI 生成 JSON。字段变化时这里会实时更新；可直接复制到「资源工作台」。</div></div><div class="actions"><button id="copyJson" class="secondary" disabled>复制 Resource JSON</button><a class="button" href="resource-workbench.html">打开资源工作台</a></div></div>
+  <textarea id="resourceJson" spellcheck="false" readonly placeholder="填写上方必要字段后自动生成…"></textarea>
+  <div class="json-note" id="jsonNote">新增车型至少需要：品牌、catalogId、车系、车型名称、Hero Key。电池/续航未知时允许为 null，不允许猜数值。</div>
 </section>
-<script>
-(function(){
- const $=id=>document.getElementById(id);let logoStandard='',heroDarkPrompt='',catalog=null,manifest=null;
- const normalize=v=>String(v||'').trim().toLowerCase().replace(/[\\s_]+/g,'-').replace(/[^a-z0-9-]+/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'');
- const stripVariant=v=>String(v||'').replace(/-(dark|light)$/,'');
- async function load(){try{
-   const [lib,c,m]=await Promise.all([fetch('prompt-library.html').then(r=>r.text()),fetch('../api/catalog/state').then(r=>r.json()),fetch('../api/state').then(r=>r.json())]);
-   const doc=new DOMParser().parseFromString(lib,'text/html');logoStandard=doc.querySelector('#logoText')?.value||doc.querySelector('#logoText')?.textContent||'';heroDarkPrompt=doc.querySelector('#heroText')?.value||doc.querySelector('#heroText')?.textContent||'';catalog=c;manifest=m;
-   const keys=[...new Set([...(c.vehicles||[]).map(v=>stripVariant(v.heroArtworkKey||'')).filter(Boolean),...Object.keys(m.artworks||{}).map(stripVariant)])].sort();
-   $('heroKey').innerHTML='<option value="">让 AI 生成规范 Hero Key</option>'+keys.map(k=>`<option value="${k}">${k}</option>`).join('');
-   $('status').textContent=`已载入正式标准 · 品牌 ${(c.brands||[]).length} · 已有 Hero 语义 Key ${keys.length}`;checkCollision();
- }catch(e){$('status').textContent='标准读取失败：'+(e.message||e);$('status').classList.add('danger')}}
- function existingKeys(){return new Set([...(catalog?.vehicles||[]).map(v=>stripVariant(v.heroArtworkKey||'')).filter(Boolean),...Object.keys(manifest?.artworks||{}).map(stripVariant)])}
- function checkCollision(){const key=$('heroKey').value,mode=$('mode').value,exists=key&&existingKeys().has(key);$('collisionWarning').classList.toggle('hidden',!exists);$('updateConfirmWrap').classList.toggle('hidden',!(exists&&mode==='update'));if(exists)$('collisionWarning').textContent=mode==='create'?`Hero Key ${key} 已存在。新增模式禁止静默复用：请清空指定 Key 让 AI 生成新 Key，或切换到“更新已有车型”。`:`Hero Key ${key} 已存在。Prompt 会要求 AI 列出当前语义 Key 的变动点，并以更新模式输出。`;return {exists,blocked:exists&&mode==='create'||exists&&mode==='update'&&!$('updateConfirm').checked}}
- function makePrompt(){const request=$('requestText').value.trim();if(!request)throw new Error('请填写车型需求');const collision=checkCollision();if(collision.blocked)throw new Error('请先处理 Hero Key 重复确认');const mode=$('mode').value,key=$('heroKey').value,brand=$('brandId').value.trim(),year=$('modelYear').value.trim(),color=$('bodyColor').value.trim(),notes=$('notes').value.trim();const currentKeys=[...existingKeys()].sort();
- const lightHero=`【EV Charge Book Light Hero 变体规则】\n- 输出仍必须是 WebP，1600 × 1100 px，中央约 1360 × 1100 为真实 1.24:1 Crop 可视窗口；左右推荐各留 180 px 安全缓冲。\n- 与 Dark Hero 使用同一车型、同一外观准确性、同一车身颜色、同一镜头和车辆尺度规则，整车必须完整。\n- 背景改为高级明亮环境：珍珠灰 / 银灰 / 柔和暖白 / 明亮阴天 / 高级汽车摄影棚，可有极轻的低饱和绿色环境光。\n- 必须保证车辆与浅色背景有足够轮廓分离；白色或银色车不得白底融掉，使用自然阴影、轮廓光和材质反差。\n- 不要过曝，不要纯白炸亮，不要高饱和霓虹，不要文字、Logo overlay、水印、UI、车牌文字。\n- Light 与 Dark 两张 Hero 构图应尽可能保持同一车型姿态/镜头语言，便于主题切换。`;
- return `你正在为 EV Charge Book 维护“一个车型的一整套可发布资源”。这是${mode==='create'?'新增':'更新'}模式。\n\n【用户输入】\n车型需求：${request}\n车身颜色：${color||'未指定，请选官方量产色或明确标注待确认'}\n年款：${year||'未指定'}\n优先 brandId：${brand||'未指定'}\n指定 Hero Key：${key||'未指定，由你生成'}\n补充要求：${notes||'无'}\n\n【最重要：不要编造车型数据】\n- 品牌、车型、配置、动力类型、电池容量、标准续航、年款必须来自可靠/官方资料；无法确认的可选数值字段用 null，并在 needsSource 中列出，不允许猜数字。\n- catalogId / brandId / heroKey 必须是稳定、小写 ASCII slug，仅允许 a-z、0-9、连字符。\n- heroKey 是车型系列/年款级语义 Key，不包含 light/dark；实际图片发布时派生为 <heroKey>-dark 和 <heroKey>-light。\n- 新增模式不得静默复用下面的已有 Hero Key。若候选冲突，必须提出新的不冲突 Key，并解释差异。更新模式只有在指定/确认旧 Key 时才能复用，并必须列出变动点。\n\n当前已有 Hero 语义 Key：\n${currentKeys.map(k=>'- '+k).join('\n')||'- 无'}\n\n【输出必须是一整套 4 类资产】\n1. 官方品牌 Logo Light。推荐源文件名：brand_<brandId>_light.webp\n2. 官方品牌 Logo Dark。推荐源文件名：brand_<brandId>_dark.webp\n3. 车型 Hero Dark。推荐源文件名：hero_<heroKey>_dark.webp\n4. 车型 Hero Light。推荐源文件名：hero_<heroKey>_light.webp\n注意：这些是生成/上传源文件名；Web Admin 发布后会自动改为标准不可变 vN 文件名，不要自行维护 vN。\n\n【品牌 Logo 正式标准】\n${logoStandard}\n\n【Dark Hero 正式 Prompt】\n请把下面模板中的 {{车型名称}} 替换成本次确认后的完整车型名称，把 {{颜色}} 替换成本次确认后的车身颜色，并生成 Dark Hero：\n\n${heroDarkPrompt}\n\n${lightHero}\n\n【单条车型配置 JSON】\n必须输出一个 ev-charge-book-vehicle-catalog v1 对象，而且严格只包含 1 个 brands 元素和 1 个 vehicles 元素。vehicle.heroArtworkKey 必须等于本次最终 heroKey（不带 -dark/-light）。字段结构：\n{\n  "format":"ev-charge-book-vehicle-catalog",\n  "version":1,\n  "brands":[{"brandId":"...","name":"...","englishName":"...","isActive":true}],\n  "vehicles":[{\n    "catalogId":"...","brandId":"...","series":"...","modelName":"...","modelYear":null,\n    "trimName":null,"powertrainType":"BEV|PHEV|REEV","batteryCapacityKwh":null,\n    "rangeKm":null,"rangeStandard":null,"heroArtworkKey":"...","isActive":true\n  }]\n}\n\n【最终 machine-readable 资源包】\n你的回答末尾必须再给出一个可直接粘贴到 EV Charge Book“车型资源工作台”的 JSON code block：\n{\n  "format":"ev-charge-book-resource-bundle",\n  "version":1,\n  "heroKey":"<最终 heroKey>",\n  "updateIntent":${mode==='update'?'true':'false'},\n  "changeSummary":["更新模式时逐条列出变动；新增模式可写 new resource bundle"],\n  "needsSource":[],\n  "catalogImport":<上面的单条 vehicle catalog JSON>,\n  "assets":{\n    "brandLogo":{"light":"brand_<brandId>_light.webp","dark":"brand_<brandId>_dark.webp"},\n    "hero":{"dark":"hero_<heroKey>_dark.webp","light":"hero_<heroKey>_light.webp"}\n  }\n}\n\n【回答顺序】\nA. 识别到的品牌/车型与资料可信度\nB. 最终 brandId / catalogId / heroKey\nC. 若有重复 Key：冲突说明和处理方式；更新模式列出变动点\nD. 单条导入 JSON\nE. Logo Light/Dark 生成要求与文件名\nF. Hero Dark/Light 生成要求与文件名\nG. 最终 resource-bundle JSON code block\n\n不要只返回图片描述；必须把 JSON、Key、文件名和四项资产要求作为同一套交付。`}
- function generate(){try{const text=makePrompt();$('output').value=text;$('copy').disabled=false;$('copyTop').disabled=false;$('status').textContent='全量 Prompt 已生成。最终重复 Key 仍会在资源工作台发布前再次拦截确认。'}catch(e){$('status').textContent=e.message||e;$('status').classList.add('danger')}}
- async function copy(){const text=$('output').value;if(!text)return;await navigator.clipboard.writeText(text);$('status').textContent='已复制全量 Prompt 到剪贴板。'}
- $('generate').onclick=generate;$('copy').onclick=copy;$('copyTop').onclick=copy;$('mode').onchange=checkCollision;$('heroKey').onchange=checkCollision;$('updateConfirm').onchange=checkCollision;load();
-})();
-</script></main></body></html>
+
+<section class="card">
+  <div class="head"><div><h2>3 · AI 图片生成 Prompt</h2><div class="meta">只让 AI 生成图片，不再生成 ID 或 JSON。已有品牌 Logo 会自动从要求中剔除，只生成缺失资产。</div></div><div class="actions"><button id="generatePrompt">生成图片 Prompt</button><button id="copyPrompt" class="secondary" disabled>复制图片 Prompt</button></div></div>
+  <textarea class="prompt-output" id="imagePrompt" spellcheck="false" placeholder="先填写上方车型信息和 Hero Key…"></textarea>
+</section>
+<script src="asset-bundle-builder.js"></script>
+</main></body></html>
