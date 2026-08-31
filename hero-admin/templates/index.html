@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>EV Charge Book · Admin</title>
   <link rel="stylesheet" href="static/admin.css" />
+  <link rel="stylesheet" href="static/catalog-tools.css" />
 </head>
 <body>
 <main>
@@ -27,6 +28,33 @@
       <span class="meta" id="brandMeta">读取中…</span>
       <button id="addBrand">新增品牌</button>
     </div>
+
+    <section class="asset-center">
+      <div class="asset-center-head">
+        <div>
+          <div class="eyebrow">BRAND ASSET</div>
+          <h2>品牌 Logo 配置</h2>
+          <p class="meta">Logo 按品牌配置一次，同一个 <code>brandId</code> 下的所有车型自动复用，不需要逐车型上传。</p>
+        </div>
+        <select id="brandLogoBrandSelect" aria-label="选择要配置 Logo 的品牌"></select>
+      </div>
+      <div class="logo-variant-grid">
+        <article class="logo-variant-card logo-light-surface">
+          <div class="logo-preview-box"><img id="brandLogoLightPreview" class="hidden" alt="浅色背景 Logo 预览" /></div>
+          <strong>浅色界面 Logo</strong>
+          <span class="meta" id="brandLogoLightMeta">尚未配置</span>
+          <button id="brandLogoLightButton" class="secondary">上传浅色 Logo</button>
+        </article>
+        <article class="logo-variant-card logo-dark-surface">
+          <div class="logo-preview-box"><img id="brandLogoDarkPreview" class="hidden" alt="深色背景 Logo 预览" /></div>
+          <strong>深色界面 Logo</strong>
+          <span class="meta" id="brandLogoDarkMeta">尚未配置</span>
+          <button id="brandLogoDarkButton" class="secondary">上传深色 Logo</button>
+        </article>
+      </div>
+      <div class="status" id="brandLogoReuseNote">请选择品牌。上传后服务器会自动标准化为 512×512 透明 WebP。</div>
+    </section>
+
     <div class="vehicle-list" id="brandList"></div>
     <div class="status" id="brandStatus">正在读取品牌目录…</div>
   </section>
@@ -36,6 +64,19 @@
       <input id="catalogSearch" placeholder="搜索品牌、车系、车型、catalogId" />
       <span class="meta" id="catalogMeta">读取中…</span>
       <button id="addVehicle">新增车型</button>
+    </div>
+    <div class="catalog-transfer-bar">
+      <div>
+        <strong>批量车型配置</strong>
+        <div class="meta">JSON 完整迁移；CSV 适合 Excel 批量维护。只导入/导出配置元数据，Logo 与 Hero 图片文件单独上传。</div>
+      </div>
+      <div class="action-group transfer-actions">
+        <button id="downloadCatalogTemplate" class="secondary">CSV 模板</button>
+        <button id="exportCatalogCsv" class="secondary">导出 CSV</button>
+        <button id="exportCatalogJson" class="secondary">导出 JSON</button>
+        <button id="importCatalog">导入配置</button>
+        <input id="catalogImportFile" class="hidden" type="file" accept="application/json,text/csv,.json,.csv" />
+      </div>
     </div>
     <div class="vehicle-list" id="vehicleList"></div>
     <div class="status" id="catalogStatus">正在读取服务器车型目录…</div>
@@ -48,7 +89,7 @@
         <input id="artworkKey" list="heroKeys" placeholder="例如 leapmotor-c16-2026" autocomplete="off" />
         <datalist id="heroKeys"></datalist>
         <div class="current" id="heroCurrent"></div>
-        <p class="meta">可输入一个新 key。第一次发布自动生成 v1；已有 key 自动 v+1。车型库里的 <b>Hero key</b> 与这里保持一致即可。</p>
+        <p class="meta">这里负责创建/发布 Hero Key。车型编辑页会自动把已有 Key 做成下拉选项，不再要求手输。</p>
       </div>
       <div>
         <label>新 Hero 原图</label>
@@ -113,7 +154,7 @@
       <div><label>品牌名称</label><input name="name" required placeholder="例如 零跑" /></div>
       <div><label>英文名称</label><input name="englishName" placeholder="例如 Leapmotor" /></div>
     </div>
-    <div class="status" id="brandFormStatus">品牌保存后即可被车型引用。Logo 在品牌列表中分别发布浅色背景版和深色背景版。</div>
+    <div class="status" id="brandFormStatus">品牌保存后即可被车型引用。Logo 统一在品牌页顶部「品牌 Logo 配置」维护，旗下车型自动复用。</div>
     <div class="dialog-actions"><button type="button" class="secondary" id="cancelBrandDialog">取消</button><button type="submit">保存品牌</button></div>
   </form>
 </dialog>
@@ -132,7 +173,13 @@
       <div><label>电池容量 kWh</label><input name="batteryCapacityKwh" type="number" min="0" step="0.1" /></div>
       <div><label>标称续航 km</label><input name="rangeKm" type="number" min="0" step="1" /></div>
       <div><label>续航标准</label><input name="rangeStandard" placeholder="例如 CLTC / WLTP / EPA" /></div>
-      <div class="wide"><label>Hero key（可暂时留空）</label><input name="heroArtworkKey" placeholder="例如 byd-seal-2026" /></div>
+      <div class="wide hero-key-field">
+        <label for="vehicleHeroKeySelect">Hero key（从已创建 Key 中选择）</label>
+        <div class="hero-key-picker">
+          <select name="heroArtworkKey" id="vehicleHeroKeySelect"><option value="">未配置 Hero</option></select>
+          <button type="button" id="manageHeroFromVehicle" class="secondary">管理 Hero Key</button>
+        </div>
+      </div>
     </div>
     <div class="status" id="formStatus">保存只更新服务器标准车型目录；App 用户不能修改这些标准参数。</div>
     <div class="dialog-actions"><button type="button" class="secondary" id="cancelDialog">取消</button><button type="submit">保存车型</button></div>
@@ -147,5 +194,6 @@
 </dialog>
 
 <script src="static/admin.js"></script>
+<script src="static/catalog-tools.js"></script>
 </body>
 </html>
