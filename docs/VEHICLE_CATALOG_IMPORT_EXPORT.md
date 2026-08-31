@@ -12,7 +12,7 @@ The Web Admin supports two portable configuration formats:
 - **JSON** — complete catalog configuration transfer / backup
 - **CSV** — spreadsheet-friendly bulk vehicle maintenance
 
-Logo and Hero image binaries are intentionally excluded from both formats. Images remain managed assets and are uploaded separately through Web Admin.
+Logo and Hero image binaries are intentionally excluded from both formats. Images remain managed assets and are uploaded separately through Web Admin / Resource Workbench.
 
 ## Import semantics
 
@@ -68,7 +68,7 @@ The JSON export does **not** include:
 - Logo CDN URLs / versions
 - user vehicles / nicknames / charging records / trips
 
-`heroArtworkKey` is retained because it is configuration metadata. If the target environment does not yet have the referenced Hero image, upload/publish that image later through the Hero page.
+`heroArtworkKey` is retained because it is configuration metadata. It stores the stable **base semantic Hero Key**, not an image variant and not a physical filename.
 
 ## CSV format v1
 
@@ -106,9 +106,39 @@ yes / no
 
 ## Hero key rule
 
-`heroArtworkKey` is selected from existing managed Hero keys in the Web vehicle editor. It should normally be created/published from the **Hero 图片** page first.
+`heroArtworkKey` is a stable base semantic key, for example:
 
-A key may exist before its image is published. This allows configuration import to happen first and image upload later.
+```text
+xiaomi-su7-2026
+```
+
+Do **not** store these in the vehicle catalog:
+
+```text
+xiaomi-su7-2026-dark
+xiaomi-su7-2026-light
+xiaomi_su7_2026_dark_v3.webp
+```
+
+The Resource Workbench publishes theme assets under derived manifest keys:
+
+```text
+<heroArtworkKey>-dark
+<heroArtworkKey>-light
+```
+
+Android resolves them in this order:
+
+```text
+Dark UI:  <base>-dark -> legacy <base>
+Light UI: <base>-light -> <base>-dark -> legacy <base>
+```
+
+The legacy base fallback preserves all Hero assets published before the Light/Dark variant convention.
+
+A key may exist in catalog configuration before its image is published. This allows configuration import to happen first and image upload later.
+
+When a Hero semantic key already exists or is shared by another vehicle, Resource Workbench must display that state and require explicit confirmation before publishing a new immutable Hero version.
 
 ## Brand Logo rule
 
@@ -123,4 +153,4 @@ Brand
 
 All vehicles under the same brand automatically reuse the same managed brand Logo. Import/export never duplicates Logo image data per vehicle.
 
-Logo files follow `docs/BRAND_LOGO_STANDARD.md` and are uploaded separately through the Brand Logo configuration center.
+Logo files follow `docs/BRAND_LOGO_STANDARD.md`. For single Logo replacement use Brand Logo configuration; for coordinated new-vehicle onboarding use `docs/RESOURCE_BUNDLE_WORKFLOW.md` and the Resource Workbench.

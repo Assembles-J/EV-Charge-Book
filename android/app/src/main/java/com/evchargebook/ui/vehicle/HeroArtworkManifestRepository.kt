@@ -1,6 +1,7 @@
 package com.evchargebook.ui.vehicle
 
 import android.content.Context
+import android.content.res.Configuration
 import com.evchargebook.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,11 +23,19 @@ import java.net.URL
  * 3. refresh the manifest once in the background for the next Hero resolve.
  *
  * A network failure must never delay or clear an already cached Hero mapping.
+ *
+ * VehicleCatalog stores one stable semantic base key. The manifest may publish:
+ * - <base>-dark
+ * - <base>-light
+ *
+ * Existing <base> entries remain a supported legacy fallback.
  */
 object HeroArtworkManifestRepository {
     data class RemoteArtwork(
         val version: Int,
-        val url: String
+        val url: String,
+        val manifestVersion: Int = version,
+        val resolvedKey: String? = null,
     )
 
     private const val PREFS = "hero_artwork_manifest"
@@ -41,12 +50,60 @@ object HeroArtworkManifestRepository {
     @Volatile private var refreshStarted = false
     @Volatile private var artworks: Map<String, RemoteArtwork> = emptyMap()
 
+    /**
+     * Resolve the best Hero for the current Android UI mode.
+     *
+     * Dark: <base>-dark -> legacy <base>
+     * Light: <base>-light -> <base>-dark -> legacy <base>
+     */
     suspend fun resolve(context: Context, artworkKey: String): RemoteArtwork? {
         val appContext = context.applicationContext
         ensureCachedManifestLoaded(appContext)
         startRemoteRefresh(appContext)
-        return artworks[artworkKey]
+        val preferLight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
+            Configuration.UI_MODE_NIGHT_YES
+        return resolveCached(artworkKey, preferLight)
     }
+
+    internal fun candidateKeys(artworkKey: String, preferLight: Boolean): List<String> {
+        val base = artworkKey
+            .trim()
+            .removeSuffix("-dark")
+            .removeSuffix("-light")
+        if (base.isBlank()) return emptyList()
+        return if (preferLight) {
+            listOf("$base-light", "$base-dark", base)
+        } else {
+            listOf("$base-dark", base)
+        }
+    }
+
+    internal fun resolveFrom(
+        entries: Map<String, RemoteArtwork>,
+        artworkKey: String,
+        preferLight: Boolean,
+    ): RemoteArtwork? {
+        val base = artworkKey.trim().removeSuffix("-dark").removeSuffix("-light")
+        return candidateKeys(base, preferLight).firstNotNullOfOrNull { key ->
+            entries[key]?.let { artwork ->
+                // HeroVehicleCard historically uses RemoteArtwork.version as an explicit Coil cache key.
+                // Encode only the resolved semantic variant into that cache version so light/dark v1
+                // cannot collide in memory/disk cache. manifestVersion remains the authoritative vN.
+                val marker = when {
+                    key.endsWith("-light") -> 2
+                    key.endsWith("-dark") -> 1
+                    else -> 0
+                }
+                artwork.copy(
+                    version = artwork.manifestVersion * 10 + marker,
+                    resolvedKey = key,
+                )
+            }
+        }
+    }
+
+    private fun resolveCached(artworkKey: String, preferLight: Boolean): RemoteArtwork? =
+        resolveFrom(artworks, artworkKey, preferLight)
 
     private suspend fun ensureCachedManifestLoaded(context: Context) {
         if (cacheLoaded) return
@@ -117,7 +174,15 @@ object HeroArtworkManifestRepository {
                 val version = item.optInt("version", 0)
                 val url = item.optString("url", "")
                 if (version > 0 && url.startsWith("https://")) {
-                    put(key, RemoteArtwork(version = version, url = url))
+                    put(
+                        key,
+                        RemoteArtwork(
+                            version = version,
+                            manifestVersion = version,
+                            resolvedKey = key,
+                            url = url,
+                        ),
+                    )
                 }
             }
         }
