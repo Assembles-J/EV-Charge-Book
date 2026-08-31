@@ -14,17 +14,20 @@ Use this file to answer:
 - which checks are relevant to a PR;
 - which workflow must not be mistaken for another acceptance layer.
 
-## Workflow matrix
+## Current workflow matrix
+
+At baseline `main@e5149a6474a17c7a5ce0a987f04fc3ab38a143b0`, the repository contains **nine** workflow files.
 
 | Workflow | Trigger / scope | Primary responsibility | Deployment / publish authority |
 | --- | --- | --- | --- |
 | `.github/workflows/android-build.yml` | PR/push when `android/**` or the workflow changes; manual dispatch | Build/test Android, enforce packaged Hero budget, produce Debug APK | **No** production publish |
 | `.github/workflows/android-release.yml` | Manual `workflow_dispatch` only | Build/sign/verify Production APK, version it inside the release run, publish release/update metadata | **Yes — Android Production Release** |
-| `.github/workflows/hero-admin.yml` | PR/push for `hero-admin/**`, `vehicle-catalog/**`; manual dispatch | Validate resource-admin browser assets, Python/container runtime and catalog/brand lifecycle contracts | **No** production deploy |
-| `.github/workflows/hero-admin-deploy.yml` | PR/push for admin/assets/catalog/deploy script; manual dispatch | Validate deployment bundle; on `main` push deploy resource admin to production | **Yes — resource admin deployment** |
+| `.github/workflows/hero-admin.yml` | PR/push for `hero-admin/**`, `vehicle-catalog/**`; manual dispatch | Validate integrated resource-admin browser assets, Python/container runtime and catalog/brand lifecycle contracts | **No** production deploy |
+| `.github/workflows/hero-admin-deploy.yml` | PR/push for admin/assets/catalog/deploy script; manual dispatch | Validate deployment bundle; on qualifying `main` push deploy resource admin to production | **Yes — resource admin deployment** |
 | `.github/workflows/hero-assets-publish.yml` | PR/push for `hero-assets/**`; manual dispatch | Validate Hero manifest/package, remote WebP existence/size/URL contract | **No direct deploy**; validates repository-hosted Hero package |
-| `.github/workflows/admin-batch-image-upload.yml` | PR/push for batch-upload browser files/docs | Verify filename matching, duplicate handling and Brand Logo contrast/batch-planning contract | **No** deployment |
-| `.github/workflows/admin-prompt-library.yml` | PR/push for prompt-library/index; manual dispatch | Verify Logo/Hero prompt/copy-center browser contract | **No** deployment |
+| `.github/workflows/admin-resource-workbench.yml` | PR/push for unified workbench/full-bundle prompt/docs | Validate coordinated one-vehicle resource bundle workbench, matching, variants, review/confirmation and bundle contract | **No** deployment |
+| `.github/workflows/admin-batch-image-upload.yml` | PR/push for legacy/focused batch-upload browser files/docs | Retained focused regression checks for filename matching, duplicate handling and Brand Logo contrast/batch-planning helpers | **No** deployment; not preferred new-vehicle onboarding authority |
+| `.github/workflows/admin-prompt-library.yml` | PR/push for single-item + full-bundle prompt surfaces; manual dispatch | Verify single-item prompt library plus full asset-bundle prompt/index contract | **No** deployment |
 | `.github/workflows/vehicle-catalog-admin-tools.yml` | PR/push for catalog-tools browser files/docs | Verify catalog import/export, Hero-key and Brand Logo admin browser contract | **No** deployment |
 
 ## Android Build
@@ -70,13 +73,13 @@ Normal PR/Debug CI must never be documented as having produced a Production Rele
 
 Production Release success still does not replace #102's real old-APK -> new-APK in-place upgrade acceptance.
 
-## Resource Admin Validation
+## Integrated Resource Admin Validation
 
 Workflow: `hero-admin.yml`
 
 This is the broad **resource-admin application validation** workflow.
 
-It checks:
+It checks integrated behavior such as:
 
 - browser/admin assets;
 - Python syntax/runtime;
@@ -85,7 +88,7 @@ It checks:
 - served browser assets;
 - managed brand / Brand Logo / vehicle catalog lifecycle contracts.
 
-It may overlap path triggers with narrower browser-contract workflows because it validates the integrated admin application, while the narrow workflows give faster focused evidence.
+It may overlap path triggers with narrower browser-contract workflows because it validates the integrated admin application, while focused workflows give faster domain-specific evidence.
 
 It is **not** the production deploy authority.
 
@@ -121,11 +124,35 @@ It checks:
 
 Do not document this workflow as publishing a server release unless the workflow is later changed to perform such a publish action.
 
+## Unified Vehicle Resource Workbench
+
+Workflow: `admin-resource-workbench.yml`
+
+Merged PR #264 introduced this as the current focused contract check for coordinated vehicle onboarding.
+
+It validates:
+
+- `车型资源工作台` browser surface;
+- one-vehicle resource-bundle JSON contract;
+- coordinated Brand Logo + Hero image queue;
+- automatic matching as a suggestion rather than hidden authority;
+- manual target/variant correction paths;
+- base Hero semantic key + `-dark` / `-light` variant rules;
+- catalog/brand diff review and explicit confirmation semantics;
+- server-standard next-version filename preview logic;
+- full asset-bundle prompt contract.
+
+Product/admin authority: `RESOURCE_BUNDLE_WORKFLOW.md`, owner #244.
+
+The Resource Workbench is the **preferred path for new vehicle resource onboarding**. Single-item tools remain valid for replacing one Logo, correcting one catalog field or publishing one Hero revision.
+
+This workflow validates the browser/workbench contract only. It does not prove production admin deployment or physical Android rendering.
+
 ## Focused Admin Browser Contracts
 
-### Batch Image Upload
+### Batch Image Upload — legacy/focused compatibility check
 
-`admin-batch-image-upload.yml` validates:
+`admin-batch-image-upload.yml` remains present and validates helper behavior around:
 
 - filename normalization;
 - longest-prefix Hero matching;
@@ -133,14 +160,20 @@ Do not document this workflow as publishing a server release unless the workflow
 - Brand Logo visual/contrast classification;
 - Light/Dark Brand Logo batch planning.
 
+PR #264 retired the old split batch Logo/Hero panels from the main admin UI in favor of the unified Resource Workbench. Therefore this workflow must **not** be documented as the preferred new-model onboarding flow merely because the file still exists.
+
+If its underlying batch helper files are later removed, this workflow should be retired or narrowed in the same PR rather than becoming an orphan check.
+
 ### Prompt Library
 
-`admin-prompt-library.yml` validates:
+`admin-prompt-library.yml` now validates both prompt surfaces:
 
-- prompt/copy-center presence in the admin;
-- Logo and Hero standard markers;
-- copy/generation affordances;
-- current key image-standard constants exposed to users.
+- single-item Logo/Hero prompt library;
+- full asset-bundle prompt;
+- index links that distinguish `全量资产包 Prompt` from `单项规范 / Prompt`;
+- current Logo/Hero standard markers and machine-readable bundle expectations.
+
+The full bundle prompt dynamically reuses single-item prompt authority rather than copying independent design rules.
 
 ### Vehicle Catalog Admin Tools
 
@@ -150,6 +183,8 @@ Do not document this workflow as publishing a server release unless the workflow
 - template/import controls;
 - Brand Logo center controls;
 - Hero-key selection/management hooks.
+
+Bulk spreadsheet/catalog maintenance remains separate from the one-vehicle Resource Workbench bundle contract.
 
 These focused workflows complement `hero-admin.yml`; they do not deploy production services.
 
@@ -162,11 +197,12 @@ These focused workflows complement `hero-admin.yml`; they do not deploy producti
 5. A Green admin validation workflow does not prove production deployment.
 6. A Green Android Build does not prove Production Release or physical-device acceptance.
 7. A workflow whose responsibility changes must update this file and `CI_CD.md`/domain docs when relevant.
-8. Avoid adding a new workflow when an existing workflow already owns the same contract; prefer adding a focused job only when responsibility remains clear.
+8. Avoid adding a new workflow when an existing workflow already owns the same contract; add a focused workflow/job only when the responsibility is genuinely distinct.
 9. When overlap is intentional, document why the overlap exists rather than deleting checks solely to reduce workflow count.
+10. When a product surface is superseded, decide explicitly whether its focused workflow remains a regression/compatibility check or should be retired; do not leave ambiguous orphan CI.
 
 ## Current conclusion
 
-The eight current workflows are not simple duplicates. Their main governance problem was **missing ownership documentation**, not necessarily excessive workflow count.
+The nine current workflow files are not simple duplicates. Their main governance risk is **authority drift as admin surfaces evolve**, especially when a newer unified workbench supersedes older UI entry points while old helper checks remain useful.
 
-Future simplification should be evidence-driven: consolidate only when two workflows truly test/deploy the same contract and the merge does not weaken path-specific feedback or authority clarity.
+Future simplification should be evidence-driven: consolidate or retire only when two workflows truly validate/deploy the same contract or when a superseded surface/helper is actually removed.
