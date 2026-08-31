@@ -20,7 +20,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 7
+    const val CURRENT_SCHEMA_VERSION = 8
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -31,6 +31,7 @@ object BackupCodec {
                 put(JSONObject().apply {
                     put("id", vehicle.id)
                     putNullable("catalogVehicleId", vehicle.catalogVehicleId)
+                    putNullable("nickname", vehicle.nickname)
                     put("brand", vehicle.brand)
                     put("model", vehicle.model)
                     put("batteryCapacityKwh", vehicle.batteryCapacityKwh)
@@ -136,6 +137,7 @@ object BackupCodec {
                     VehicleEntity(
                         id = id,
                         catalogVehicleId = item.optNullableString("catalogVehicleId"),
+                        nickname = item.optNullableString("nickname"),
                         brand = item.getString("brand"),
                         model = item.getString("model"),
                         batteryCapacityKwh = item.getDouble("batteryCapacityKwh"),
