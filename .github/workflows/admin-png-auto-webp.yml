@@ -1,0 +1,65 @@
+name: Admin PNG Auto WebP
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/app.py'
+      - 'hero-admin/static/resource-workbench.html'
+      - 'hero-admin/static/png-auto-webp.js'
+      - '.github/workflows/admin-png-auto-webp.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/app.py'
+      - 'hero-admin/static/resource-workbench.html'
+      - 'hero-admin/static/png-auto-webp.js'
+      - '.github/workflows/admin-png-auto-webp.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify PNG detection helper
+        shell: bash
+        run: |
+          set -eu
+          node --check hero-admin/static/png-auto-webp.js
+          node - <<'NODE'
+          require('./hero-admin/static/png-auto-webp.js');
+          const assert=require('assert');
+          const h=globalThis.__evPngAutoWebpTest;
+          assert.equal(h.isPngName('hero_demo_dark.png'),true);
+          assert.equal(h.isPngName('BRAND_demo_LIGHT.PNG'),true);
+          assert.equal(h.isPngName('hero_demo_dark.webp'),false);
+          NODE
+      - name: Verify server WebP output contract
+        shell: bash
+        run: |
+          set -eu
+          python3 - <<'PY'
+          from pathlib import Path
+          app = Path('hero-admin/app.py').read_text(encoding='utf-8')
+          page = Path('hero-admin/static/resource-workbench.html').read_text(encoding='utf-8')
+          js = Path('hero-admin/static/png-auto-webp.js').read_text(encoding='utf-8')
+          for marker in [
+              'ALLOWED_INPUT_FORMATS = {"PNG", "WEBP"}',
+              'def _encode_webp(',
+              'format="WEBP"',
+              'def _encode_logo_webp(',
+              '.webp"',
+          ]:
+              assert marker in app, f'missing server conversion marker: {marker}'
+          for marker in [
+              'PNG 会自动转 WebP',
+              'PNG → WebP 自动转换',
+              'png-auto-webp.js',
+          ]:
+              assert marker in page, f'missing workbench PNG marker: {marker}'
+          for marker in ['data-auto-convert-webp', 'PNG → WebP（发布时自动转换）']:
+              assert marker in js, f'missing PNG detection UI marker: {marker}'
+          print('PNG -> WebP contract OK')
+          PY
