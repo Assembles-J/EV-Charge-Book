@@ -1,213 +1,302 @@
 # EV Charge Book Vehicle Catalog & Multi-Vehicle Design
 
-版本: v1.0.0
-更新时间: 2026-08-26
+版本: v2.0.0
+更新时间: 2026-08-31
 状态: Authority Subdocument
 
-## 1. 目标
+## 1. 核心原则
 
-让用户不必手工填写全部车辆参数，同时支持一个用户管理多辆新能源车，并保证车型库更新不会破坏用户已有记录。
+Vehicle 模块采用 **后台车型主数据 + Android Offline First 缓存 + 用户车辆实例** 三层模型。
 
----
+必须遵守：
 
-## 2. “所有电车”需求评审
-
-产品目标可以是“覆盖主流及持续扩充的在售/历史新能源车型”，但不能承诺通过一个免费 API 永久、完整、实时覆盖市场上所有车型。
-
-原因:
-
-- 车型、年款、配置版持续变化
-- 同一营销车型存在不同电池/续航配置
-- 官方监管产品型号与消费者看到的品牌/车系/配置名并非一一对应
-- 工信部公开车辆产品公告是权威数据来源之一，但不是面向 App 的稳定车型查询 API
-
-因此采用“车型目录 + 用户自定义兜底”。
+1. **后台决定“这是什么车”**：支持品牌、车系、年款、配置、标准规格、标准续航、品牌 Logo、车型 Hero 全部由 Web Admin / managed catalog 维护。
+2. **用户只决定“这是我的哪辆车”**：用户车辆只能编辑昵称等个人属性，不能修改标准车型事实。
+3. **Android 不拥有支持车型名单**：新增品牌或车型不得要求修改 Kotlin 白名单、`when (brand)`、字符串匹配或重新发布 APK。
+4. **App 永远以本地缓存运行**：Room 是 Android 运行时车型目录来源；网络仅用于后台刷新，刷新失败继续使用 last-known-good 数据。
 
 ---
 
-## 3. 数据分层
+## 2. 数据分层
+
+### VehicleBrand
+
+后台维护的品牌主数据：
+
+- `brandId`（稳定 ID）
+- `displayName`
+- `englishName?`
+- `logoKey?`
+- `isActive`
+- `sourceUpdatedAtEpochMillis`
+
+品牌 Logo 作为版本化远程资产管理；Android 只消费 `logoKey` / manifest，不硬编码品牌 drawable 映射。
 
 ### VehicleCatalog
 
-只读参考数据，可随版本或后续网络目录更新:
+后台维护、Android 只读的标准车型数据：
 
-- catalogId
-- source
-- sourceModelCode
-- brand
-- series
-- modelName
-- modelYear
-- trimName
-- powertrainType (BEV / PHEV / REEV)
-- batteryCapacityKwh?
-- rangeKm?
-- rangeStandard? (CLTC/WLTC/etc)
-- batteryChemistry?
-- manufacturer?
-- isActive
-- sourceUpdatedAt
+- `catalogId`（稳定 ID）
+- `brandId`
+- `series`
+- `modelName`
+- `modelYear`
+- `trimName`
+- `powertrainType` (`BEV` / `PHEV` / `REEV`)
+- `batteryCapacityKwh?`
+- `rangeKm?`
+- `rangeStandard?` (`CLTC` / `WLTC` / etc.)
+- 其他标准规格字段
+- `heroArtworkKey?`
+- `isActive`
+- `sourceUpdatedAtEpochMillis`
+
+这些字段属于车型客观事实。Android 车辆详情可以展示，但不能提供用户编辑入口。
 
 ### UserVehicle
 
-用户真实车辆档案（现有 `VehicleEntity` 的演进方向）:
+用户自己的车辆实例（现有 `VehicleEntity`）：
 
-- id
-- catalogVehicleId? nullable
-- nickname?
-- brandSnapshot
-- modelSnapshot
-- batteryCapacityKwh
-- rangeKm
-- isDefault
-- isArchived
-- createdAt
+- `id`
+- `catalogVehicleId`
+- `nickname?`
+- 标准车型不可编辑快照（仅用于离线/历史兼容）
+- `isDefault`
+- `isArchived`
+- `createdAtEpochMillis`
+- sync metadata
 
-用户从车型库选择后，将关键参数快照到 UserVehicle。车型目录以后更新，不自动改写用户历史车辆参数。
+`nickname` 是主要用户可编辑文本。
 
-始终提供“找不到车型 / 自定义车辆”。
-
----
-
-## 4. 车型目录来源策略
-
-### v0.2
-
-优先使用仓库内版本化 JSON/Room seed 数据:
+展示名称规则：
 
 ```text
-assets/vehicle_catalog.json
- -> first-run import
- -> local search
+nickname 非空 -> nickname
+nickname 为空 -> catalog/model compact display name
 ```
 
-先覆盖常见新能源品牌和车型，保证离线可用、没有 API 成本、结果可测试。
-
-### 后续
-
-建立目录更新工具，参考:
-
-- 工信部道路机动车辆生产企业及产品公告
-- 新能源车型公开目录/官方品牌资料
-
-监管数据需要做消费者车型名归一化，不直接把原始公告当 UI 车型列表。
-
-云端目录更新应晚于 v0.2 本地目录验证。
+车型目录后续修正不能静默重写既有用户历史；保留快照是兼容策略，不代表这些字段对用户可编辑。
 
 ---
 
-## 5. 车辆选择 UX
+## 3. Web Admin 是唯一支持车型管理中心
 
-新增车辆:
+Web 端负责：
 
 ```text
-选择品牌
+品牌管理
+├─ 新增 / 编辑品牌
+├─ Logo 上传 / 更新
+├─ 上架 / 下架
+│
+车型管理
+├─ 新增车系 / 年款 / 配置
+├─ 标准电池 / 续航 / 续航标准
+├─ 标准规格
+├─ Hero 关联 / 发布
+└─ 上架 / 下架
+```
+
+发布要求：
+
+- 稳定 ID 不因文案修正改变；
+- `catalogVersion` 单调递增；
+- 元数据原子写入；
+- 无效/重复数据拒绝发布；
+- 下架使用 `isActive=false`，不物理删除；
+- 已添加到用户本地的车辆和历史记录不因目录下架被删除。
+
+新增第 100 个品牌/车型时，Android 代码改动应为 **0**。
+
+---
+
+## 4. Android Offline First 目录
+
+运行时数据链路：
+
+```text
+APK bundled seed
+      ↓ first run
+Room vehicle catalog
+      ↓
+UI always reads local Room
+      ↑
+best-effort background refresh
+      ↑
+managed server catalog
+```
+
+### 刷新规则
+
+远程目录只有在以下条件全部通过后才能写入 Room：
+
+- HTTPS 请求成功；
+- schemaVersion 支持；
+- 文档非空；
+- ID 合法且无重复；
+- 必填文本完整；
+- 枚举值合法；
+- 数值范围合法。
+
+任一失败：
+
+```text
+remote failure
+     ↓
+DO NOT clear Room
+     ↓
+continue last-known-good catalog
+```
+
+禁止为了“拿最新车型”让 Dashboard、记录、行程、统计或车辆切换依赖在线服务。
+
+---
+
+## 5. 车辆新增 UX
+
+正式流程：
+
+```text
+选择/搜索品牌或车型
  -> 选择车系
  -> 年款/配置
- -> 展示可用参数
- -> 用户确认/修改
- -> 保存为 UserVehicle
+ -> 查看标准参数（只读）
+ -> 确认添加
+ -> 可选设置车辆昵称
 ```
 
-搜索支持品牌/车系/车型关键字。
+标准参数不能修改。
 
-底部始终提供:
+不再把“自定义填写品牌、车型、电池、续航”作为正常支持车型的兜底方案。缺失车型应由 Web Admin 补录并通过远程目录发布。
 
-`没有找到？自定义添加车辆`
-
-不要求用户提供 VIN 才能使用 App。
+如未来确实需要实验性自定义车辆，必须明确标记为非标准车型，并与 managed catalog 数据隔离；不得污染标准车型统计和规格事实。
 
 ---
 
-## 6. 多车辆设计
+## 6. 编辑车辆 UX
 
-### Dashboard
-
-顶部当前车辆改为可切换 Vehicle Switcher:
+编辑入口只编辑用户车辆属性，例如：
 
 ```text
-[ C16 ▼ ]
+车辆名称
+[ 小黑 ]
 ```
 
-切换后 Dashboard、Records、Stats 默认只显示该车数据。
-
-可提供“全部车辆”汇总视图，但必须明确标记，禁止把多个车辆的数据无提示混在一起。
-
-### Vehicle 页面
+车辆详情中的标准信息：
 
 ```text
-我的车辆
-
-[默认] 零跑 C16
-        67.7 kWh
-
-       小米 SU7
-        73.6 kWh
-
-[ + 添加车辆 ]
+零跑 C16 2026款
+580 智享版
+纯电
+74.9 kWh
+CLTC 580 km
 ```
 
-操作:
-
-- 设为当前/默认车辆
-- 编辑车辆
-- 归档车辆
-- 新增车辆
-
-### Charging Record
-
-新增充电记录自动关联当前车辆；表单顶部允许切换目标车辆。
-
-### Trip
-
-每次 TripSession 必须绑定 `vehicleId`，开始行程前显示当前车辆。
+全部为只读展示，不出现编辑按钮或文本输入框。
 
 ---
 
-## 7. 删除与归档
+## 7. 多车辆切换
 
-有历史充电或行程数据的车辆默认不提供直接物理删除。
+切换器的主视觉：
 
-优先使用 `isArchived`:
+```text
+[品牌 Logo]  nickname / compact model name
+```
 
-- 不再出现在默认切换器
-- 历史数据仍可查询
-- 可恢复
+例如：
 
-真正删除时需要明确处理关联 ChargingRecord / TripSession。
+```text
+[零跑 Logo] 小黑
+[小米 Logo] SU7
+[BYD Logo] 通勤车
+```
 
----
+切换器不展示电池容量、续航等次要标准规格。
 
-## 8. 当前车辆状态
-
-当前选择的 `vehicleId` 不放在每个页面单独维护。
-
-v0.2 建议使用 DataStore 保存 `selectedVehicleId`，并由统一 VehicleRepository / app state 提供当前车辆。
-
-所有查询必须显式按 vehicleId 过滤。
+切换后 Dashboard、Records、Stats 默认只显示当前车辆数据。进行中的 Trip 仍固定绑定开始时的 `vehicleId`，不能因切换当前车辆而改变归属。
 
 ---
 
-## 9. 验收目标
+## 8. 品牌 Logo 与车型 Hero
 
-- [ ] 车型目录本地搜索
-- [ ] 品牌 -> 车系 -> 年款/配置选择
-- [ ] 自定义车辆兜底
-- [ ] 添加至少两辆车辆
-- [ ] 当前车辆切换
-- [ ] Dashboard/Records/Stats 按车辆隔离
-- [ ] Add Charging Record 可指定车辆
-- [ ] 默认车辆持久化
-- [ ] 车辆归档不丢历史记录
-- [ ] TripSession 与车辆绑定
+品牌 Logo 与车型 Hero 都是 managed assets，不属于 Android 支持车型代码。
+
+### Brand Logo
+
+```text
+brandId
+  -> logoKey
+  -> asset manifest
+  -> disk/memory cache
+  -> remote latest
+```
+
+### Vehicle Hero
+
+```text
+catalogId
+  -> heroArtworkKey
+  -> Hero manifest
+  -> disk/memory cache
+  -> remote latest
+```
+
+资源加载失败不得影响车型本身可用性；优先继续使用缓存，首次离线且无资源时使用通用占位。
+
+禁止：
+
+- `when (brand)` 选择 Logo/Hero；
+- Kotlin 中维护支持车型列表；
+- 通过 `brand.contains("小米")` 等字符串规则猜车型图片；
+- 新增车型时要求发布新版 APK 才能显示。
 
 ---
 
-## 10. 变更记录
+## 9. 删除与归档
 
-### v1.0.0
+用户车辆默认采用 `isArchived`：
 
-- 建立车型目录与多车辆权威设计
-- 采用 Catalog + UserVehicle snapshot 模型
-- 明确不承诺一个免费 API 覆盖所有车型
-- 明确本地目录、自定义兜底、车辆切换与归档规则
+- 不再出现在默认切换器；
+- 历史充电记录和行程继续保留；
+- 不因远程目录下架自动归档用户车辆。
+
+车型目录采用 `isActive`：
+
+- `false` 后不再提供给新用户选择；
+- 已存在的 UserVehicle 继续可用；
+- 历史数据保持可读。
+
+---
+
+## 10. 验收目标
+
+- [ ] Web Admin 可维护品牌与稳定 `brandId`
+- [ ] Web Admin 可上传/更新品牌 Logo
+- [x] Web Admin 可新增/编辑/上下架车型
+- [x] Web Admin 发布后 `catalogVersion` 递增
+- [x] Android 本地 Room Catalog + best-effort remote refresh
+- [x] 远程失败保持 last-known-good Catalog
+- [ ] Android 不再存在支持品牌/车型白名单
+- [ ] Android 不再通过品牌/车型字符串猜 Hero
+- [ ] 标准车型参数全部只读
+- [ ] UserVehicle 支持 `nickname`
+- [ ] 编辑车辆只允许编辑 nickname
+- [ ] 新增车辆只能确认 managed catalog 标准信息
+- [ ] 车辆切换器显示 `Logo + nickname/fallback`
+- [ ] 新增后台品牌/车型无需 APK 更新即可在 App 出现
+- [ ] 归档/下架不破坏历史记录
+
+---
+
+## 11. 变更记录
+
+### v2.0.0
+
+- 将 Web Admin 定义为支持品牌/车型唯一管理中心；
+- 标准车型事实改为 App 只读；
+- UserVehicle 只允许 nickname 等用户属性可编辑；
+- 明确 Android 不允许维护支持车型白名单；
+- 品牌 Logo / Hero 改为动态 managed assets；
+- 保留 Room Offline First + last-known-good 缓存模型；
+- 废弃“用户确认后修改标准车型参数”的旧产品规则。
