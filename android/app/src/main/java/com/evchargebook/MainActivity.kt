@@ -310,7 +310,6 @@ fun MainApp(
     SideEffect {
         (context as? Activity)?.window?.let { window ->
             WindowCompat.getInsetsController(window, window.decorView).apply {
-                // Dashboard is always visually dark because the Hero artwork reaches the system bar.
                 isAppearanceLightStatusBars = if (!hasOverlayPage && tab == 0) false else !themeController.darkTheme
                 isAppearanceLightNavigationBars = !themeController.darkTheme
             }
@@ -363,8 +362,6 @@ fun MainApp(
     AppUpdatePrompt()
 
     Scaffold(
-        // Only the Dashboard owns the top system-bar backdrop. Other screens keep the
-        // existing Scaffold safe-drawing insets and therefore retain their current layout.
         contentWindowInsets = if (!hasOverlayPage && tab == 0) {
             WindowInsets(0, 0, 0, 0)
         } else {
@@ -395,9 +392,7 @@ fun MainApp(
                                 Icon(
                                     imageVector = icons[index],
                                     contentDescription = title,
-                                    modifier = Modifier
-                                        .size(26.dp)
-                                        .padding(3.dp)
+                                    modifier = Modifier.size(26.dp).padding(3.dp)
                                 )
                             },
                             label = { Text(title, style = MaterialTheme.typography.labelMedium) },
@@ -438,28 +433,45 @@ fun MainApp(
                 )
                 editVehicle -> state.vehicle?.let { vehicle ->
                     VehicleEditScreen(
-                        initialBrand = vehicle.brand,
-                        initialModel = vehicle.model,
-                        initialBatteryCapacity = vehicle.batteryCapacityKwh.toString(),
-                        initialRange = vehicle.rangeKm.toString(),
-                        onSave = { brand, model, capacity, range -> viewModel.saveVehicle(brand, model, capacity, range); editVehicle = false },
+                        initialNickname = vehicle.nickname.orEmpty(),
+                        brand = vehicle.brand,
+                        model = vehicle.model,
+                        batteryCapacityKwh = vehicle.batteryCapacityKwh,
+                        rangeKm = vehicle.rangeKm,
+                        onSave = { nickname ->
+                            viewModel.saveVehicleNickname(nickname)
+                            editVehicle = false
+                        },
                         onBack = { editVehicle = false }
                     )
                 }
-                addVehicle -> VehicleEditScreen(
-                    initialBrand = catalogSelection?.brand.orEmpty(),
-                    initialModel = catalogSelection?.modelName.orEmpty(),
-                    initialBatteryCapacity = catalogSelection?.batteryCapacityKwh?.toString().orEmpty(),
-                    initialRange = catalogSelection?.rangeKm?.toString().orEmpty(),
-                    title = "添加车辆",
-                    onSave = { brand, model, capacity, range -> viewModel.addVehicle(brand, model, capacity, range, catalogSelection?.catalogId); catalogSelection = null; addVehicle = false },
-                    onBack = { addVehicle = false }
-                )
+                addVehicle -> catalogSelection?.let { catalog ->
+                    VehicleEditScreen(
+                        initialNickname = "",
+                        brand = catalog.brand,
+                        model = listOfNotNull(catalog.modelName, catalog.trimName?.takeIf { it.isNotBlank() }).joinToString(" · "),
+                        batteryCapacityKwh = catalog.batteryCapacityKwh,
+                        rangeKm = catalog.rangeKm,
+                        title = "添加车辆",
+                        onSave = { nickname ->
+                            viewModel.addVehicle(catalog, nickname)
+                            catalogSelection = null
+                            addVehicle = false
+                        },
+                        onBack = {
+                            catalogSelection = null
+                            addVehicle = false
+                        }
+                    )
+                }
                 selectCatalogVehicle -> VehicleCatalogScreen(
-                    state.catalogVehicles,
-                    { selected -> catalogSelection = selected; selectCatalogVehicle = false; addVehicle = true },
-                    { catalogSelection = null; selectCatalogVehicle = false; addVehicle = true },
-                    { selectCatalogVehicle = false }
+                    items = state.catalogVehicles,
+                    onSelect = { selected ->
+                        catalogSelection = selected
+                        selectCatalogVehicle = false
+                        addVehicle = true
+                    },
+                    onBack = { selectCatalogVehicle = false }
                 )
                 bluetoothPrompt -> BluetoothPromptScreen(state.bluetoothSettings, state.pairedBluetoothDevices, viewModel::saveBluetoothPrompt) { bluetoothPrompt = false }
                 else -> when (tab) {
