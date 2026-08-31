@@ -1,6 +1,7 @@
 package com.evchargebook.ui.vehicle
 
 import com.evchargebook.data.entity.VehicleEntity
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -8,21 +9,22 @@ import org.junit.Test
 class OfficialVehicleImageCatalogTest {
 
     @Test
-    fun `supported catalog vehicles resolve bundled artwork`() {
-        assertNotNull(OfficialVehicleImageCatalog.resolve(vehicle("byd-seal-2025-650", "比亚迪", "海豹 2025款")))
-        assertNotNull(OfficialVehicleImageCatalog.resolve(vehicle("leap-c16-2026-reev-67", "零跑", "C16 2026款")))
-        assertNotNull(OfficialVehicleImageCatalog.resolve(vehicle("xiaomi-su7-2024-max", "小米", "SU7 Max")))
+    fun `managed artwork key resolves without model whitelist`() {
+        val resolved = OfficialVehicleImageCatalog.resolve(
+            vehicle("future-brand-model-1", "未来品牌", "未来车型"),
+            preferredArtworkKey = "future-brand-model-hero"
+        )
+
+        assertNotNull(resolved)
+        assertEquals("future-brand-model-hero", resolved?.key)
+        assertNull(resolved?.remoteFallbackUrl)
     }
 
     @Test
-    fun `strict name fallback resolves model 3`() {
-        assertNotNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "Tesla", "Model 3")))
-    }
-
-    @Test
-    fun `nearby models never borrow wrong artwork`() {
-        assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "比亚迪", "海豹07 EV")))
-        assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "Tesla", "Model Y")))
+    fun `model names never select artwork without catalog key`() {
+        assertNull(OfficialVehicleImageCatalog.resolve(vehicle("byd-seal-2025-650", "比亚迪", "海豹 2025款")))
+        assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "Tesla", "Model 3")))
+        assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "任意品牌", "任意车型")))
     }
 
     private fun vehicle(catalogId: String?, brand: String, model: String) = VehicleEntity(
