@@ -83,15 +83,16 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         seedVehicleCatalog()
         val activeVehicles = vehicles.first()
         if (activeVehicles.isEmpty()) {
-            val id = vehicleDao.insert(VehicleEntity(brand = "零跑", model = "C16 2026款", batteryCapacityKwh = 67.7, rangeKm = 520, isDefault = true))
-            ensureVehicleState(id)
-            selectVehicle(id)
-        } else {
-            val defaultVehicle = activeVehicles.firstOrNull { it.isDefault } ?: activeVehicles.first()
-            if (!defaultVehicle.isDefault) vehicleDao.setDefault(defaultVehicle.id)
-            if (selectedVehicleId.first() !in activeVehicles.map { it.id }) selectVehicle(defaultVehicle.id)
-            activeVehicles.forEach { ensureVehicleState(it.id) }
+            // An empty garage is a valid first-run state. The app must never decide which
+            // managed model the user owns; the user selects one from the cached catalog.
+            context.vehicleSelectionDataStore.edit { it.remove(selectedVehicleIdKey) }
+            return
         }
+
+        val defaultVehicle = activeVehicles.firstOrNull { it.isDefault } ?: activeVehicles.first()
+        if (!defaultVehicle.isDefault) vehicleDao.setDefault(defaultVehicle.id)
+        if (selectedVehicleId.first() !in activeVehicles.map { it.id }) selectVehicle(defaultVehicle.id)
+        activeVehicles.forEach { ensureVehicleState(it.id) }
     }
 
     suspend fun exportBackup(appVersion: String): String {
@@ -406,9 +407,20 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             List(array.length()) { index ->
                 val item = array.getJSONObject(index)
                 VehicleCatalogEntity(
-                    catalogId = item.getString("catalogId"), source = item.getString("source"), brand = item.getString("brand"), series = item.getString("series"), modelName = item.getString("modelName"),
-                    modelYear = item.optInt("modelYear").takeIf { it != 0 }, trimName = item.optString("trimName").takeIf { it.isNotBlank() }, powertrainType = item.getString("powertrainType"),
-                    batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() }, rangeKm = item.optInt("rangeKm").takeIf { it != 0 }
+                    catalogId = item.getString("catalogId"),
+                    source = item.getString("source"),
+                    brandId = item.optString("brandId"),
+                    brand = item.getString("brand"),
+                    series = item.getString("series"),
+                    modelName = item.getString("modelName"),
+                    modelYear = item.optInt("modelYear").takeIf { it != 0 },
+                    trimName = item.optString("trimName").takeIf { it.isNotBlank() },
+                    powertrainType = item.getString("powertrainType"),
+                    batteryCapacityKwh = item.optDouble("batteryCapacityKwh").takeIf { !it.isNaN() },
+                    rangeKm = item.optInt("rangeKm").takeIf { it != 0 },
+                    rangeStandard = item.optString("rangeStandard").takeIf { it.isNotBlank() },
+                    heroArtworkKey = item.optString("heroArtworkKey").takeIf { it.isNotBlank() },
+                    isActive = if (item.has("isActive")) item.getBoolean("isActive") else true,
                 )
             }
         }
