@@ -2,16 +2,16 @@
 
 Updated: 2026-08-31
 Status: Operational status authority
-Baseline: `main@81b50a5b15408bac7bb998041d0681426c829c61`
+Baseline: `main@e5149a6474a17c7a5ce0a987f04fc3ab38a143b0`
 
 ## Purpose
 
-This file owns **fast-changing project execution status**. Stable product and architecture principles remain in `PROJECT_MASTER.md` and the domain-specific authority documents.
+This file owns **fast-changing project execution status**. Stable product and architecture principles remain in `PROJECT_MASTER.md` and domain-specific authority documents.
 
 When status sources disagree, use this order:
 
 1. current `main` implementation facts and persisted schemas;
-2. merged PR / CI evidence;
+2. merged PR / current-head CI evidence;
 3. this current-status authority;
 4. owning Open Issue for remaining acceptance or future work;
 5. older roadmap/history/versioned design text.
@@ -24,26 +24,29 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 
 Merged PR #263 established:
 
-- current root README as a stable project entrypoint instead of a stale MVP checklist;
-- root MIT `LICENSE` matching the repository's declared license intent;
+- root README as a stable project entrypoint instead of a stale pre-Room/MVP checklist;
+- root MIT `LICENSE`;
 - `.github/PULL_REQUEST_TEMPLATE.md`;
 - evidence-first Bug / Feature / Documentation-Governance Issue templates;
 - `docs/BRANCH_AND_PR_GOVERNANCE.md` for branch lifecycle, stacked PRs and merge evidence.
 
 ### Remaining repository-setting gaps
 
-- `main` is still not branch-protected;
-- required status checks are still empty;
-- repository rulesets are empty;
-- `delete_branch_on_merge` is still false;
-- the 2026-08-31 branch audit returned 192 remote branch refs across two pages.
+Current repository metadata still reports:
+
+- `main` not branch-protected;
+- required status checks empty;
+- repository rulesets empty;
+- `delete_branch_on_merge = false`.
+
+The 2026-08-31 branch audit returned 192 remote branch refs across two pages.
 
 Ownership:
 
 - #75 — `main` protection + current-head required Android CI policy;
 - #265 — stale remote branch cleanup + merge-time branch deletion.
 
-The current ChatGPT GitHub connection can read these repository states but does not expose ruleset/protection writes or remote-ref deletion. #75/#265 must not be closed until GitHub metadata itself confirms the settings/cleanup.
+The connected GitHub tool can read these states but currently exposes neither branch-protection/ruleset writes nor remote-ref deletion. #75/#265 must not be closed until GitHub metadata itself confirms the change.
 
 ## Active delivery streams
 
@@ -60,19 +63,19 @@ Current product/data authority:
 
 #### PR #258 — pure calculation contract
 
-Current status:
+Snapshot at this baseline:
 
 - Draft;
 - head `2d9de0c666f56bc5b0e5f56e71afce0f1763eda0`;
-- only engine + focused test files in its own diff;
+- own diff remains engine + focused test only;
 - Android Build #626 Green on that head;
-- current repository comparison shows the branch is **10 commits behind current `main`**.
+- comparison to baseline `main@e5149a6` shows it is **11 commits behind current `main`**.
 
-Therefore the old “behind by 0” claim is stale. #258 must synchronize with current `main`, re-check its effective diff and obtain current-head CI after synchronization before Ready/Merge.
+The numerical behind-count is only a snapshot and will change as `main` moves. The durable rule is: #258 is not merge-ready until it is synchronized/revalidated against current `main`, its effective diff is re-read and current-head Android CI is Green.
 
 #### PR #261 — stacked Add/Edit billing adoption
 
-Current status:
+Snapshot:
 
 - Draft;
 - base = #258 branch;
@@ -94,31 +97,46 @@ Required order:
 
 Do not delete the #258 branch while #261 depends on it.
 
-### Vehicle maturity / catalog — #244 and #20
+### Vehicle maturity / catalog / resource onboarding — #244 and #20
 
-Already in `main`:
+Already in `main` before #264:
 
 - user vehicle nickname and nickname-first display;
 - managed-catalog-only primary add flow;
 - standard vehicle facts read-only in Android;
-- removal of Android supported-model hard-code as product authority;
 - managed brand metadata / stable `brandId`;
 - managed Light/Dark Brand Logo publishing and Android cached rendering;
-- vehicle switchers show managed Logo + nickname/fallback;
 - range-standard metadata;
-- JSON/CSV catalog import/export and template;
-- managed Hero-key selection;
-- filename-prefix batch Brand Logo / Hero upload;
-- copyable Logo/Hero standards and prompt center;
-- #259 Brand Logo batch-upload simplification and light-card contrast correction.
+- catalog JSON/CSV import/export and template;
+- managed Hero semantic key selection;
+- batch Brand Logo / Hero upload helpers;
+- copyable Logo/Hero standards and prompt center.
 
-#244 is implementation-mostly-complete and now owns remaining maturity/physical acceptance. #20 owns provenance, normalization/conflict quality and broader real-model coverage, not a second catalog runtime/import architecture.
+Merged PR #264 further advanced the resource workflow:
+
+- unified `车型资源工作台` for one-vehicle resource-bundle onboarding;
+- one resource-bundle JSON carrying one managed brand + one vehicle plus coordinated assets;
+- mixed Logo/Hero multi-file queue with automatic matching as suggestion only and explicit manual correction;
+- duplicate/shared Hero-key review with explicit update confirmation;
+- all-in-one full asset-bundle prompt while retaining the single-item prompt library;
+- stable base `heroArtworkKey` with published `<base>-dark` / `<base>-light` variants;
+- Android Hero resolution with backward-compatible fallback:
+  - Dark: `<base>-dark -> legacy <base>`;
+  - Light: `<base>-light -> <base>-dark -> legacy <base>`;
+- old split batch Logo/Hero panels retired from the main admin UI; single-item maintenance remains;
+- new `Admin Resource Workbench` CI contract.
+
+Current product/admin authority: `RESOURCE_BUNDLE_WORKFLOW.md`, owner #244.
+
+#244 therefore owns remaining real workflow/device maturity, not implementation of another disconnected Logo/Hero/catalog onboarding system.
+
+#20 remains the data-quality owner: provenance, normalization, conflicts/corrections, broader real-model coverage and coverage metrics. The unified one-vehicle workbench does not replace bulk catalog data-quality work.
 
 ### Trip background/location reliability — #77
 
 Current `main` includes:
 
-- #80 removal of the old 8m callback displacement gate;
+- #80 removal of old 8m callback displacement gate;
 - #184 delayed-delivery grace while preserving original `Location.time` authority and 120s LONG_GAP;
 - #217 Google Play Fused production source;
 - #220 non-GMS platform GPS/network fallback;
@@ -168,18 +186,19 @@ Updater runtime includes release discovery, DownloadManager, SHA-256, installer 
 
 Detailed trigger/ownership boundaries are documented in `WORKFLOW_OWNERSHIP.md`.
 
-High-level split:
+At this baseline there are **nine** workflow files:
 
 - `android-build.yml` — Android PR/push validation + Debug APK artifact;
 - `android-release.yml` — manual production signed APK publish path;
-- `hero-admin.yml` — resource-admin application/container/lifecycle validation;
-- `hero-admin-deploy.yml` — production deployment of the resource admin on main push;
+- `hero-admin.yml` — integrated resource-admin application/container/lifecycle validation;
+- `hero-admin-deploy.yml` — production resource-admin deployment on qualifying `main` push;
 - `hero-assets-publish.yml` — Hero asset package validation;
-- `admin-batch-image-upload.yml` — batch-image browser-contract validation;
-- `admin-prompt-library.yml` — copy/prompt-library contract validation;
-- `vehicle-catalog-admin-tools.yml` — catalog admin browser/import-export contract validation.
+- `admin-resource-workbench.yml` — unified vehicle resource-bundle workbench contract validation;
+- `admin-batch-image-upload.yml` — retained focused/legacy batch-helper regression contract, not preferred new-model onboarding authority;
+- `admin-prompt-library.yml` — single-item + full-bundle prompt/index contract validation;
+- `vehicle-catalog-admin-tools.yml` — catalog admin/import-export browser-contract validation.
 
-These workflows overlap by changed paths intentionally but do not have the same responsibility.
+These workflows overlap by paths intentionally but do not have the same responsibility. Validation, resource publication through existing admin endpoints and production admin deployment are distinct states.
 
 ## Authority maintenance rules
 
@@ -193,6 +212,7 @@ These workflows overlap by changed paths intentionally but do not have the same 
 8. No broad reimplementation may start from an old Issue before checking current `main` and merged PR history.
 9. Stacked parent branches remain until every Open child is safely retargeted.
 10. Historical Green CI does not authorize merge after effective head/base changes.
+11. When an admin surface is superseded, its old workflow must be explicitly treated as retained regression coverage or retired; existence of a workflow file does not make that old UI the current product authority.
 
 ## Current governance queue
 
@@ -205,12 +225,11 @@ Completed in the 2026-08-31 audit:
 - README/LICENSE/templates/branch-stack rules merged by #263;
 - #75 rewritten to exact current branch-protection/CI target;
 - #265 created for stale-branch cleanup/merge-time deletion;
-- #258/#261/#260/#251 descriptions synchronized to actual stacked state.
+- #258/#261/#260/#251 descriptions synchronized to actual stacked state;
+- PR #264 resource workbench / Hero theme-variant baseline incorporated into current authority.
 
-Remaining documentation debt:
+Remaining documentation debt after this authority-sync PR:
 
-- reconcile dated `ROADMAP.md` milestone narrative without turning it into an hourly status log;
-- reconcile `PROJECT_MASTER.md` present-tense runtime wording where it conflicts with this file;
 - reconcile older Trip/UI acceptance Issues that still call historical SHAs “latest main”;
 - narrow old #70 local-Hero/model-whitelist wording to physical visual closeout;
 - add explicit supersession/version notes to older docs that still look current.
