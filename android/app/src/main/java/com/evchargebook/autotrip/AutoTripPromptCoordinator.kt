@@ -91,9 +91,18 @@ class AutoTripPromptCoordinator(private val context: Context) {
         val vehicleLabel = vehicle?.let { "${it.brand} ${it.model}" } ?: binding.deviceName ?: "车辆"
 
         if (binding.autoStartOnConnect) {
-            // A background receiver cannot request location permission. Preserve the user's
-            // explicit auto-start preference, but fall back to the visible confirmation path so
-            // MainActivity can request permission instead of creating an immediately interrupted Trip.
+            // Android 13+ notification denial must never turn this into silent automation.
+            if (!notifications.canPostNotifications()) {
+                markBlocked(session.id)
+                return@withLock AutoTripCandidateResult.Existing(
+                    sessionId = session.id,
+                    state = AutoTripDetectionState.BLOCKED,
+                )
+            }
+
+            // A background receiver cannot request location permission. Fall back to the visible
+            // confirmation path so MainActivity can request permission instead of creating an
+            // immediately interrupted Trip.
             if (!hasLocationPermission()) {
                 return@withLock createVisibleCandidate(session, vehicleLabel, now)
             }
@@ -114,16 +123,7 @@ class AutoTripPromptCoordinator(private val context: Context) {
                     AutoTripCandidateResult.ActiveTripExists
 
                 is TripStartResult.Blocked -> {
-                    sessionDao.getById(session.id)?.let { current ->
-                        if (current.state == AutoTripDetectionState.BLUETOOTH_CANDIDATE.name) {
-                            sessionDao.update(
-                                current.copy(
-                                    state = AutoTripDetectionState.BLOCKED.name,
-                                    updatedAtEpochMillis = System.currentTimeMillis(),
-                                )
-                            )
-                        }
-                    }
+                    markBlocked(session.id)
                     AutoTripCandidateResult.Existing(session.id, AutoTripDetectionState.BLOCKED)
                 }
 
@@ -166,14 +166,28 @@ class AutoTripPromptCoordinator(private val context: Context) {
     ): AutoTripCandidateResult.Created {
         val visible = notifications.showCandidate(session, vehicleLabel)
         if (!visible) {
-            sessionDao.update(
-                session.copy(
-                    state = AutoTripDetectionState.BLOCKED.name,
-                    updatedAtEpochMillis = now,
-                )
-            )
+            markBlocked(session.id, now)
         }
         return AutoTripCandidateResult.Created(session.id, visible)
+    }
+
+    private suspend fun markBlocked(
+        sessionId: String,
+        now: Long = System.currentTimeMillis(),
+    ) {
+        sessionDao.getById(sessionId)?.let { current ->
+            if (
+                current.closedAtEpochMillis == null &&
+                current.state == AutoTripDetectionState.BLUETOOTH_CANDIDATE.name
+            ) {
+                sessionDao.update(
+                    current.copy(
+                        state = AutoTripDetectionState.BLOCKED.name,
+                        updatedAtEpochMillis = now,
+                    )
+                )
+            }
+        }
     }
 
     private fun hasLocationPermission(): Boolean =
@@ -288,7 +302,7 @@ class AutoTripNotificationController(private val context: Context) {
         )
     }
 
-    private fun canPostNotifications(): Boolean =
+    fun canPostNotifications(): Boolean =
         Build.VERSION.SDK_INT < 33 ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
             PackageManager.PERMISSION_GRANTED
