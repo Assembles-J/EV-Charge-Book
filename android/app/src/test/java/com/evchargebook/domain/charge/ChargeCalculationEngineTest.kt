@@ -32,7 +32,7 @@ class ChargeCalculationEngineTest {
     }
 
     @Test
-    fun `editing unit price keeps total cost and recalculates meter energy`() {
+    fun `editing unit price keeps authoritative total cost and recalculates meter energy`() {
         val result = ChargeCalculationEngine.editBilling(
             input = ChargeCalculationInput(
                 totalCost = 45.76,
@@ -53,6 +53,31 @@ class ChargeCalculationEngineTest {
         assertTrue(ChargeBillingField.UNIT_PRICE in result.input.authoritativeBillingFields)
         assertFalse(ChargeBillingField.METER_ENERGY in result.input.authoritativeBillingFields)
         assertFalse(result.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
+    }
+
+    @Test
+    fun `editing unit price keeps energy when total cost was calculated`() {
+        val energyFirst = ChargeCalculationEngine.editBilling(
+            input = ChargeCalculationInput(
+                unitPrice = 1.25,
+                authoritativeBillingFields = setOf(ChargeBillingField.UNIT_PRICE)
+            ),
+            field = ChargeBillingField.METER_ENERGY,
+            value = 32.0
+        )
+        val priceChanged = ChargeCalculationEngine.editBilling(
+            input = energyFirst.input,
+            field = ChargeBillingField.UNIT_PRICE,
+            value = 1.10
+        )
+
+        assertEquals(32.0, priceChanged.input.meterEnergyKwh!!, 0.000001)
+        assertEquals(1.10, priceChanged.input.unitPrice!!, 0.000001)
+        assertEquals(35.20, priceChanged.input.totalCost!!, 0.000001)
+        assertFalse(ChargeBillingField.TOTAL_COST in priceChanged.input.authoritativeBillingFields)
+        assertTrue(ChargeBillingField.UNIT_PRICE in priceChanged.input.authoritativeBillingFields)
+        assertTrue(ChargeBillingField.METER_ENERGY in priceChanged.input.authoritativeBillingFields)
+        assertFalse(priceChanged.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
     }
 
     @Test
@@ -137,7 +162,7 @@ class ChargeCalculationEngineTest {
     }
 
     @Test
-    fun `zero unit price never divides by zero and conflicts with positive cost`() {
+    fun `zero unit price never divides by zero and conflicts with positive authoritative cost`() {
         val originalEnergy = 37.5
         val result = ChargeCalculationEngine.editBilling(
             input = ChargeCalculationInput(
