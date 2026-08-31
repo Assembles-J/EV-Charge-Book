@@ -4,12 +4,14 @@ on:
   pull_request:
     paths:
       - 'hero-admin/static/prompt-library.html'
+      - 'hero-admin/static/asset-bundle-prompt.html'
       - 'hero-admin/templates/index.html'
       - '.github/workflows/admin-prompt-library.yml'
   push:
     branches: [main]
     paths:
       - 'hero-admin/static/prompt-library.html'
+      - 'hero-admin/static/asset-bundle-prompt.html'
       - 'hero-admin/templates/index.html'
       - '.github/workflows/admin-prompt-library.yml'
   workflow_dispatch:
@@ -30,8 +32,11 @@ jobs:
           from pathlib import Path
           index = Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
           page = Path('hero-admin/static/prompt-library.html').read_text(encoding='utf-8')
+          bundle = Path('hero-admin/static/asset-bundle-prompt.html').read_text(encoding='utf-8')
           required_index = [
-              '规范与提示词 · Logo / Hero 一键复制',
+              '全量资产包 Prompt',
+              '单项规范 / Prompt',
+              'static/asset-bundle-prompt.html',
               'static/prompt-library.html',
           ]
           required_page = [
@@ -48,9 +53,19 @@ jobs:
               "navigator.clipboard.writeText",
               "localStorage.setItem('evcb-copy-center-v1'",
           ]
+          required_bundle = [
+              '新车型全量资产包 Prompt',
+              'prompt-library.html',
+              'Logo Light/Dark',
+              'Hero Dark/Light',
+              'ev-charge-book-resource-bundle',
+              'catalogImport',
+          ]
           for marker in required_index:
               assert marker in index, f'missing index marker: {marker}'
           for marker in required_page:
               assert marker in page, f'missing prompt library marker: {marker}'
+          for marker in required_bundle:
+              assert marker in bundle, f'missing full bundle prompt marker: {marker}'
           print('Prompt library contract OK')
           PY
