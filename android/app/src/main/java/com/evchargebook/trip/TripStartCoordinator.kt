@@ -25,7 +25,7 @@ sealed interface TripStartResult {
     data class Started(val tripId: Long) : TripStartResult
     data class AlreadyActive(val tripId: Long) : TripStartResult
     data class Blocked(val reason: String) : TripStartResult
-    data class Failed(val reason: String, val cause: Throwable? = null) : TripStartResult
+    data class Failed(val tripId: Long, val reason: String, val cause: Throwable? = null) : TripStartResult
 }
 
 /**
@@ -175,7 +175,11 @@ class TripStartCoordinator(
                     }
                 }
             }
-            TripStartResult.Failed(error.message ?: "无法启动行程记录服务", error)
+            TripStartResult.Failed(
+                tripId = prepared.tripId,
+                reason = error.message ?: "无法启动行程记录服务",
+                cause = error,
+            )
         }
     }
 
