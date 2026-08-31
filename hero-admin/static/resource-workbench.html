@@ -26,9 +26,9 @@
   <section class="card">
     <div class="section-head">
       <div>
-        <div class="eyebrow">STEP 1 · OPTIONAL CONFIG</div>
+        <div class="eyebrow">STEP 1 · NEW VEHICLE CONFIG</div>
         <h2>单车型资源包 JSON</h2>
-        <p>可直接粘贴「全量资产包 Prompt」返回的 JSON。也兼容单条 <code>ev-charge-book-vehicle-catalog v1</code> JSON。</p>
+        <p><strong>新增车型首次发布时必须提供。</strong>已有车型只维护 Logo / Hero 时可以跳过。可直接粘贴「全量资产包 Prompt」返回的 JSON，也兼容单条 <code>ev-charge-book-vehicle-catalog v1</code> JSON；图片文件名不会被用来猜测年款、电池、续航等标准参数。</p>
       </div>
       <div class="actions">
         <button id="readClipboard" class="secondary">从剪贴板读取</button>
@@ -36,7 +36,7 @@
       </div>
     </div>
     <textarea id="bundleJson" spellcheck="false" placeholder='粘贴 { "format": "ev-charge-book-resource-bundle", ... }'></textarea>
-    <div class="bundle-summary" id="bundleSummary">未载入资源包。只批量上传图片时可以跳过本步骤。</div>
+    <div class="bundle-summary" id="bundleSummary">未载入资源包：当前是图片维护模式，不会创建或更新车型配置。</div>
     <div class="diff-list" id="bundleDiff"></div>
     <label class="confirm-line hidden" id="configUpdateConfirmWrap">
       <input type="checkbox" id="configUpdateConfirm" />
@@ -76,16 +76,18 @@
     <div>
       <div class="eyebrow">STEP 3 · REVIEW & PUBLISH</div>
       <h2>确认并发布整套资源</h2>
-      <p>执行顺序：品牌配置 → 车型配置 → Logo → Hero。任何未匹配、校验失败或未确认的重复 Hero 都会阻止误发布；PNG / WebP 都会由发布端输出成规范 WebP，图片原始文件名不会直接落盘。</p>
+      <p>只有 STEP 1 已载入并校验 JSON 时才会写入品牌 / 车型配置；没有 JSON 时仅发布图片资源。Logo → Hero 图片继续按队列发布，PNG / WebP 都会由发布端输出成规范 WebP。</p>
     </div>
     <div class="publish-actions">
       <button id="refreshState" class="secondary">刷新线上状态</button>
       <button id="publishBundle" disabled>确认并发布整套资源</button>
     </div>
-    <div class="publish-log" id="publishLog">等待校验。</div>
+    <div class="status-strip" id="publishPlan">正在计算本次发布计划…</div>
+    <div class="publish-log" id="publishLog">尚未开始发布。</div>
   </section>
 </main>
 <script src="resource-workbench.js"></script>
 <script src="png-auto-webp.js"></script>
+<script src="resource-publish-guidance.js"></script>
 </body>
 </html>

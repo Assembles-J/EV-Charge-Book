@@ -1,0 +1,31 @@
+name: Admin Resource Publish Guidance
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/static/resource-workbench.html'
+      - 'hero-admin/static/resource-publish-guidance.js'
+      - '.github/workflows/admin-resource-publish-guidance.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/static/resource-workbench.html'
+      - 'hero-admin/static/resource-publish-guidance.js'
+      - '.github/workflows/admin-resource-publish-guidance.yml'
+
+jobs:
+  publish-guidance-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate publish guidance JavaScript syntax
+        run: node --check hero-admin/static/resource-publish-guidance.js
+      - name: Verify new-vehicle and image-only contracts
+        run: |
+          grep -F '新增车型首次发布时必须提供' hero-admin/static/resource-workbench.html
+          grep -F '图片维护模式，不会创建或更新车型配置' hero-admin/static/resource-workbench.html
+          grep -F '本次发布计划' hero-admin/static/resource-publish-guidance.js
+          grep -F '车型配置：不会创建/更新（未提供 STEP 1 JSON）' hero-admin/static/resource-publish-guidance.js
+          grep -F '仅发布 ${images.pendingAssets} 个图片资源' hero-admin/static/resource-publish-guidance.js
+          grep -F "setText(button,'已发布完成')" hero-admin/static/resource-publish-guidance.js
+          grep -F '本次发布已完成，无待发布项' hero-admin/static/resource-publish-guidance.js
