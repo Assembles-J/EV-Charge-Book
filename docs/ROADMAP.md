@@ -1,349 +1,320 @@
 # EV Charge Book Roadmap
 
-版本: v2.8.2
-更新时间: 2026-08-29
+版本: v3.0.0
+更新时间: 2026-08-31
+状态: Milestone / sequencing authority
 
-## 0. 路线原则
+## 0. 文档职责
 
-以 `PROJECT_MASTER.md` / `PRODUCT.md` / `FEATURE_MATRIX.md` 为准。
+本文件只负责 **里程碑、阶段顺序和产品优先级**。
 
-继续坚持：简单可维护、Local First、真实数据、先验收后扩功能；原始事实、派生值与估算值必须区分。
+它不再维护高频 PR/commit/CI/head-SHA 状态。当前实现、Open PR stack、真机验收 owner 和仓库治理快照统一以 `CURRENT_STATUS_AUTHORITY.md` 为准。
 
-阶段状态必须区分：
+当本文件的日期晚于旧设计文档但早于 current-status snapshot 时：
 
-- 代码已实现
-- Android CI 已通过
-- 真机功能验收
-- 真机视觉验收
-- Production Release 验收
+- 产品阶段顺序仍以本文件为准；
+- “现在代码做到哪”以 `CURRENT_STATUS_AUTHORITY.md` / current `main` 为准；
+- Open Issue 不代表代码一定未实现；
+- CI Green 不等于真机或 Production Release 验收。
 
-不得用 CI Green 代替真机结论，也不得因为 Issue 仍然 Open 就重复实现已经进入 `main` 的代码。
+路线原则：简单可维护、Local First、真实数据、先验收后扩功能；原始事实、派生值与估算值必须明确区分。
 
 ---
 
-## v0.1 - Local Charging Book
+## v0.1 — Local Charging Book
 
 状态: **Released / Accepted**
 
-- [x] Room / DAO / Repository / ViewModel
-- [x] 车辆创建 / 编辑持久化
-- [x] 充电记录新增 / 编辑 / 删除
-- [x] Dashboard / Records / Stats
-- [x] Android CI / Debug APK
-- [x] 真机核心 CRUD 验收
-- [x] signed production APK / atomic server release
+目标：建立离线可用的车辆与充电记账基础。
+
+稳定能力：
+
+- Vehicle / ChargingRecord 本地持久化；
+- 充电记录新增、编辑、删除；
+- Dashboard / Records / Stats 基础；
+- 本地数据恢复基础；
+- Android Debug / Production Release 基础链路。
+
+本阶段不再作为活跃开发 owner。
 
 ---
 
-## v0.2 - Vehicle, Location & Trip Foundation
+## v0.2 — Vehicle, Location & Trip Foundation
 
-状态: **Core Implemented / Post-#184 Physical Reliability Revalidation**
+状态: **Core Implemented / Physical Reliability Closeout**
 
-### Trip / Location 基础
+目标：建立真实、可解释的驾驶行程事实层。
 
-- [x] TripSession / TripPoint + Room migration
-- [x] manual start / completion / interrupted resume
-- [x] foreground location service + persistent notification
-- [x] WGS84 / accuracy / speed / bearing / altitude
-- [x] distance / elapsed / moving / stopped / average / max speed
-- [x] runtime GPS health / callback heartbeat / accepted-point heartbeat
-- [x] `lastLocationCallbackAt` 与 `lastAcceptedPointAt` 分离诊断
-- [x] GPS / Network provider fallback
-- [x] provider / permission / service lifecycle diagnostics
-- [x] `START_REDELIVER_INTENT` evidence
+稳定方向：
 
-### GPS continuity / data trust
+- TripSession / TripPoint；
+- foreground tracking；
+- WGS84 坐标、速度、方向、海拔、accuracy；
+- distance / elapsed / moving / stopped / average / max；
+- provider / callback / accepted-point diagnostics；
+- `LONG_GAP` 断点与不补造距离原则；
+- Fused + non-GMS/provider fallback；
+- truthful route / speed / altitude presentation；
+- interruption / resume / repair notification。
 
-- [x] callback registration 改为 time-based liveness，不再依赖 8m system displacement gate（PR #80）
-- [x] stationary TripPoint 继续由 app-level 15s throttling 控制
-- [x] 2026-08-29 新锁屏证据后，delayed callback freshness 从 15s 放宽到 10min（PR #184）
-- [x] delayed fix 仍使用原始 `location.time`，倒序 historical point 继续拒绝
-- [x] `LONG_GAP_SECONDS = 120` 未因 callback grace 放宽；真实 capture-time long gap 两端仍不累计可信距离/时长/速度
-- [x] PR #184 Android CI run `33229162800` Green，merged as `bae3a21`
-- [x] long gap 在 route preview 中保持断开，不画假实线
-- [x] GPS health 区分 WAITING / GOOD / DEGRADED / LOST / LONG_GAP
-- [x] coarse/network provider 不直接制造 Trip max-speed peak
-- [x] extreme GPS peak 缺失 `speedAccuracy` 时不进入可信 max speed
-- [x] raw TripPoint 保留，不通过派生统计“清洗掉”原始证据
-- [x] 轨迹按可信本车速度着色，并保留 gap / unknown speed 语义
-- [x] 起点 / 终点不只依赖颜色区分
+当前关闭条件不是再做一套 tracking architecture，而是完成 current-main 真机可靠性：锁屏、另一 App 前台、静止、provider loss/recovery、delayed callback、距离可信度。
 
-### Trip analytics / data quality
-
-- [x] 起终点 / 最低 / 最高海拔
-- [x] 累计爬升 / 下降，过滤明显弱 vertical accuracy 和小幅 GPS 垂直抖动
-- [x] 累计海拔变化不跨 LONG_GAP 拼接
-- [x] Trip validity：明确空/异常完成行程从 Dashboard 与汇总统计排除
-- [x] 极短真实行程只标 `REVIEW`，不自动删除、不自动排除
-- [x] 用户仍通过显式确认删除无效/测试 Trip
-
-### Physical reliability remaining
-
-2026-08-29 新锁屏真机证据在 PR #80 后仍出现 2 个长缺口，因此完成了聚焦修复 PR #184。#77 现在保留为 **post-#184 真机复验 owner**，不是新的 broad tracking architecture 项目：
-
-- [ ] 锁屏/另一 App 前台 5–10 分钟时，连续 capture 的 delayed fixes 不再因 >15s delivery age 被整体丢弃
-- [ ] 原始 capture timestamps 连续时可信距离继续增加
-- [ ] 真实 >=120s capture-time gap 仍产生断点且不补造距离
-- [ ] 2–3 分钟停车/红灯能累计 stopped time，不产生 false LONG_GAP
-- [ ] 真正 callback/provider loss 仍产生 LOST / LONG_GAP
-- [ ] stationary heartbeat 不产生过量 TripPoint
-- [ ] out-of-order delayed historical point 仍被 non-monotonic guard 拒绝
-
-相关：#77、#67、#42、#26。
+主要 owner：#77 / #26 / #14 / #215。
 
 ---
 
-## v0.3 - Local Analytics & Data Reliability
+## v0.3 — Local Analytics & Data Reliability
 
 状态: **Feature Complete / Incremental Follow-up Only**
 
-已实现：
+目标：在不伪造 BMS/车辆遥测的前提下，把本地 Charge / Trip 事实转成可解释分析。
 
-- charging interval odometer distance
-- cost / 100km estimate
-- charged kWh / 100km estimate
-- Trip + odometer coverage evidence
-- SOC confidence hints
-- six-month cost / energy trend
-- month-over-month comparison
-- charger type mix
-- ChargingPlace aggregation + common-place reuse
-- selected-vehicle charging CSV analysis export
-- non-blocking charging anomaly hints
-- Local JSON Backup / Restore
-- Trip validity-aware analytics
-- Trip SOC energy estimate 与桩端充电事实分层展示
+稳定方向：
 
-Issue #19 已完成关闭。HOME / WORK 结构化地点、Privacy Zone、DataSource metadata 等只在真实需求出现时增量实现，不为了“数据治理完整度”新增重表或框架。
+- 月度充电费用 / 电量趋势；
+- month-over-month；
+- charger type mix；
+- common place / interval evidence；
+- cost / 100km 与 energy / 100km 估算；
+- Trip validity-aware analytics；
+- anomaly / confidence hints；
+- CSV / JSON 本地导出与恢复。
+
+只在真实需求或数据质量证据出现时增量扩展，不为“看起来完整”增加重型分析框架。
 
 ---
 
-## v0.4 - Cloud & Catalog Sync
+## v0.4 — Local First Sync & Catalog Platform
 
-状态: **Phase A Complete / Expansion Deferred Until v0.5 Physical Closeout**
+状态: **Identity / Catalog Runtime Baseline Implemented; Sync Expansion Deferred**
 
-### 已完成 Phase A
+### Sync
 
-- [x] Vehicle stable `syncId`
-- [x] Vehicle `updatedAtEpochMillis`
-- [x] ChargingRecord stable `syncId`
-- [x] ChargingRecord `updatedAtEpochMillis`
-- [x] ChargingRecord tombstone
-- [x] Room migration + old-row identity generation
-- [x] Backup / Restore 保留 sync metadata
-- [x] active UI / analytics 排除 tombstone
-- [x] pure JVM sync identity tests
+已建立 Vehicle / ChargingRecord 稳定 sync identity、updatedAt / tombstone / backup compatibility 等基础。
 
-Issue #28 已完成关闭；后续由父 Issue #27 跟踪。
+后续 #27 的第一批目标保持最小：
 
-### 下一阶段 #27
+- protocol/schema version；
+- Vehicle / ChargingRecord envelope；
+- push/pull cursor；
+- idempotent upsert；
+- explicit tombstone propagation；
+- 简单冲突策略；
+- smallest HTTPS + Spring Boot monolith + PostgreSQL slice。
 
-- [ ] protocol/schema version runtime implementation
-- [ ] Vehicle / ChargingRecord sync envelope DTO
-- [ ] push changed entities
-- [ ] pull changes since cursor/revision
-- [ ] idempotent upsert by `syncId`
-- [ ] explicit delete/tombstone propagation
-- [ ] last successful sync cursor/status
-- [ ] conflict policy pure Kotlin tests
-- [ ] smallest HTTPS + Spring Boot monolith + PostgreSQL slice
+明确不做：CRDT、微服务、MQ、让云端成为 App 运行前提、第一批同步 TripPoint。
 
-约束不变：云端不能成为 App 运行前提或唯一恢复路径；第一批不做 TripSession / TripPoint cloud sync，不做 CRDT / 微服务 / MQ。
+### Catalog
 
-### Catalog #20
+Managed catalog runtime、Offline First refresh、后台维护、JSON/CSV import/export、Brand Logo/Hero metadata 已建立。
 
-现有本地 versioned JSON seed、离线搜索、自定义车辆 fallback 继续使用。完整车型管道仍是独立长期任务：
+剩余 #20 聚焦：
 
-- [ ] 可追溯公开数据来源
-- [ ] 品牌 / 车系 / 年款 / 配置归一化
-- [ ] 可重复导入 / 校验工具
-- [ ] 增量更新、弃用和纠错
-- [ ] catalog 更新不自动改写用户 Vehicle snapshot
+- 可审计 source provenance；
+- brand/series/year/trim normalization；
+- duplicate/conflict/correction policy；
+- broader real-model coverage；
+- coverage quality metrics。
 
 ---
 
-## v0.5 - Local Experience & VehicleState Closure
+## v0.5 / v0.6 — Local Experience & Physical Closeout
 
 状态: **Code Baseline Implemented / Physical Closeout**
 
-### UI baseline
+目标：把 Dashboard / Records / Stats / Trip / Vehicle 收敛到成熟的 Dark First、信息密集、truthful UI，并完成真实设备验收。
 
-- [x] Dark First design language / persisted Light mode
-- [x] Dashboard / Records / Stats / Trip / Vehicle 核心页面重构（#71）
-- [x] Dashboard dynamic Vehicle Hero（#96）
-- [x] Dashboard recent Trip card（#100）
-- [x] release updater UI 对齐 Dashboard dark/green language（#126）
-- [x] Trip v0.6 information-dense baseline and device-fidelity corrections（#145 / #168）
-- [x] Trip home/history 与 READY preparation 分离（PR #176）
-- [x] READY / active / completion density and interaction corrections（PR #170 / #172 / #174）
-- [x] completed Trip detail 分为 `概览` / `轨迹` / `数据`（#178 / PR #179，Android CI run `33198331727` Green）
-- [x] completed route endpoint red-flag visual language further unified by PR #184
-- [x] completion narrow-width/fontScale/IME hardening merged by #187 / PR #189（Android CI run `33236915039` Green）
-- [x] Trip-home latest-summary narrow-width/fontScale hardening + completion helper copy alignment merged by #194 / PR #195 as `8a895bc`（Android Build run `33240198841` Green）
-- [x] Trip v0.6 authority docs synchronized through PR #191; post-#195 authority synchronization is part of the current documentation closeout
+代码方向已经从“重设计”转为“真机 closeout”：
 
-### VehicleState / SOC / mileage
+- Dashboard dynamic Vehicle Hero + recent Trip；
+- Records dense charging ledger；
+- Stats compact analytics hierarchy；
+- Trip home / READY / active / completion / completed detail 分层；
+- route / trends / diagnostics progressive disclosure；
+- narrow width / large font / IME / accessibility hardening；
+- Trip playback / route interaction / trend inspection 等增量能力。
 
-- [x] VehicleState 当前 SOC / 当前里程作为当前车辆事实层
-- [x] Trip start 保存当前 SOC / mileage 快照
-- [x] Trip completion 要求 explicit end SOC
-- [x] end mileage 可按 start mileage + GPS distance 预填并允许修正
-- [x] Trip end SOC / mileage 回写 VehicleState
-- [x] 正 SOC drop 才估算 consumed kWh / kWh per 100km
-- [x] 删除完成 Trip 后重新构建 VehicleState
-- [x] 后发生的 Charge / manual VehicleState 保持 authority
+主要剩余 owner：#70 / #42 / #94 / #95 / #145 / #168 / #77 / #14 / #26 / #102 / #124。
 
-代码基线由 #87/#89 等已合并 PR 提供；真机闭环由 #124 验收。
-
-### Location / address
-
-- [x] coordinates 是事实，address 是派生展示
-- [x] Add Charge 自动请求当前位置
-- [x] Geocoder failure 不阻塞坐标保存
-- [x] LocationProvider / AddressResolver 分离
-- [x] successful geocode process-local bounded cache
-- [x] failed / blank geocode 不缓存，允许真实 retry（#129）
-
-#14 已收窄为 Location / Geocoder / backup restore 真机验收；交互地图增强由 #192 独立跟踪，不再作为 #14 或 #145 blocker。
-
-### Lock-screen / background notification
-
-- [x] ongoing notification 显示 Trip elapsed time + trusted persisted distance（#130）
-- [x] notification tap / `打开行程` 直接进入 active Trip（#130）
-- [x] provider / Location permission runtime loss -> Trip `INTERRUPTED` + one-shot repair notification（#131）
-- [x] repair action deep-link 到 App 权限设置或系统 Location 设置（#131）
-- [x] 修复后由用户明确 resume，不自动后台恢复（#131）
-- [x] Android 13+ Trip 通知权限在 tracking 已开始/恢复后再请求（#132）
-- [x] 通知权限拒绝不阻塞、不回滚 Trip（#132）
-
-#26 保持 Open，只做上述行为的真机验收；trusted speed / battery optimization guidance 为 evidence-driven optional，不是代码 blocker。
-
-### Production updater
-
-- [x] updater infrastructure / latest.json / SHA-256 / installer handoff
-- [x] root composition wiring（#103）
-- [x] Dashboard-style update card（#126）
-- [ ] old production APK -> newer production APK 真机覆盖升级（#102）
-
-### v0.5 physical closeout
-
-仍需真实设备验收，不由 CI 代替：
-
-- #145 Trip v0.6 parent physical matrix
-- #168 Trip device-fidelity correction acceptance
-- #146 Trip home/history + latest-summary narrow-width acceptance
-- #173/#187 completion normal width / 320–360dp / fontScale / IME acceptance
-- #178 completed-detail tabs / 320–360dp / fontScale 1.3 / Dark-Light comparison
-- #70 五个一级页面 + Light mode
-- #94 Dashboard Hero
-- #95 recent Trip card
-- #42 accessibility / large font / small screen / active-Trip state safety
-- #22 top spacing / density
-- #14 Location / Geocoder / backup restore
-- #77 post-#184 lock-screen / delayed callback / stationary hold
-- #124 Trip SOC -> VehicleState
-- #26 lock-screen / repair notifications
-- #102 release APK updater
-
-#192 interactive map context and #193 truthful trajectory playback are post-v0.6 enhancements. They do not block this physical closeout.
+原则：没有具体真机 regression，就不重新开启 broad redesign。
 
 ---
 
-## P3 - Optional Vehicle Data Source / OBD-II
+## v0.7 — Charging Maturity + Current Product Closure
 
-状态: **Future Exploration / Not Product Blocker**
+状态: **Active Delivery**
 
-首个最小 PoC：
+当前主线产品工作是 Charging v0.7，而不是重做既有 Vehicle/Trip 基础。
 
-- [ ] 定义轻量 `VehicleSpeedSource` 边界
-- [ ] 外接 OBD-II Bluetooth / BLE / Wi-Fi adapter
-- [ ] 查询标准 Vehicle Speed 支持能力
-- [ ] 读取 OBD Vehicle Speed
-- [ ] 与 GNSS `Location.speed` 对照
+### Charging workflow
 
-明确不进入当前主线：
+Parent: #251
 
-- 厂商私有 CAN ID 逆向
-- 私有 BMS PID 逆向
-- 单车型复杂协议维护
-- OBD 成为 Trip 必需依赖
+产品模型：
 
-只有 Vehicle Speed PoC 证明稳定价值后，才评估 SOC / 电压 / 电流 / 电池温度等更多车辆事实。
+- `开始充电` — 可选 lifecycle / preset bookkeeping；
+- `充电记录维护` — 独立、完整的历史记录新增/补录/编辑入口。
+
+手工维护不能被“开始充电”取代。
+
+### Billing / derived metrics
+
+Owners: #252 / #260
+
+核心规则：
+
+`总费用 > 单价 > 桩端/电表电量`
+
+要求：
+
+- centralized calculation/editor state；
+- raw typing 稳定；
+- 不出现 bidirectional recomposition loop；
+- duration / average power / loss 只在输入充分时派生；
+- 估算值不冒充 BMS/桩端遥测。
+
+当前 PR stack 与实时 merge gate 不写死在本文件，见 `CURRENT_STATUS_AUTHORITY.md`。
+
+### Optional active charging lifecycle
+
+Owner: #253
+
+目标：
+
+- Local First active session；
+- process-death recovery；
+- truthful `充电中` 状态；
+- completion 只生成/更新一条 completed record；
+- preset 只保存可复用环境输入，不保存未来结果。
+
+### Charging location
+
+Owner: #254
+
+先复用真实 coordinate + reverse geocode + manual address 基础；map-point picker 只在产品价值明确时增加。
+
+---
+
+## Vehicle maturity / managed assets — Parallel Closeout
+
+Owners: #244 / #20
+
+并行完成：
+
+- managed read-only standard vehicle facts；
+- user nickname；
+- Brand Logo / Hero asset runtime；
+- Offline First / last-known-good；
+- catalog retire compatibility；
+- provenance / normalization / coverage quality。
+
+这不是新的产品主线架构项目，而是成熟度与数据质量收口。
+
+---
+
+## Repository governance — Parallel P0
+
+Owners: #6 / #75 / #265
+
+项目高频迭代要求仓库治理同步成熟：
+
+- README / authority hierarchy / Issue/PR templates；
+- stacked PR 明确依赖与 retarget 规则；
+- `main` protection + current-head required CI；
+- merged/closed stale remote branch cleanup；
+- merge-time branch deletion；
+- workflow ownership documentation。
+
+仓库治理不应阻塞业务探索，但必须防止旧 Issue/branch/PR/CI 证据重新成为伪权威。
+
+---
+
+## Post-v0.7 / Optional Enhancements
+
+### Map context
+
+Owners: #192 / #199
+
+只有 provider/style 在中国大陆真实 Trip 上证明道路/中文标签/可用性/许可价值后，才引入 basemap。现有 truthful no-basemap route 继续作为 fallback。
+
+### Destination planning
+
+Owner: #152
+
+未来 capability；当前 Trip 不伪造 destination / ETA / navigation state。
+
+### Higher-fidelity vehicle telemetry
+
+Owner: #138 / future OBD research
+
+优先级：公开/用户授权 API > 用户自有 OBD/telemetry > 用户提供事实 > 当前透明估算。
+
+不逆向其他 App 私有数据，不让 OBD/云端成为核心 Trip 必需依赖。
+
+### Cross-device sync
+
+Owner: #27
+
+在当前 Local Experience / Charging closure 之后恢复最小 Vehicle + ChargingRecord cloud sync。
 
 ---
 
 ## 当前执行顺序
 
+产品主线：
+
 ```text
-v0.5 physical acceptance bundle
-  -> #145 / #168 / #146 / #173 / #187 / #178 Trip v0.6 design-device comparison
-  -> #77 post-#184 lock-screen / delayed callback / stationary reliability revalidation
-  -> #124 Trip SOC -> VehicleState
-  -> #26 lock-screen + repair notification
-  -> #14 Location / Geocoder / backup restore
-  -> #70 / #94 / #95 / #42 / #22 remaining UI-device checks
-  -> #102 old-production -> new-production updater flow
-  -> only fix concrete device regressions
-  -> resume #27 minimal Local First sync protocol/runtime
-  -> advance #20 catalog pipeline when source/coverage work is justified
-  -> evaluate #192 / #193 only after current Trip closeout and only when map/playback product value is justified
-  -> P3 OBD-II optional PoC only when product value justifies it
+Charging v0.7 calculation/editor stack
+  -> manual Add/Edit maturity
+  -> optional active charging lifecycle
+  -> charging location/detail workflow
+  -> migration/backup/physical acceptance
 ```
 
-当前已有真实 WGS84 no-basemap route preview。#192 可探索交互地图/道路上下文，#193 可探索真实轨迹回放，但两者都保持 post-v0.6、非 blocker；不为了“看起来完整”提前绑定地图 SDK 或回放架构。
+并行 closeout：
+
+```text
+Trip / Vehicle / Dashboard / Records / Stats physical acceptance
+  + background/location/notification reliability
+  + production updater acceptance
+  + catalog provenance/coverage quality
+```
+
+并行仓库治理：
+
+```text
+main protection / required current-head CI
+  + stale branch cleanup
+  + documentation / Issue / PR authority maintenance
+```
+
+之后再恢复：
+
+```text
+minimal Local First cloud sync
+  -> optional map context / destination / telemetry research
+```
 
 ---
 
-## 变更记录
+## 阶段状态定义
 
-### v2.8.2
+文档必须使用下列不同状态，不可混用：
 
-- recorded #187 / PR #189 completion narrow-width/fontScale/IME hardening and Android CI `33236915039` Green
-- recorded #194 / PR #195 Trip-home latest-summary responsive layout and completion helper-copy alignment; Android Build `33240198841` Green; merged as `8a895bc`
-- moved #14 to Location / Geocoder / backup-restore physical acceptance only; map rendering ownership moved to #192
-- classified #192 interactive map context and #193 trajectory playback as post-v0.6, non-blocking enhancements
-- updated Trip physical closeout owners to include #146 and #173/#187 explicitly
-- synchronized direct Trip UI authority to the post-#195 code baseline
+- **Implemented** — 代码已进入 `main`；
+- **CI Green** — 自动化检查通过；
+- **Physical Functional Accepted** — 真机功能链路通过；
+- **Physical Visual Accepted** — 真机视觉/交互通过；
+- **Production Accepted** — 正式发布/升级链路通过。
 
-### v2.8.1
+任何一个状态都不能自动推导另一个状态。
 
-- recorded 2026-08-29 post-PR #80 physical evidence: a lock-screen Trip still showed 2 long gaps
-- recorded focused PR #184: delayed callback freshness 15s -> 10min while preserving original capture timestamps, non-monotonic rejection and the unchanged 120s LONG_GAP trust boundary
-- recorded PR #184 Android CI run `33229162800` Green and merge `bae3a21`
-- changed #77 from generic background physical acceptance to explicit post-#184 lock-screen/delayed-callback revalidation
-- recorded the small completed endpoint red-flag visual convergence from PR #184
+---
 
-### v2.8.0
+## 路线维护规则
 
-- synchronized Roadmap with the approved Trip v0.6 design authority and current `main`
-- recorded Trip device-fidelity correction series #168 / PR #170/#172/#174/#176
-- recorded completed Trip detail information architecture #178 / PR #179 (`概览` / `轨迹` / `数据`) and Android CI run `33198331727` Green
-- recorded documentation synchronization through PR #180
-- added #145/#168/#178 to the explicit physical acceptance bundle; CI remains insufficient to close them
-
-### v2.7.0
-
-- reconciled ROADMAP with current `main` after Trip reliability/data-quality work through #123/#127/#128/#129
-- recorded Trip SOC/mileage/energy -> VehicleState baseline from #87/#89 and physical acceptance owner #124
-- recorded v0.5 Dashboard Hero/recent-Trip implementation (#96/#100)
-- recorded updater wiring/UI implementation (#103/#126) while preserving #102 physical release acceptance
-- recorded lock-screen Trip progress and direct active-Trip navigation (#130)
-- recorded provider/permission repair notifications and explicit INTERRUPTED -> user resume semantics (#131)
-- recorded Android 13+ non-blocking Trip notification permission flow (#132)
-- moved the active stage from “implement Trip P0 slices” to “physical acceptance bundle, then resume minimal sync”
-
-### v2.6.0
-
-- PR #36 GPS health / notification / route-gap / speed semantics passed Android Build Run #184
-- clarified current peak speed comes primarily from `Location.speed`, not point-to-point straight-line division
-- recorded that average speed still inherits GPS distance-quality limitations
-- promoted long-gap distance correction and GPS/Network dedupe ahead of colored route work
-- added OBD-II as P3 optional VehicleSpeedSource PoC, explicitly excluding private CAN/BMS reverse engineering from current product scope
-
-### v2.5.0
-
-- based on real Trip #7, promoted 12-15 minute GPS gaps to P0 reliability work
-- added segmented speed / continuous color visualization as P1
-- clarified speed colors describe this vehicle's speed, not real traffic congestion
-- clarified long GPS gaps must not be rendered as trustworthy solid routes
-- deferred v0.4 execution until Trip P0 reliability becomes observable
+1. 里程碑/执行顺序变化才更新本文件。
+2. PR head、最新 CI run、branch behind/ahead、当天 Issue 状态写入 `CURRENT_STATUS_AUTHORITY.md` / owning Issue，而不是本文件。
+3. 稳定产品/架构原则写入 `PROJECT_MASTER.md` / domain authority。
+4. 历史实现证据保留在 merged PR / Git 历史，不在 Roadmap 长期堆叠 SHA 清单。
+5. Open Issue 不等于未实现；开始新开发前必须检查 current `main`。
