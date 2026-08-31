@@ -63,39 +63,39 @@ Current product/data authority:
 
 #### PR #258 — pure calculation contract
 
-Snapshot at this baseline:
+Current parent state at this snapshot:
 
 - Draft;
-- head `2d9de0c666f56bc5b0e5f56e71afce0f1763eda0`;
-- own diff remains engine + focused test only;
-- Android Build #626 Green on that head;
-- comparison to baseline `main@e5149a6` shows it is **11 commits behind current `main`**.
+- current head `b506b749a6cea7041b4825b80b83ed9455b4196e`;
+- comparison to baseline `main@e5149a6` is **ahead 10 / behind 0**;
+- effective diff remains only `ChargeCalculationEngine.kt` + focused test;
+- prior head Android Build #626 was Green;
+- synchronized-head Android Build #637 is running at the time of this snapshot.
 
-The numerical behind-count is only a snapshot and will change as `main` moves. The durable rule is: #258 is not merge-ready until it is synchronized/revalidated against current `main`, its effective diff is re-read and current-head Android CI is Green.
+Durable merge gate: the current synchronized head needs successful current-head Android CI and unchanged intended diff before Ready/Merge. Historical #626 Green does not authorize the new head.
 
 #### PR #261 — stacked Add/Edit billing adoption
 
-Snapshot:
+Current child state:
 
 - Draft;
-- base = #258 branch;
-- head `c805ba3150576b57dc2cd74631edc09e0a8b8c44`;
-- 7 commits ahead / 0 behind its current #258 parent;
-- Android Build #630 Green on the stacked head;
-- actual diff includes `ChargeBillingEditorState`, focused tests, `AddRecordScreen.kt` adoption and `RecordEditScreen.kt` adoption.
-
-The earlier description that #261 did not yet modify Add/Edit forms was stale and has been corrected.
+- child head `c805ba3150576b57dc2cd74631edc09e0a8b8c44`;
+- base branch name is still the #258 calculation branch;
+- the child was built against the older #258 parent head;
+- Android Build #630 was Green for that older stack relationship;
+- after #258 synchronized to current `main`, comparison to the **new parent branch** is now diverged/behind;
+- intended child diff remains editor state/tests plus `AddRecordScreen.kt` and `RecordEditScreen.kt` adoption.
 
 Required order:
 
-1. synchronize/revalidate #258 against current `main`;
-2. review/merge #258 first;
-3. retarget #261 to `main`;
-4. re-read #261 changed files/diff against `main`;
-5. obtain current-head Android CI after effective base/head changes;
+1. finish current-head validation/review for #258;
+2. resolve/merge #258 first;
+3. normalize #261 onto the surviving `main` base using the normal code-maintenance workflow;
+4. re-read #261 effective diff;
+5. obtain current-head Android CI for the normalized child;
 6. only then decide Ready/Merge for #261.
 
-Do not delete the #258 branch while #261 depends on it.
+Do not delete the #258 branch while #261 still depends on it.
 
 ### Vehicle maturity / catalog / resource onboarding — #244 and #20
 
@@ -109,7 +109,7 @@ Already in `main` before #264:
 - range-standard metadata;
 - catalog JSON/CSV import/export and template;
 - managed Hero semantic key selection;
-- batch Brand Logo / Hero upload helpers;
+- batch Brand Logo / Hero helpers;
 - copyable Logo/Hero standards and prompt center.
 
 Merged PR #264 further advanced the resource workflow:
@@ -128,7 +128,7 @@ Merged PR #264 further advanced the resource workflow:
 
 Current product/admin authority: `RESOURCE_BUNDLE_WORKFLOW.md`, owner #244.
 
-#244 therefore owns remaining real workflow/device maturity, not implementation of another disconnected Logo/Hero/catalog onboarding system.
+#244 owns remaining real workflow/device maturity, not implementation of another disconnected Logo/Hero/catalog onboarding system.
 
 #20 remains the data-quality owner: provenance, normalization, conflicts/corrections, broader real-model coverage and coverage metrics. The unified one-vehicle workbench does not replace bulk catalog data-quality work.
 
@@ -225,7 +225,7 @@ Completed in the 2026-08-31 audit:
 - README/LICENSE/templates/branch-stack rules merged by #263;
 - #75 rewritten to exact current branch-protection/CI target;
 - #265 created for stale-branch cleanup/merge-time deletion;
-- #258/#261/#260/#251 descriptions synchronized to actual stacked state;
+- #258/#261/#260/#251 descriptions synchronized to actual stacked behavior;
 - PR #264 resource workbench / Hero theme-variant baseline incorporated into current authority.
 
 Remaining documentation debt after this authority-sync PR:
