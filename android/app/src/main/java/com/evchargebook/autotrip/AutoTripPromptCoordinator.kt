@@ -162,7 +162,7 @@ class AutoTripNotificationController(private val context: Context) {
                 .setContentTitle("已连接 $vehicleLabel")
                 .setContentText("是否开始本次行程？")
                 .setContentIntent(openIntent)
-                .addAction(android.R.drawable.ic_media_play, "打开并确认", openIntent)
+                .addAction(android.R.drawable.ic_media_play, "立即开始", openIntent)
                 .addAction(android.R.drawable.ic_menu_close_clear_cancel, "本次忽略", ignoreIntent)
                 .setAutoCancel(true)
                 .build(),
