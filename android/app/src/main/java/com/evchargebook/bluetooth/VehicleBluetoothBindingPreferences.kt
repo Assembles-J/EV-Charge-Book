@@ -27,15 +27,16 @@ class VehicleBluetoothBindingPreferences(private val context: Context) {
 
     suspend fun save(binding: VehicleBluetoothBinding) {
         context.vehicleBluetoothBindingDataStore.edit { prefs ->
+            val normalizedAddress = normalizeAddress(binding.deviceAddress)
             val current = decode(prefs[bindingsJsonKey]).toMutableList()
-            val duplicateDevice = current.firstOrNull {
-                it.vehicleId != binding.vehicleId &&
-                    it.deviceAddress.equals(binding.deviceAddress, ignoreCase = true)
-            }
-            require(duplicateDevice == null) { "该蓝牙设备已绑定到另一辆车" }
 
-            current.removeAll { it.vehicleId == binding.vehicleId }
-            current += binding.copy(deviceAddress = normalizeAddress(binding.deviceAddress))
+            // Selecting a device while editing the current vehicle is an explicit rebind action.
+            // Keep one owner per physical Bluetooth address so connection events stay unambiguous.
+            current.removeAll {
+                it.vehicleId == binding.vehicleId ||
+                    it.deviceAddress.equals(normalizedAddress, ignoreCase = true)
+            }
+            current += binding.copy(deviceAddress = normalizedAddress)
             prefs[bindingsJsonKey] = encode(current)
         }
     }
