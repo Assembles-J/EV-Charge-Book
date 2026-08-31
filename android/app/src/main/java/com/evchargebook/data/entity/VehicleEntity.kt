@@ -18,6 +18,8 @@ data class VehicleEntity(
     val model: String,
     val batteryCapacityKwh: Double,
     val rangeKm: Int,
+    @ColumnInfo(defaultValue = "NULL")
+    val nickname: String? = null,
     val isDefault: Boolean = false,
     val isArchived: Boolean = false,
     val createdAtEpochMillis: Long = System.currentTimeMillis(),
@@ -25,4 +27,7 @@ data class VehicleEntity(
     val syncId: String = UUID.randomUUID().toString(),
     @ColumnInfo(defaultValue = "0")
     val updatedAtEpochMillis: Long = System.currentTimeMillis()
-)
+) {
+    val displayName: String
+        get() = nickname?.trim()?.takeIf { it.isNotEmpty() } ?: model
+}
