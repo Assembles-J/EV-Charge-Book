@@ -1,6 +1,8 @@
 package com.evchargebook.data.backup
 
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.ChargingSessionEntity
+import com.evchargebook.data.entity.ChargingSessionStatus
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
@@ -15,12 +17,13 @@ data class BackupPayload(
     val appVersion: String,
     val vehicles: List<VehicleEntity>,
     val chargingRecords: List<ChargingRecordEntity>,
+    val chargingSessions: List<ChargingSessionEntity> = emptyList(),
     val tripSessions: List<TripSessionEntity> = emptyList(),
     val tripPoints: List<TripPointEntity> = emptyList()
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 8
+    const val CURRENT_SCHEMA_VERSION = 9
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -50,7 +53,9 @@ object BackupCodec {
                     put("id", record.id)
                     put("vehicleId", record.vehicleId)
                     put("chargeTimeEpochMillis", record.chargeTimeEpochMillis)
+                    putNullable("endedAtEpochMillis", record.endedAtEpochMillis)
                     put("energyKwh", record.energyKwh)
+                    putNullable("vehicleEnergyKwh", record.vehicleEnergyKwh)
                     put("cost", record.cost)
                     put("startSoc", record.startSoc)
                     put("endSoc", record.endSoc)
@@ -64,6 +69,28 @@ object BackupCodec {
                     put("syncId", record.syncId)
                     put("updatedAtEpochMillis", record.updatedAtEpochMillis)
                     put("isDeleted", record.isDeleted)
+                })
+            }
+        })
+        put("chargingSessions", JSONArray().apply {
+            payload.chargingSessions.forEach { session ->
+                put(JSONObject().apply {
+                    put("id", session.id)
+                    put("vehicleId", session.vehicleId)
+                    put("startedAtEpochMillis", session.startedAtEpochMillis)
+                    putNullable("startSoc", session.startSoc)
+                    putNullable("targetSoc", session.targetSoc)
+                    putNullable("chargerType", session.chargerType)
+                    putNullable("unitPricePerKwh", session.unitPricePerKwh)
+                    putNullable("location", session.location)
+                    putNullable("remark", session.remark)
+                    putNullable("latitude", session.latitude)
+                    putNullable("longitude", session.longitude)
+                    putNullable("locationAccuracyMeters", session.locationAccuracyMeters)
+                    put("status", session.status)
+                    putNullable("endedAtEpochMillis", session.endedAtEpochMillis)
+                    putNullable("completedRecordId", session.completedRecordId)
+                    put("updatedAtEpochMillis", session.updatedAtEpochMillis)
                 })
             }
         })
@@ -162,7 +189,9 @@ object BackupCodec {
                         id = item.getLong("id"),
                         vehicleId = item.getLong("vehicleId"),
                         chargeTimeEpochMillis = chargeTime,
+                        endedAtEpochMillis = item.optNullableLong("endedAtEpochMillis"),
                         energyKwh = item.getDouble("energyKwh"),
+                        vehicleEnergyKwh = item.optNullableDouble("vehicleEnergyKwh"),
                         cost = item.getDouble("cost"),
                         startSoc = item.getInt("startSoc"),
                         endSoc = item.getInt("endSoc"),
@@ -176,6 +205,34 @@ object BackupCodec {
                         syncId = item.optString("syncId").takeIf { it.isNotBlank() } ?: UUID.randomUUID().toString(),
                         updatedAtEpochMillis = item.optLong("updatedAtEpochMillis", chargeTime),
                         isDeleted = item.optBoolean("isDeleted", false)
+                    )
+                )
+            }
+        }
+
+        val chargingSessionsJson = root.optJSONArray("chargingSessions") ?: JSONArray()
+        val chargingSessions = buildList {
+            for (index in 0 until chargingSessionsJson.length()) {
+                val item = chargingSessionsJson.getJSONObject(index)
+                val startedAt = item.getLong("startedAtEpochMillis")
+                add(
+                    ChargingSessionEntity(
+                        id = item.getString("id"),
+                        vehicleId = item.getLong("vehicleId"),
+                        startedAtEpochMillis = startedAt,
+                        startSoc = item.optNullableInt("startSoc"),
+                        targetSoc = item.optNullableInt("targetSoc"),
+                        chargerType = item.optNullableString("chargerType"),
+                        unitPricePerKwh = item.optNullableDouble("unitPricePerKwh"),
+                        location = item.optNullableString("location"),
+                        remark = item.optNullableString("remark"),
+                        latitude = item.optNullableDouble("latitude"),
+                        longitude = item.optNullableDouble("longitude"),
+                        locationAccuracyMeters = item.optNullableDouble("locationAccuracyMeters"),
+                        status = item.optString("status", ChargingSessionStatus.ACTIVE),
+                        endedAtEpochMillis = item.optNullableLong("endedAtEpochMillis"),
+                        completedRecordId = item.optNullableLong("completedRecordId"),
+                        updatedAtEpochMillis = item.optLong("updatedAtEpochMillis", startedAt),
                     )
                 )
             }
@@ -244,6 +301,7 @@ object BackupCodec {
         }
 
         val vehicleIds = vehicles.map { it.id }.toSet()
+        val recordIds = records.map { it.id }.toSet()
         val tripIds = sessions.map { it.id }.toSet()
         require(vehicles.isNotEmpty()) { "备份中没有车辆数据" }
         require(vehicles.all { it.syncId.isNotBlank() }) { "备份中存在缺失同步身份的车辆" }
@@ -252,6 +310,31 @@ object BackupCodec {
         require(records.all { it.syncId.isNotBlank() }) { "备份中存在缺失同步身份的充电记录" }
         require(records.map { it.syncId }.distinct().size == records.size) { "备份中存在重复充电记录同步身份" }
         require(records.all { (it.latitude == null) == (it.longitude == null) }) { "备份中存在不完整的定位坐标" }
+        require(records.all { it.endedAtEpochMillis == null || it.endedAtEpochMillis > it.chargeTimeEpochMillis }) { "备份中存在无效充电结束时间" }
+        require(records.all { it.vehicleEnergyKwh == null || it.vehicleEnergyKwh >= 0.0 }) { "备份中存在无效车辆侧充电量" }
+
+        require(chargingSessions.map { it.id }.all { it.isNotBlank() }) { "备份中存在缺失身份的充电会话" }
+        require(chargingSessions.map { it.id }.distinct().size == chargingSessions.size) { "备份中存在重复充电会话" }
+        require(chargingSessions.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的充电会话" }
+        require(chargingSessions.all { it.status in ChargingSessionStatus.all }) { "备份中存在未知充电会话状态" }
+        require(chargingSessions.all { it.startSoc == null || it.startSoc in 0..100 }) { "备份中存在无效充电开始 SOC" }
+        require(chargingSessions.all { it.targetSoc == null || it.targetSoc in 0..100 }) { "备份中存在无效充电目标 SOC" }
+        require(chargingSessions.all { it.unitPricePerKwh == null || it.unitPricePerKwh >= 0.0 }) { "备份中存在无效充电单价" }
+        require(chargingSessions.all { (it.latitude == null) == (it.longitude == null) }) { "备份中存在不完整的充电会话坐标" }
+        require(chargingSessions.all { it.endedAtEpochMillis == null || it.endedAtEpochMillis >= it.startedAtEpochMillis }) { "备份中存在无效充电会话结束时间" }
+        require(chargingSessions.all { it.completedRecordId == null || it.completedRecordId in recordIds }) { "备份中存在无法关联记录的已完成充电会话" }
+        require(chargingSessions.all {
+            when (it.status) {
+                ChargingSessionStatus.ACTIVE -> it.endedAtEpochMillis == null && it.completedRecordId == null
+                ChargingSessionStatus.COMPLETED -> it.endedAtEpochMillis != null && it.completedRecordId != null
+                ChargingSessionStatus.CANCELLED -> it.endedAtEpochMillis != null && it.completedRecordId == null
+                else -> false
+            }
+        }) { "备份中存在状态与完成信息不一致的充电会话" }
+        require(chargingSessions.filter { it.status == ChargingSessionStatus.ACTIVE }
+            .groupBy { it.vehicleId }
+            .all { (_, items) -> items.size == 1 }) { "备份中同一车辆存在多个进行中的充电会话" }
+
         require(sessions.all { it.vehicleId in vehicleIds }) { "备份中存在无法关联车辆的行程" }
         require(sessions.all { it.status in setOf(TripStatus.RECORDING, TripStatus.INTERRUPTED, TripStatus.COMPLETED) }) { "备份中存在未知行程状态" }
         require(sessions.all { (it.startLatitude == null) == (it.startLongitude == null) && (it.endLatitude == null) == (it.endLongitude == null) }) { "备份中存在不完整的行程坐标" }
@@ -267,6 +350,7 @@ object BackupCodec {
             appVersion = root.optString("appVersion", "unknown"),
             vehicles = vehicles,
             chargingRecords = records,
+            chargingSessions = chargingSessions,
             tripSessions = sessions,
             tripPoints = points
         )

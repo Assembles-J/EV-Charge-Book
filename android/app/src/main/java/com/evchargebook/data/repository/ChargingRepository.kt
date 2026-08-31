@@ -13,6 +13,7 @@ import com.evchargebook.data.backup.BackupCodec
 import com.evchargebook.data.backup.BackupPayload
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
@@ -54,10 +55,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     private val vehicleDao = database.vehicleDao()
     private val vehicleCatalogDao = database.vehicleCatalogDao()
     private val chargingRecordDao = database.chargingRecordDao()
+    private val chargingSessionDao = database.chargingSessionDao()
     private val tripDao = database.tripDao()
     private val vehicleStateDao = database.vehicleStateDao()
     private val bluetoothPreferences = BluetoothPromptPreferences(context)
     private val tripStartCoordinator = TripStartCoordinator(database, context)
+    private val chargingSessionRepository = ChargingSessionRepository(database)
 
     val vehicles: Flow<List<VehicleEntity>> = vehicleDao.observeActive()
     val catalogVehicles: Flow<List<VehicleCatalogEntity>> = vehicleCatalogDao.observeAll()
@@ -71,6 +74,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     }
     val chargingRecords: Flow<List<ChargingRecordEntity>> = vehicle.flatMapLatest { selected ->
         selected?.let { chargingRecordDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
+    }
+    val activeChargingSession: Flow<ChargingSessionEntity?> = vehicle.flatMapLatest { selected ->
+        selected?.let { chargingSessionDao.observeActiveForVehicle(it.id) } ?: flowOf(null)
     }
     val trips: Flow<List<TripSessionEntity>> = vehicle.flatMapLatest { selected ->
         selected?.let { tripDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
@@ -102,6 +108,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             appVersion = appVersion,
             vehicles = vehicleDao.getAll(),
             chargingRecords = chargingRecordDao.getAll(),
+            chargingSessions = chargingSessionDao.getAll(),
             tripSessions = tripDao.getAllSessions(),
             tripPoints = tripDao.getAllPoints()
         )
@@ -109,6 +116,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val verified = BackupCodec.decode(encoded)
         require(verified.vehicles.size == payload.vehicles.size) { "车辆备份数量校验失败" }
         require(verified.chargingRecords.size == payload.chargingRecords.size) { "充电记录备份数量校验失败" }
+        require(verified.chargingSessions.size == payload.chargingSessions.size) { "充电会话备份数量校验失败" }
         require(verified.tripSessions.size == payload.tripSessions.size) { "行程备份数量校验失败" }
         require(verified.tripPoints.size == payload.tripPoints.size) { "轨迹点备份数量校验失败" }
         return encoded
@@ -118,21 +126,39 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val payload = BackupCodec.decode(content)
         database.withTransaction {
             require(tripDao.getActive() == null) { "请先结束当前行程，再恢复备份" }
+            require(chargingSessionDao.getAnyActive() == null) { "请先结束或取消当前充电，再恢复备份" }
+            chargingSessionDao.deleteAll()
             tripDao.deleteAllSessions()
             chargingRecordDao.deleteAll()
             vehicleStateDao.deleteAll()
             vehicleDao.deleteAll()
             vehicleDao.insertAll(payload.vehicles)
             chargingRecordDao.insertAll(payload.chargingRecords)
+            chargingSessionDao.insertAll(payload.chargingSessions)
             tripDao.insertSessions(payload.tripSessions)
             tripDao.insertPoints(payload.tripPoints)
             payload.vehicles.forEach { rebuildVehicleStateFromEvents(it.id) }
             require(vehicleDao.getAll().size == payload.vehicles.size) { "车辆恢复数量校验失败" }
             require(chargingRecordDao.getAll().size == payload.chargingRecords.size) { "充电记录恢复数量校验失败" }
+            require(chargingSessionDao.getAll().size == payload.chargingSessions.size) { "充电会话恢复数量校验失败" }
             require(tripDao.getAllSessions().size == payload.tripSessions.size) { "行程恢复数量校验失败" }
             require(tripDao.getAllPoints().size == payload.tripPoints.size) { "轨迹点恢复数量校验失败" }
         }
     }
+
+    suspend fun startChargingSession(request: StartChargingSessionRequest): String =
+        chargingSessionRepository.start(request)
+
+    suspend fun updateActiveChargingSession(session: ChargingSessionEntity) =
+        chargingSessionRepository.updateActive(session)
+
+    suspend fun cancelChargingSession(
+        sessionId: String,
+        endedAtEpochMillis: Long = System.currentTimeMillis()
+    ) = chargingSessionRepository.cancel(sessionId, endedAtEpochMillis)
+
+    suspend fun completeChargingSession(request: CompleteChargingSessionRequest): Long =
+        chargingSessionRepository.complete(request)
 
     suspend fun startTrip(
         vehicleId: Long,
@@ -246,18 +272,28 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         odometerKm: Double? = null,
         latitude: Double? = null,
         longitude: Double? = null,
-        locationAccuracyMeters: Double? = null
+        locationAccuracyMeters: Double? = null,
+        endedAtEpochMillis: Long? = null,
+        vehicleEnergyKwh: Double? = null,
     ) {
         ChargingRecordRules.validate(startSoc, endSoc, energyKwh, cost, odometerKm)
+        validateChargingCompletionFacts(
+            chargeTimeEpochMillis = chargeTimeEpochMillis,
+            endedAtEpochMillis = endedAtEpochMillis,
+            meterEnergyKwh = energyKwh,
+            vehicleEnergyKwh = vehicleEnergyKwh,
+        )
         require((latitude == null) == (longitude == null)) { "定位坐标不完整" }
         database.withTransaction {
             chargingRecordDao.insert(
                 ChargingRecordEntity(
                     vehicleId = vehicleId,
                     chargeTimeEpochMillis = chargeTimeEpochMillis,
+                    endedAtEpochMillis = endedAtEpochMillis,
                     startSoc = startSoc,
                     endSoc = endSoc,
                     energyKwh = energyKwh,
+                    vehicleEnergyKwh = vehicleEnergyKwh,
                     cost = cost,
                     location = location?.trim()?.takeIf { it.isNotEmpty() },
                     chargerType = chargerType,
@@ -281,6 +317,12 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun updateChargingRecord(record: ChargingRecordEntity) {
         ChargingRecordRules.validate(record.startSoc, record.endSoc, record.energyKwh, record.cost, record.odometerKm)
+        validateChargingCompletionFacts(
+            chargeTimeEpochMillis = record.chargeTimeEpochMillis,
+            endedAtEpochMillis = record.endedAtEpochMillis,
+            meterEnergyKwh = record.energyKwh,
+            vehicleEnergyKwh = record.vehicleEnergyKwh,
+        )
         require((record.latitude == null) == (record.longitude == null)) { "定位坐标不完整" }
         database.withTransaction {
             chargingRecordDao.update(
@@ -318,6 +360,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         database.withTransaction {
             val activeTrip = tripDao.getActive()
             require(activeTrip?.vehicleId != vehicleId) { "请先结束这辆车的当前行程" }
+            require(chargingSessionDao.getActiveForVehicle(vehicleId) == null) { "请先结束或取消这辆车的当前充电" }
             val activeVehicles = vehicleDao.observeActive().first()
             require(activeVehicles.size > 1) { "请至少保留一辆车辆" }
             val vehicle = activeVehicles.firstOrNull { it.id == vehicleId } ?: error("车辆不可用")
@@ -348,7 +391,11 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val latestTripSoc = tripDao.getLatestCompletedWithSocForVehicle(vehicleId)
         val socFact = latestFact(
             latestCharge?.let {
-                VehicleStateFact(it.endSoc, it.chargeTimeEpochMillis, VehicleStateUpdateSource.CHARGE_RECORD)
+                VehicleStateFact(
+                    it.endSoc,
+                    it.endedAtEpochMillis ?: it.chargeTimeEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_RECORD,
+                )
             },
             latestTripSoc?.let {
                 VehicleStateFact(it.endSoc!!, it.endedAtEpochMillis!!, VehicleStateUpdateSource.TRIP_END)
@@ -362,7 +409,11 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val latestTripMileage = tripDao.getLatestCompletedWithMileageForVehicle(vehicleId)
         val mileageFact = latestFact(
             latestChargeMileage?.odometerKm?.let {
-                VehicleStateFact(it, latestChargeMileage.chargeTimeEpochMillis, VehicleStateUpdateSource.CHARGE_RECORD)
+                VehicleStateFact(
+                    it,
+                    latestChargeMileage.endedAtEpochMillis ?: latestChargeMileage.chargeTimeEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_RECORD,
+                )
             },
             latestTripMileage?.endMileageKm?.let {
                 VehicleStateFact(it, latestTripMileage.endedAtEpochMillis!!, VehicleStateUpdateSource.TRIP_END)
@@ -399,6 +450,21 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         require(vehicle.model.isNotBlank()) { "车型不能为空" }
         require(vehicle.batteryCapacityKwh > 0) { "电池容量必须大于 0" }
         require(vehicle.rangeKm > 0) { "续航必须大于 0" }
+    }
+
+    private fun validateChargingCompletionFacts(
+        chargeTimeEpochMillis: Long,
+        endedAtEpochMillis: Long?,
+        meterEnergyKwh: Double,
+        vehicleEnergyKwh: Double?,
+    ) {
+        require(endedAtEpochMillis == null || endedAtEpochMillis > chargeTimeEpochMillis) {
+            "结束时间必须晚于开始时间"
+        }
+        require(vehicleEnergyKwh == null || vehicleEnergyKwh >= 0.0) { "车辆侧充电量不能小于 0" }
+        require(vehicleEnergyKwh == null || vehicleEnergyKwh <= meterEnergyKwh + 1e-6) {
+            "车辆侧充电量不能高于桩端 / 电表电量"
+        }
     }
 
     private suspend fun seedVehicleCatalog() {
