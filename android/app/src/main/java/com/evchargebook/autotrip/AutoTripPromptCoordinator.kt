@@ -10,7 +10,6 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
-import com.evchargebook.MainActivity
 import com.evchargebook.bluetooth.BluetoothPromptPreferences
 import com.evchargebook.bluetooth.VehicleBluetoothBinding
 import com.evchargebook.bluetooth.VehicleBluetoothBindingPreferences
@@ -139,10 +138,10 @@ class AutoTripNotificationController(private val context: Context) {
         createChannel()
         if (!canPostNotifications()) return false
 
-        val openIntent = PendingIntent.getBroadcast(
+        val openIntent = PendingIntent.getActivity(
             context,
             requestCode(session.id, ACTION_OPEN_CONFIRMATION),
-            Intent(context, AutoTripActionReceiver::class.java)
+            Intent(context, AutoTripConfirmationActivity::class.java)
                 .setAction(ACTION_OPEN_CONFIRMATION)
                 .putExtra(EXTRA_SESSION_ID, session.id),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
@@ -205,39 +204,26 @@ class AutoTripNotificationController(private val context: Context) {
 
 class AutoTripActionReceiver : android.content.BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != AutoTripNotificationController.ACTION_IGNORE_SESSION) return
         val sessionId = intent.getStringExtra(AutoTripNotificationController.EXTRA_SESSION_ID) ?: return
         val pending = goAsync()
         kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
             try {
-                val database = AppDatabase.getInstance(context)
-                val dao = database.autoTripDetectionDao()
+                val dao = AppDatabase.getInstance(context).autoTripDetectionDao()
                 val session = dao.getById(sessionId) ?: return@launch
-                if (session.closedAtEpochMillis != null) return@launch
+                if (
+                    session.closedAtEpochMillis != null ||
+                    session.state != AutoTripDetectionState.BLUETOOTH_CANDIDATE.name
+                ) return@launch
 
-                when (intent.action) {
-                    AutoTripNotificationController.ACTION_IGNORE_SESSION -> {
-                        val now = System.currentTimeMillis()
-                        dao.markIgnored(
-                            sessionId = session.id,
-                            state = AutoTripDetectionState.IGNORED.name,
-                            ignoredAtEpochMillis = now,
-                            updatedAtEpochMillis = now,
-                        )
-                        AutoTripNotificationController(context).cancel(session.id)
-                    }
-
-                    AutoTripNotificationController.ACTION_OPEN_CONFIRMATION -> {
-                        if (session.state != AutoTripDetectionState.BLUETOOTH_CANDIDATE.name) return@launch
-                        if (database.tripDao().getActive() != null) return@launch
-                        AutoTripNotificationController(context).cancel(session.id)
-                        context.startActivity(
-                            Intent(context, MainActivity::class.java)
-                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                                .putExtra(MainActivity.EXTRA_OPEN_TRIP_CONFIRMATION, true)
-                                .putExtra(AutoTripNotificationController.EXTRA_SESSION_ID, session.id)
-                        )
-                    }
-                }
+                val now = System.currentTimeMillis()
+                dao.markIgnored(
+                    sessionId = session.id,
+                    state = AutoTripDetectionState.IGNORED.name,
+                    ignoredAtEpochMillis = now,
+                    updatedAtEpochMillis = now,
+                )
+                AutoTripNotificationController(context).cancel(session.id)
             } finally {
                 pending.finish()
             }
