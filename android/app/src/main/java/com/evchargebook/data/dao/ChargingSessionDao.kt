@@ -16,6 +16,9 @@ interface ChargingSessionDao {
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'ACTIVE' ORDER BY startedAtEpochMillis DESC LIMIT 1")
     suspend fun getActiveForVehicle(vehicleId: Long): ChargingSessionEntity?
 
+    @Query("SELECT * FROM charging_sessions WHERE status = 'ACTIVE' ORDER BY startedAtEpochMillis DESC LIMIT 1")
+    suspend fun getAnyActive(): ChargingSessionEntity?
+
     @Query("SELECT * FROM charging_sessions WHERE id = :sessionId LIMIT 1")
     suspend fun get(sessionId: String): ChargingSessionEntity?
 
