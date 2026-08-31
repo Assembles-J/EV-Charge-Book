@@ -60,11 +60,14 @@ fun AppUpdatePrompt() {
     LaunchedEffect(Unit) {
         runCatching { manager.checkForUpdate() }
             .onSuccess { info ->
-                if (info != null) {
-                    // Move out of IDLE before publishing the update payload so the dialog is
-                    // created only once. IDLE itself never renders a dialog.
+                if (info != null && processUpdatePromptSessionGate.tryClaim(info.versionCode)) {
+                    // The previous fix prevented a double render inside one composition. Keep a
+                    // process-level version claim as well so navigation/activity recreation cannot
+                    // consume the same discovery result again and show a second identical dialog.
                     phase = UpdatePhase.DISCOVERED
                     update = info
+                } else if (info != null) {
+                    Log.d(TAG, "Skip duplicate update prompt for versionCode=${info.versionCode}")
                 }
             }
             .onFailure { error ->
@@ -249,6 +252,16 @@ private fun UpdateDecisionDialog(
         }
     )
 }
+
+internal class UpdatePromptSessionGate {
+    private val claimedVersionCodes = mutableSetOf<Int>()
+
+    fun tryClaim(versionCode: Int): Boolean = synchronized(claimedVersionCodes) {
+        claimedVersionCodes.add(versionCode)
+    }
+}
+
+private val processUpdatePromptSessionGate = UpdatePromptSessionGate()
 
 private enum class UpdatePhase {
     IDLE,
