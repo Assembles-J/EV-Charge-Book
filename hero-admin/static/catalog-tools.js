@@ -27,8 +27,28 @@
     if(previous)select.value=previous;
   }
 
+  function ensureManagedHeroKeySelect(){
+    if($('managedHeroKeySelect'))return $('managedHeroKeySelect');
+    const input=$('artworkKey');if(!input||!input.parentElement)return null;
+    const select=document.createElement('select');select.id='managedHeroKeySelect';select.setAttribute('aria-label','选择已有 Hero Key');
+    input.parentElement.insertBefore(select,input);
+    select.onchange=()=>{
+      if(select.value==='__new__'){input.value='';input.focus()}else if(select.value){input.value=select.value;renderHeroCurrent()}
+    };
+    return select;
+  }
+
+  function renderManagedHeroKeySelect(){
+    const select=ensureManagedHeroKeySelect();if(!select)return;
+    const current=$('artworkKey').value.trim().toLowerCase();select.innerHTML='';
+    const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='选择已有 Hero Key';select.appendChild(placeholder);
+    for(const key of uniqueHeroKeys()){const option=document.createElement('option');option.value=key;const published=manifest&&manifest.artworks&&manifest.artworks[key];option.textContent=published?`${key} · v${published.version}`:`${key} · 未发布图片`;select.appendChild(option)}
+    const create=document.createElement('option');create.value='__new__';create.textContent='+ 新建 Hero Key';select.appendChild(create);
+    if(current&&uniqueHeroKeys().includes(current))select.value=current;
+  }
+
   const baseRenderHeroKeys=renderHeroKeys;
-  renderHeroKeys=function(){baseRenderHeroKeys();renderVehicleHeroKeyOptions()};
+  renderHeroKeys=function(){baseRenderHeroKeys();renderVehicleHeroKeyOptions();renderManagedHeroKeySelect()};
   const baseOpenVehicle=openVehicle;
   openVehicle=function(vehicle){renderVehicleHeroKeyOptions(vehicle&&vehicle.heroArtworkKey||'');baseOpenVehicle(vehicle)};
 
@@ -179,5 +199,5 @@
     }catch(error){setStatus($('catalogStatus'),`导入失败：${error.message||error}`,'error')}
   };
 
-  const initTimer=setInterval(()=>{if(catalog){clearInterval(initTimer);renderBrandLogoCenter();renderVehicleHeroKeyOptions()}},100);
+  const initTimer=setInterval(()=>{if(catalog){clearInterval(initTimer);renderBrandLogoCenter();renderVehicleHeroKeyOptions();renderManagedHeroKeySelect()}},100);
 })();
