@@ -8,9 +8,9 @@ on:
         required: true
         default: main
       release_series:
-        description: Release series, for example 0.4
+        description: Release series, for example 0.7
         required: true
-        default: '0.4'
+        default: '0.7'
 
 permissions:
   contents: read
