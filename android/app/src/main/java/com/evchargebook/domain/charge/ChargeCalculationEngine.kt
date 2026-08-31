@@ -102,14 +102,19 @@ object ChargeCalculationEngine {
 
         val cost = input.totalCost
         val energy = input.meterEnergyKwh
+        val costLocked = ChargeBillingField.TOTAL_COST in input.authoritativeBillingFields
+
         updated = when {
-            cost != null && cost >= 0.0 && value > 0.0 -> updated
+            cost != null && costLocked && cost >= 0.0 && value > 0.0 -> updated
                 .copy(meterEnergyKwh = cost / value)
                 .markCalculated(ChargeBillingField.METER_ENERGY)
-            cost != null -> updated
+            cost != null && costLocked -> updated
             energy != null && energy >= 0.0 -> updated
                 .copy(totalCost = value * energy)
                 .markCalculated(ChargeBillingField.TOTAL_COST)
+            cost != null && cost >= 0.0 && value > 0.0 -> updated
+                .copy(meterEnergyKwh = cost / value)
+                .markCalculated(ChargeBillingField.METER_ENERGY)
             else -> updated
         }
         return updated
