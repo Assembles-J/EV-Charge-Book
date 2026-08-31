@@ -22,7 +22,13 @@ data class ChargeCalculationInput(
     val meterEnergyKwh: Double? = null,
     val vehicleEnergyKwh: Double? = null,
     val startTimeEpochMillis: Long? = null,
-    val endTimeEpochMillis: Long? = null
+    val endTimeEpochMillis: Long? = null,
+    /**
+     * Billing values that should be treated as user/preset-confirmed facts for the current editor.
+     * Values produced by this engine are deliberately removed from this set so they remain live
+     * dependants on the next edit instead of accidentally becoming locked facts.
+     */
+    val authoritativeBillingFields: Set<ChargeBillingField> = emptySet()
 )
 
 data class ChargeCalculationResult(
@@ -40,10 +46,10 @@ data class ChargeCalculationResult(
  * Billing precedence is intentionally asymmetric:
  * total cost > unit price > meter energy.
  *
- * Editing a higher-priority value may recompute a lower-priority value. Editing meter energy never
- * silently overwrites an already-known total cost or unit price. If all three facts are present and
- * a manual meter-energy edit makes them disagree, the engine preserves the user's facts and reports
- * [ChargeCalculationIssue.BILLING_CONFLICT].
+ * The edited field becomes authoritative. When a higher-priority edit recalculates a dependant,
+ * that dependant is marked calculated (non-authoritative). This distinction is important for a
+ * mature text editor: a cost calculated from price * energy must keep following later energy edits
+ * until the user explicitly edits cost.
  *
  * The engine keeps full Double precision. UI formatting/rounding must happen at the presentation
  * boundary so repeated edits do not accumulate display-rounding drift.
@@ -60,10 +66,13 @@ object ChargeCalculationEngine {
         field: ChargeBillingField,
         value: Double?
     ): ChargeCalculationResult {
+        val edited = input.copy(
+            authoritativeBillingFields = input.authoritativeBillingFields + field
+        )
         val updated = when (field) {
-            ChargeBillingField.TOTAL_COST -> editTotalCost(input, value)
-            ChargeBillingField.UNIT_PRICE -> editUnitPrice(input, value)
-            ChargeBillingField.METER_ENERGY -> editMeterEnergy(input, value)
+            ChargeBillingField.TOTAL_COST -> editTotalCost(edited, value)
+            ChargeBillingField.UNIT_PRICE -> editUnitPrice(edited, value)
+            ChargeBillingField.METER_ENERGY -> editMeterEnergy(edited, value)
         }
         return derive(updated)
     }
@@ -75,9 +84,13 @@ object ChargeCalculationEngine {
         val price = input.unitPrice
         val energy = input.meterEnergyKwh
         updated = when {
-            price != null && price > 0.0 -> updated.copy(meterEnergyKwh = value / price)
+            price != null && price > 0.0 -> updated
+                .copy(meterEnergyKwh = value / price)
+                .markCalculated(ChargeBillingField.METER_ENERGY)
             price != null -> updated
-            energy != null && energy > 0.0 -> updated.copy(unitPrice = value / energy)
+            energy != null && energy > 0.0 -> updated
+                .copy(unitPrice = value / energy)
+                .markCalculated(ChargeBillingField.UNIT_PRICE)
             else -> updated
         }
         return updated
@@ -90,9 +103,13 @@ object ChargeCalculationEngine {
         val cost = input.totalCost
         val energy = input.meterEnergyKwh
         updated = when {
-            cost != null && cost >= 0.0 && value > 0.0 -> updated.copy(meterEnergyKwh = cost / value)
+            cost != null && cost >= 0.0 && value > 0.0 -> updated
+                .copy(meterEnergyKwh = cost / value)
+                .markCalculated(ChargeBillingField.METER_ENERGY)
             cost != null -> updated
-            energy != null && energy >= 0.0 -> updated.copy(totalCost = value * energy)
+            energy != null && energy >= 0.0 -> updated
+                .copy(totalCost = value * energy)
+                .markCalculated(ChargeBillingField.TOTAL_COST)
             else -> updated
         }
         return updated
@@ -104,14 +121,30 @@ object ChargeCalculationEngine {
 
         val cost = input.totalCost
         val price = input.unitPrice
+        val costLocked = ChargeBillingField.TOTAL_COST in input.authoritativeBillingFields
+        val priceLocked = ChargeBillingField.UNIT_PRICE in input.authoritativeBillingFields
+
         updated = when {
-            cost != null && price != null -> updated
-            cost != null && cost >= 0.0 && value > 0.0 -> updated.copy(unitPrice = cost / value)
-            price != null && price >= 0.0 -> updated.copy(totalCost = price * value)
+            cost != null && price != null && costLocked && priceLocked -> updated
+            cost != null && costLocked && value > 0.0 -> updated
+                .copy(unitPrice = cost / value)
+                .markCalculated(ChargeBillingField.UNIT_PRICE)
+            price != null && priceLocked -> updated
+                .copy(totalCost = price * value)
+                .markCalculated(ChargeBillingField.TOTAL_COST)
+            cost != null && price == null && value > 0.0 -> updated
+                .copy(unitPrice = cost / value)
+                .markCalculated(ChargeBillingField.UNIT_PRICE)
+            price != null -> updated
+                .copy(totalCost = price * value)
+                .markCalculated(ChargeBillingField.TOTAL_COST)
             else -> updated
         }
         return updated
     }
+
+    private fun ChargeCalculationInput.markCalculated(field: ChargeBillingField): ChargeCalculationInput =
+        copy(authoritativeBillingFields = authoritativeBillingFields - field)
 
     private fun derive(input: ChargeCalculationInput): ChargeCalculationResult {
         val issues = linkedSetOf<ChargeCalculationIssue>()
