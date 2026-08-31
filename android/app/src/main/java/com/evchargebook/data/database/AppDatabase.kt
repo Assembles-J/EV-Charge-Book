@@ -220,36 +220,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_15_16 = object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                // Legacy records only know one occurrence time and no explicit vehicle-side energy.
-                // Keep both new facts nullable rather than backfilling invented values.
-                db.execSQL("ALTER TABLE charging_records ADD COLUMN endedAtEpochMillis INTEGER")
-                db.execSQL("ALTER TABLE charging_records ADD COLUMN vehicleEnergyKwh REAL")
-                db.execSQL(
-                    """
-                    CREATE TABLE IF NOT EXISTS charging_sessions (
-                        id TEXT NOT NULL,
-                        vehicleId INTEGER NOT NULL,
-                        startedAtEpochMillis INTEGER NOT NULL,
-                        startSoc INTEGER,
-                        targetSoc INTEGER,
-                        chargerType TEXT,
-                        unitPricePerKwh REAL,
-                        location TEXT,
-                        remark TEXT,
-                        latitude REAL,
-                        longitude REAL,
-                        locationAccuracyMeters REAL,
-                        status TEXT NOT NULL,
-                        endedAtEpochMillis INTEGER,
-                        completedRecordId INTEGER,
-                        updatedAtEpochMillis INTEGER NOT NULL,
-                        PRIMARY KEY(id)
-                    )
-                    """.trimIndent()
-                )
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_vehicleId ON charging_sessions(vehicleId)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_status ON charging_sessions(status)")
-                db.execSQL("CREATE INDEX IF NOT EXISTS index_charging_sessions_startedAtEpochMillis ON charging_sessions(startedAtEpochMillis)")
+                ChargingMigration15To16.statements.forEach(db::execSQL)
             }
         }
 
