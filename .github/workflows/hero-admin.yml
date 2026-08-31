@@ -31,13 +31,17 @@ jobs:
         run: |
           set -eu
           node --check hero-admin/static/admin.js
+          python3 -m py_compile hero-admin/app.py
           node <<'NODE'
           const fs = require('fs');
           const html = fs.readFileSync('hero-admin/templates/index.html', 'utf8');
           const js = fs.readFileSync('hero-admin/static/admin.js', 'utf8');
           const css = fs.readFileSync('hero-admin/static/admin.css', 'utf8');
           for (const marker of [
+            'data-tab="brands"',
             'data-tab="tools"',
+            'brandDialog',
+            'vehicleBrandSelect',
             'static/admin.css',
             'static/admin.js',
             'Hero 1600×1100 居中裁切'
@@ -45,6 +49,8 @@ jobs:
             if (!html.includes(marker)) throw new Error(`missing admin HTML marker: ${marker}`);
           }
           for (const marker of [
+            'publishBrandLogo',
+            'api/brand/logo',
             'downloadRemoteArtwork',
             'createImageBitmap',
             "'image/webp'",
@@ -77,6 +83,7 @@ jobs:
             -p 127.0.0.1:18080:8080 \
             -e HERO_ADMIN_PASSWORD=test-only-password \
             -e HERO_PUBLIC_ORIGIN=http://127.0.0.1:18080 \
+            -e BRAND_LOGO_PUBLIC_ASSET_BASE=https://example.test/ev-charge-book/releases/brand-logos \
             -v "$PWD/.hero-admin-test/releases:/data/releases" \
             -v "$PWD/.hero-admin-test/release-meta:/data/release-meta" \
             ev-charge-book-hero-admin:test
@@ -94,17 +101,60 @@ jobs:
         shell: bash
         run: |
           set -eu
-          curl --fail --silent --show-error http://127.0.0.1:18080/static/admin.js | grep -q 'rollbackArtworkVersion'
+          curl --fail --silent --show-error http://127.0.0.1:18080/static/admin.js | grep -q 'publishBrandLogo'
           curl --fail --silent --show-error http://127.0.0.1:18080/static/admin.css | grep -q 'history-list'
 
-      - name: Exercise vehicle catalog lifecycle
+      - name: Exercise brand logo and vehicle catalog lifecycle
         shell: bash
         run: |
           set -eu
+          cat > .hero-admin-test/new-brand.json <<'JSON'
+          {
+            "brandId": "testbrand",
+            "name": "测试品牌",
+            "englishName": "Test Brand"
+          }
+          JSON
+
+          curl --fail --silent --show-error \
+            -u admin:test-only-password \
+            -H 'Origin: http://127.0.0.1:18080' \
+            -H 'X-Hero-Admin-Request: 1' \
+            -H 'Content-Type: application/json' \
+            --data-binary @.hero-admin-test/new-brand.json \
+            http://127.0.0.1:18080/api/brand/save \
+            -o .hero-admin-test/brand-created.json
+
+          python3 - <<'PY'
+          import struct
+          import zlib
+          from pathlib import Path
+          width = height = 640
+          signature = b'\x89PNG\r\n\x1a\n'
+          def chunk(kind, payload):
+              body = kind + payload
+              return struct.pack('>I', len(payload)) + body + struct.pack('>I', zlib.crc32(body) & 0xffffffff)
+          ihdr = struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)
+          pixel = b'\x10\x90\x60\xff'
+          row = b'\x00' + pixel * width
+          png = signature + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(row * height, 9)) + chunk(b'IEND', b'')
+          Path('.hero-admin-test/logo.png').write_bytes(png)
+          PY
+
+          curl --fail --silent --show-error \
+            -u admin:test-only-password \
+            -H 'Origin: http://127.0.0.1:18080' \
+            -H 'X-Hero-Admin-Request: 1' \
+            -F 'brandId=testbrand' \
+            -F 'variant=light' \
+            -F 'file=@.hero-admin-test/logo.png;type=image/png' \
+            http://127.0.0.1:18080/api/brand/logo \
+            -o .hero-admin-test/logo-created.json
+
           cat > .hero-admin-test/new-vehicle.json <<'JSON'
           {
             "catalogId": "test-ev-2026-long-range",
-            "brand": "测试品牌",
+            "brandId": "testbrand",
             "series": "TEST EV",
             "modelName": "TEST EV 2026款",
             "modelYear": 2026,
@@ -112,6 +162,7 @@ jobs:
             "powertrainType": "BEV",
             "batteryCapacityKwh": 88.8,
             "rangeKm": 688,
+            "rangeStandard": "CLTC",
             "heroArtworkKey": "test-ev-2026"
           }
           JSON
@@ -138,14 +189,31 @@ jobs:
           python3 - <<'PY'
           import json
           from pathlib import Path
+          brand_result = json.loads(Path('.hero-admin-test/brand-created.json').read_text())
+          assert brand_result['ok'] is True and brand_result['action'] == 'created'
+
+          logo_result = json.loads(Path('.hero-admin-test/logo-created.json').read_text())
+          assert logo_result['ok'] is True
+          assert logo_result['version'] == 1
+          assert logo_result['outputWidth'] == 512 and logo_result['outputHeight'] == 512
+          assert logo_result['outputBytes'] <= 262_144
+          logo = Path('.hero-admin-test/releases/brand-logos/brand_testbrand_light_v1.webp').read_bytes()
+          assert logo[:4] == b'RIFF' and logo[8:12] == b'WEBP'
+
           result = json.loads(Path('.hero-admin-test/catalog-created.json').read_text())
           assert result['ok'] is True and result['action'] == 'created'
           catalog = json.loads(Path('.hero-admin-test/release-meta/vehicle-catalog-v1.json').read_text())
+          brand = next(b for b in catalog['brands'] if b['brandId'] == 'testbrand')
+          assert brand['logoLightVersion'] == 1
+          assert brand['logoLightUrl'].endswith('/brand_testbrand_light_v1.webp')
           item = next(v for v in catalog['vehicles'] if v['catalogId'] == 'test-ev-2026-long-range')
+          assert item['brandId'] == 'testbrand'
+          assert item['brand'] == '测试品牌'
+          assert item['rangeStandard'] == 'CLTC'
           assert item['isActive'] is True
           assert item['heroArtworkKey'] == 'test-ev-2026'
           assert item['batteryCapacityKwh'] == 88.8
-          assert catalog['catalogVersion'] == 4
+          assert catalog['catalogVersion'] == 7
           backup = json.loads(Path('.hero-admin-test/release-meta/vehicle-catalog-v1.json.bak').read_text())
           assert next(v for v in backup['vehicles'] if v['catalogId'] == 'test-ev-2026-long-range')['isActive'] is False
           PY
