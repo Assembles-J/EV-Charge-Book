@@ -122,14 +122,9 @@ private fun CatalogVehicleRow(item: VehicleCatalogEntity, onSelect: (VehicleCata
         shape = MaterialTheme.shapes.large
     ) {
         Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
-            Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(
-                        item.brand.take(1).uppercase(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+            Surface(Modifier.size(46.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
+                Box(Modifier.padding(7.dp), contentAlignment = Alignment.Center) {
+                    ManagedBrandLogo(catalog = item, modifier = Modifier.fillMaxSize())
                 }
             }
             Spacer(Modifier.width(MaterialTheme.spacing.sm))
@@ -140,8 +135,11 @@ private fun CatalogVehicleRow(item: VehicleCatalogEntity, onSelect: (VehicleCata
                     Text("·", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text(item.powertrainType, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
+                val rangeText = item.rangeKm?.let { range ->
+                    item.rangeStandard?.let { "$range km $it" } ?: "$range km"
+                } ?: "续航 --"
                 Text(
-                    "${item.batteryCapacityKwh?.let { "$it kWh" } ?: "电池 --"}  ·  ${item.rangeKm?.let { "$it km" } ?: "续航 --"}",
+                    "${item.batteryCapacityKwh?.let { "$it kWh" } ?: "电池 --"}  ·  $rangeText",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
