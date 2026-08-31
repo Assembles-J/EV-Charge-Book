@@ -137,6 +137,27 @@ class ChargeCalculationEngineTest {
     }
 
     @Test
+    fun `zero unit price never divides by zero and conflicts with positive cost`() {
+        val originalEnergy = 37.5
+        val result = ChargeCalculationEngine.editBilling(
+            input = ChargeCalculationInput(
+                totalCost = 45.76,
+                unitPrice = 1.22,
+                meterEnergyKwh = originalEnergy,
+                authoritativeBillingFields = setOf(ChargeBillingField.TOTAL_COST)
+            ),
+            field = ChargeBillingField.UNIT_PRICE,
+            value = 0.0
+        )
+
+        assertEquals(45.76, result.input.totalCost!!, 0.000001)
+        assertEquals(0.0, result.input.unitPrice!!, 0.000001)
+        assertEquals(originalEnergy, result.input.meterEnergyKwh!!, 0.000001)
+        assertTrue(result.input.meterEnergyKwh!!.isFinite())
+        assertTrue(result.issues.contains(ChargeCalculationIssue.BILLING_CONFLICT))
+    }
+
+    @Test
     fun `derives duration average power and charging loss from compatible facts`() {
         val result = ChargeCalculationEngine.calculate(
             ChargeCalculationInput(
