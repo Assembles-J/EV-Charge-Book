@@ -6,6 +6,8 @@ on:
       - 'hero-admin/templates/index.html'
       - 'hero-admin/static/batch-upload.js'
       - 'hero-admin/static/batch-upload.css'
+      - 'hero-admin/static/catalog-tools.css'
+      - 'docs/WEB_BATCH_IMAGE_UPLOAD.md'
       - '.github/workflows/admin-batch-image-upload.yml'
   push:
     branches: [main]
@@ -13,6 +15,8 @@ on:
       - 'hero-admin/templates/index.html'
       - 'hero-admin/static/batch-upload.js'
       - 'hero-admin/static/batch-upload.css'
+      - 'hero-admin/static/catalog-tools.css'
+      - 'docs/WEB_BATCH_IMAGE_UPLOAD.md'
       - '.github/workflows/admin-batch-image-upload.yml'
 
 permissions:
@@ -31,42 +35,83 @@ jobs:
           node - <<'NODE'
           require('./hero-admin/static/batch-upload.js');
           const assert=require('assert');
-          const {normalizeToken,matchByLongestPrefix,planBatch}=globalThis.__evBatchUploadTest;
+          const {
+            normalizeToken,
+            matchByLongestPrefix,
+            planBatch,
+            classifyLogoContrast,
+            planBrandBatch,
+          }=globalThis.__evBatchUploadTest;
+
           assert.equal(normalizeToken('Xiaomi_SU7_Ultra_v4.WEBP'),'xiaomi-su7-ultra-v4');
-          const targets=[
+          const heroTargets=[
             {id:'xiaomi-su7',aliases:['xiaomi-su7']},
             {id:'xiaomi-su7-ultra',aliases:['xiaomi-su7-ultra']},
           ];
-          assert.equal(matchByLongestPrefix('xiaomi-su7-ultra_v4.webp',targets).target.id,'xiaomi-su7-ultra');
-          assert.equal(matchByLongestPrefix('xiaomi-su7_20260831.webp',targets).target.id,'xiaomi-su7');
-          const plan=planBatch([
+          assert.equal(matchByLongestPrefix('xiaomi-su7-ultra_v4.webp',heroTargets).target.id,'xiaomi-su7-ultra');
+          assert.equal(matchByLongestPrefix('xiaomi-su7_20260831.webp',heroTargets).target.id,'xiaomi-su7');
+          const heroPlan=planBatch([
             {name:'xiaomi-su7_v1.webp',type:'image/webp'},
             {name:'xiaomi-su7_v2.webp',type:'image/webp'},
             {name:'unknown.webp',type:'image/webp'},
-          ],targets,'Hero Key');
-          assert.equal(plan[0].state,'ready');
-          assert.equal(plan[1].state,'duplicate');
-          assert.equal(plan[2].state,'unmatched');
+          ],heroTargets,'Hero Key');
+          assert.equal(heroPlan[0].state,'ready');
+          assert.equal(heroPlan[1].state,'duplicate');
+          assert.equal(heroPlan[2].state,'unmatched');
+
+          const base={width:512,height:512,visiblePixels:1500,transparentRatio:.72};
+          assert.deepEqual(classifyLogoContrast({...base,averageLuminance:.02}).variants,['light']);
+          assert.deepEqual(classifyLogoContrast({...base,averageLuminance:.95}).variants,['dark']);
+          assert.deepEqual(classifyLogoContrast({...base,averageLuminance:.18}).variants,['light','dark']);
+          assert.equal(classifyLogoContrast({...base,averageLuminance:.02,transparentRatio:0}).valid,false);
+
+          (async()=>{
+            const brandTargets=[{id:'xiaomi',aliases:['xiaomi'],brand:{brandId:'xiaomi',name:'小米'}}];
+            const files=[
+              {name:'xiaomi_black_v1.webp',type:'image/webp'},
+              {name:'xiaomi_white_v1.webp',type:'image/webp'},
+              {name:'xiaomi_black_v2.webp',type:'image/webp'},
+              {name:'unknown.webp',type:'image/webp'},
+            ];
+            const analyzer=async file=>file.name.includes('white')
+              ? {...base,averageLuminance:.95}
+              : {...base,averageLuminance:.02};
+            const plan=await planBrandBatch(files,brandTargets,analyzer);
+            assert.equal(plan[0].state,'ready');
+            assert.deepEqual(plan[0].publishVariants,['light']);
+            assert.equal(plan[1].state,'ready');
+            assert.deepEqual(plan[1].publishVariants,['dark']);
+            assert.equal(plan[2].state,'duplicate');
+            assert.equal(plan[3].state,'unmatched');
+          })().catch(error=>{console.error(error);process.exit(1)});
           NODE
           python3 - <<'PY'
           from pathlib import Path
           html=Path('hero-admin/templates/index.html').read_text(encoding='utf-8')
           js=Path('hero-admin/static/batch-upload.js').read_text(encoding='utf-8')
+          css=Path('hero-admin/static/catalog-tools.css').read_text(encoding='utf-8')
           for marker in ['static/batch-upload.css','static/batch-upload.js']:
               if marker not in html:
                   raise SystemExit(f'missing page asset: {marker}')
           for marker in [
               '品牌 Logo 批量上传',
               'Hero 批量上传',
-              'brandLightBatchDrop',
-              'brandDarkBatchDrop',
+              "id:'brandBatchDrop'",
               'heroBatchDrop',
               'input.multiple=true',
               'matchByLongestPrefix',
-              '最先上传优先',
+              'classifyLogoContrast',
+              'analyzeLogoFile',
+              '无需区分 Light / Dark',
+              '最先进入队列的文件优先',
               "api/brand/logo",
               "api/publish",
           ]:
               if marker not in js:
                   raise SystemExit(f'missing batch upload marker: {marker}')
+          for stale in ['brandLightBatchDrop','brandDarkBatchDrop']:
+              if stale in js:
+                  raise SystemExit(f'stale split Logo drop zone remains: {stale}')
+          if '.logo-light-surface button.secondary' not in css:
+              raise SystemExit('light Logo card button contrast fix missing')
           PY
