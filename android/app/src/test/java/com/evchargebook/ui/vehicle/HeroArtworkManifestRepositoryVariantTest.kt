@@ -1,7 +1,7 @@
 package com.evchargebook.ui.vehicle
 
-import kotlin.test.Test
-import kotlin.test.assertEquals
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class HeroArtworkManifestRepositoryVariantTest {
     @Test
