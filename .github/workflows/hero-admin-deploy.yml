@@ -76,7 +76,7 @@ jobs:
           gzip -t hero-admin-image.tar.gz
           ls -lh hero-admin-image.tar.gz
 
-      - name: Prepare remote staging directory
+      - name: Prepare remote staging and reclaim safe disk space
         uses: appleboy/ssh-action@v1.2.2
         with:
           host: ${{ secrets.COMMON_SERVER_HOST }}
@@ -84,9 +84,29 @@ jobs:
           key: ${{ secrets.COMMON_SSH_PRIVATE_KEY }}
           script: |
             set -eu
-            rm -rf /opt/ev-charge-book/hero-admin-deploy
-            mkdir -p /opt/ev-charge-book/hero-admin-deploy
-            test -w /opt/ev-charge-book
+            ROOT=/opt/ev-charge-book
+            STAGING="$ROOT/hero-admin-deploy"
+            REQUIRED_KB=$((512 * 1024))
+
+            # Deployment staging is disposable. Persistent Hero/Logo/catalog data lives
+            # under $ROOT/releases and $ROOT/release-meta and is intentionally untouched.
+            rm -rf "$STAGING"
+
+            # Reclaim only Docker data that is not referenced by running containers.
+            docker image prune -f >/dev/null 2>&1 || true
+            docker builder prune -af >/dev/null 2>&1 || true
+
+            mkdir -p "$STAGING"
+            test -w "$ROOT"
+
+            AVAILABLE_KB="$(df -Pk "$ROOT" | awk 'NR==2 {print $4}')"
+            echo "EV Admin deploy free space: $((AVAILABLE_KB / 1024)) MiB"
+            if [ "$AVAILABLE_KB" -lt "$REQUIRED_KB" ]; then
+              echo "Insufficient disk for safe EV Admin deployment: need at least 512 MiB free." >&2
+              df -h "$ROOT" >&2 || true
+              docker system df >&2 || true
+              exit 1
+            fi
 
       - name: Upload admin deployment bundle
         uses: appleboy/scp-action@v1.0.0
@@ -167,5 +187,6 @@ jobs:
             echo "- Hero manifest: https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
             echo "- Vehicle catalog: https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json"
             echo "- Server credentials file: /opt/ev-charge-book/hero-admin.env"
-            echo "- Server-side Docker/PyPI network access is not required for deployment."
+            echo "- Deployment preflight safely prunes dangling Docker images/build cache and requires 512 MiB free."
+            echo "- Persistent releases and release-meta data are never cleaned by the deploy preflight."
           } >> "$GITHUB_STEP_SUMMARY"
