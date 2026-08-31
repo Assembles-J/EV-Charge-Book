@@ -1,5 +1,8 @@
 package com.evchargebook.ui.vehicle
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,15 +14,20 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
+import com.evchargebook.bluetooth.BluetoothPromptPreferences
 import com.evchargebook.bluetooth.BluetoothPromptSettings
 import com.evchargebook.bluetooth.PairedBluetoothDevice
 import com.evchargebook.ui.theme.spacing
+import kotlinx.coroutines.launch
 
 private val BluetoothHeroBrush = Brush.linearGradient(
     listOf(Color(0xFF06100B), Color(0xFF0B2117), Color(0xFF07120D))
@@ -34,6 +42,11 @@ fun BluetoothPromptScreen(
     onBack: () -> Unit
 ) {
     val enabled = settings.enabled && settings.deviceAddress != null
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val canPostNotifications = Build.VERSION.SDK_INT < 33 ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+        PackageManager.PERMISSION_GRANTED
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -55,11 +68,32 @@ fun BluetoothPromptScreen(
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
-            item { BluetoothStatusCockpit(settings, enabled, onSave) }
+            item {
+                BluetoothStatusCockpit(
+                    settings = settings,
+                    enabled = enabled,
+                    canPostNotifications = canPostNotifications,
+                    onSave = onSave,
+                    onAutoStartChange = { checked ->
+                        scope.launch {
+                            BluetoothPromptPreferences(context.applicationContext)
+                                .saveAutoStartOnConnect(checked)
+                        }
+                    },
+                )
+            }
             item {
                 Column {
                     Text("已配对设备", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                    Text("选择车辆蓝牙，连接时提醒你确认是否开始行程。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (settings.autoStartOnConnect) {
+                            "选择车辆蓝牙；连接后将尝试自动开始行程。"
+                        } else {
+                            "选择车辆蓝牙，连接时提醒你确认是否开始行程。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             if (devices.isEmpty()) {
@@ -85,7 +119,9 @@ fun BluetoothPromptScreen(
 private fun BluetoothStatusCockpit(
     settings: BluetoothPromptSettings,
     enabled: Boolean,
-    onSave: (Boolean, String?, String?) -> Unit
+    canPostNotifications: Boolean,
+    onSave: (Boolean, String?, String?) -> Unit,
+    onAutoStartChange: (Boolean) -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxWidth(), color = Color.Transparent, shape = MaterialTheme.shapes.extraLarge) {
         Column(
@@ -123,14 +159,51 @@ private fun BluetoothStatusCockpit(
             Text(
                 when {
                     settings.deviceAddress == null -> "先在下方选择一个已配对设备。"
-                    enabled -> "连接到此设备后，会提醒你确认是否开始行程。"
-                    else -> "设备已选择，但连接提醒当前关闭。"
+                    !enabled -> "设备已选择，但蓝牙行程检测当前关闭。"
+                    settings.autoStartOnConnect && !canPostNotifications -> "自动开始需要通知权限，当前不会在后台静默记录。"
+                    settings.autoStartOnConnect -> "连接到此设备后，将尝试直接开始本次行程。"
+                    else -> "连接到此设备后，会提醒你确认是否开始行程。"
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
-            Text("只做连接提醒，不读取车辆数据，也不会自动开始行程。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        "蓝牙连接后自动开始行程",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        when {
+                            !enabled -> "先选择车辆蓝牙并开启连接检测。"
+                            !canPostNotifications -> "需要开启通知权限，确保自动记录始终对你可见。"
+                            else -> "开启后无需再次确认；已有行程或系统限制会阻止重复启动。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.width(MaterialTheme.spacing.sm))
+                Switch(
+                    checked = settings.autoStartOnConnect,
+                    onCheckedChange = onAutoStartChange,
+                    enabled = enabled && canPostNotifications,
+                )
+            }
+
+            Text(
+                when {
+                    !canPostNotifications -> "通知权限关闭时，自动开始被安全阻断；不会静默创建行程。"
+                    settings.autoStartOnConnect && enabled -> "自动开始只对当前车辆绑定的蓝牙生效；不会跨车辆启动行程。"
+                    else -> "默认仅做连接提醒，不读取车辆数据，也不会自动开始行程。"
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
