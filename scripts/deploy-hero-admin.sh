@@ -71,6 +71,10 @@ if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
   exit 1
 fi
 
+# The compressed image is only transport staging. Drop it immediately after a
+# successful docker load so each deployment does not keep another ~50-60 MiB.
+rm -f "${IMAGE_ARCHIVE}"
+
 log "Starting Hero Admin container on ${NETWORK}"
 docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
 docker run -d \
@@ -224,6 +228,10 @@ catalog = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
 assert catalog.get("schemaVersion") == 1
 assert isinstance(catalog.get("vehicles"), list) and catalog["vehicles"]
 PY
+
+# The previous image becomes dangling after the new tag/container is active.
+# Remove only dangling images; never prune images still referenced by containers.
+docker image prune -f >/dev/null 2>&1 || true
 
 log "EV Charge Book admin deployment complete"
 log "Credentials are stored only in ${ENV_FILE}"
