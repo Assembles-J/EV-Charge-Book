@@ -147,14 +147,21 @@ class AppUpdateManager(private val context: Context) {
             .setDestinationInExternalFilesDir(context, Environment.DIRECTORY_DOWNLOADS, fileName)
         val downloadId = downloadManager.enqueue(request)
 
-        // Persist immediately after enqueue. If the app is closed one millisecond later, the next
-        // process can still recover this exact DownloadManager task and eventually install it.
-        savePendingDownload(downloadId, info)
+        // This record is the only bridge between DownloadManager and the next app process. Commit
+        // it synchronously on the IO dispatcher before returning to the polling loop. If durable
+        // persistence fails, cancel the just-created task rather than leave an unrecoverable orphan.
+        try {
+            savePendingDownload(downloadId, info)
+        } catch (error: Throwable) {
+            downloadManager.remove(downloadId)
+            throw error
+        }
         awaitDownloadAndVerify(downloadId, info)
     }
 
     suspend fun resumeDownloadAndVerify(downloadId: Long, info: AppUpdateInfo): Uri = withContext(Dispatchers.IO) {
-        // Refresh the persisted metadata in case this state was created by an older app build.
+        // Refresh persisted metadata before resuming observation so another process recreation can
+        // still recover the same task.
         savePendingDownload(downloadId, info)
         awaitDownloadAndVerify(downloadId, info)
     }
@@ -205,7 +212,7 @@ class AppUpdateManager(private val context: Context) {
     }
 
     private fun savePendingDownload(downloadId: Long, info: AppUpdateInfo) {
-        updatePrefs.edit()
+        val persisted = updatePrefs.edit()
             .putLong(KEY_DOWNLOAD_ID, downloadId)
             .putInt(KEY_VERSION_CODE, info.versionCode)
             .putString(KEY_VERSION_NAME, info.versionName)
@@ -213,7 +220,8 @@ class AppUpdateManager(private val context: Context) {
             .putString(KEY_SHA256, info.sha256)
             .putString(KEY_PUBLISHED_AT, info.publishedAt)
             .putBoolean(KEY_MANDATORY, info.mandatory)
-            .apply()
+            .commit()
+        check(persisted) { "无法保存更新下载状态" }
     }
 
     private fun readPendingDownload(): Pair<Long, AppUpdateInfo>? {
