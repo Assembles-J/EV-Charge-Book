@@ -6,6 +6,7 @@
   <title>EV Charge Book · Admin</title>
   <link rel="stylesheet" href="static/admin.css" />
   <link rel="stylesheet" href="static/catalog-tools.css" />
+  <link rel="stylesheet" href="static/batch-upload.css" />
 </head>
 <body>
 <main>
@@ -130,9 +131,11 @@
           <div class="quality-row"><label for="convertQuality">WebP 质量</label><span class="quality-value" id="qualityValue">90%</span></div>
           <input id="convertQuality" type="range" min="0.70" max="1" step="0.01" value="0.90" />
         </div>
-        <div class="tool-result" id="toolResult">
-          <img id="convertOutputPreview" alt="WebP preview" />
-          <div class="empty-result">转换完成后会在这里显示 WebP 预览、尺寸和文件大小。</div>
+        <div>
+          <div class="tool-result" id="toolResult">
+            <img id="convertOutputPreview" alt="WebP preview" />
+            <div class="empty-result">转换完成后会在这里显示 WebP 预览、尺寸和文件大小。</div>
+          </div>
         </div>
       </div>
     </div>
@@ -196,5 +199,6 @@
 
 <script src="static/admin.js"></script>
 <script src="static/catalog-tools.js"></script>
+<script src="static/batch-upload.js"></script>
 </body>
 </html>
