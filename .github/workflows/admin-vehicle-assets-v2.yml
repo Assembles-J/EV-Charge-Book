@@ -24,11 +24,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check JavaScript syntax
-        run: |
-          node --check hero-admin/static/asset-bundle-builder.js
-          node --check hero-admin/static/admin-hero-variants.js
-          node --check hero-admin/static/admin-brand-details.js
+      - name: Check asset bundle builder syntax
+        run: node --check hero-admin/static/asset-bundle-builder.js
+      - name: Check Hero variant syntax
+        run: node --check hero-admin/static/admin-hero-variants.js
+      - name: Check brand detail syntax
+        run: node --check hero-admin/static/admin-brand-details.js
       - name: Verify resource bundle builder behavior
         run: |
           node <<'NODE'
