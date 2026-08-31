@@ -186,8 +186,8 @@ private fun VehicleRow(vehicle: VehicleEntity, onSelect: () -> Unit, onArchive: 
     Surface(onClick = onSelect, modifier = Modifier.fillMaxWidth(), color = MaterialTheme.colorScheme.surfaceContainerLow, shape = MaterialTheme.shapes.large) {
         Row(Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md), verticalAlignment = Alignment.CenterVertically) {
             Surface(Modifier.size(42.dp), shape = CircleShape, color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(Icons.Default.DirectionsCar, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(21.dp))
+                Box(Modifier.padding(7.dp), contentAlignment = Alignment.Center) {
+                    ManagedBrandLogo(catalogVehicleId = vehicle.catalogVehicleId, modifier = Modifier.fillMaxSize())
                 }
             }
             Spacer(Modifier.width(MaterialTheme.spacing.sm))
