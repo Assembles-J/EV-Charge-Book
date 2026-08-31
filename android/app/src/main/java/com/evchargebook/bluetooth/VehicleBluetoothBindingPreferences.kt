@@ -78,12 +78,17 @@ class VehicleBluetoothBindingPreferences(private val context: Context) {
                     for (index in 0 until array.length()) {
                         val item = array.getJSONObject(index)
                         val address = item.optString("deviceAddress").takeIf { it.isNotBlank() } ?: continue
+                        val deviceName = if (item.isNull("deviceName")) {
+                            null
+                        } else {
+                            item.optString("deviceName").takeIf { it.isNotBlank() }
+                        }
                         add(
                             VehicleBluetoothBinding(
                                 vehicleId = item.getLong("vehicleId"),
                                 enabled = item.optBoolean("enabled", false),
                                 deviceAddress = normalizeAddress(address),
-                                deviceName = item.optString("deviceName").takeIf { it.isNotBlank() },
+                                deviceName = deviceName,
                             )
                         )
                     }
