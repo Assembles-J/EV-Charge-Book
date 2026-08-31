@@ -15,6 +15,7 @@ data class BluetoothPromptSettings(
     val enabled: Boolean = false,
     val deviceAddress: String? = null,
     val deviceName: String? = null,
+    val autoStartOnConnect: Boolean = false,
 )
 
 data class PairedBluetoothDevice(val address: String, val name: String)
@@ -23,6 +24,7 @@ private val Context.bluetoothPromptDataStore by preferencesDataStore("bluetooth_
 private val enabledKey = booleanPreferencesKey("enabled")
 private val addressKey = stringPreferencesKey("device_address")
 private val nameKey = stringPreferencesKey("device_name")
+private val autoStartOnConnectKey = booleanPreferencesKey("auto_start_on_connect")
 
 /**
  * Compatibility facade for the existing UI/repository API.
@@ -39,6 +41,7 @@ class BluetoothPromptPreferences(private val context: Context) {
                 enabled = prefs[enabledKey] == true,
                 deviceAddress = prefs[addressKey],
                 deviceName = prefs[nameKey],
+                autoStartOnConnect = prefs[autoStartOnConnectKey] == true,
             )
         }
 
@@ -57,6 +60,7 @@ class BluetoothPromptPreferences(private val context: Context) {
                 enabled = binding.enabled,
                 deviceAddress = binding.deviceAddress,
                 deviceName = binding.deviceName,
+                autoStartOnConnect = binding.autoStartOnConnect,
             )
 
             // Only inherit an old global binding when vehicle ownership is unambiguous.
@@ -65,7 +69,12 @@ class BluetoothPromptPreferences(private val context: Context) {
         }
     }
 
-    suspend fun save(enabled: Boolean, address: String?, name: String?) {
+    suspend fun save(
+        enabled: Boolean,
+        address: String?,
+        name: String?,
+        autoStartOnConnect: Boolean = false,
+    ) {
         val vehicles = database.vehicleDao().observeActive().first()
         val selectedVehicle = vehicles.firstOrNull { it.isDefault } ?: vehicles.firstOrNull()
 
@@ -79,6 +88,7 @@ class BluetoothPromptPreferences(private val context: Context) {
                         enabled = enabled,
                         deviceAddress = address,
                         deviceName = name,
+                        autoStartOnConnect = autoStartOnConnect,
                     )
                 )
             }
@@ -88,6 +98,7 @@ class BluetoothPromptPreferences(private val context: Context) {
         // guess ownership when multiple active vehicles exist.
         context.bluetoothPromptDataStore.edit { prefs ->
             prefs[enabledKey] = enabled
+            prefs[autoStartOnConnectKey] = autoStartOnConnect
             if (address.isNullOrBlank()) {
                 prefs.remove(addressKey)
                 prefs.remove(nameKey)
