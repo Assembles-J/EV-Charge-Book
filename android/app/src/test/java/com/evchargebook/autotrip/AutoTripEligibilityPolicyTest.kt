@@ -176,7 +176,7 @@ class AutoTripEligibilityPolicyTest {
         decision: AutoTripDecision,
         reason: AutoTripReasonCode,
     ) {
-        assertTrue("Expected ${T::class.simpleName}, got ${decision::class.simpleName}", decision is T)
+        assertTrue(decision is T)
         assertEquals(reason, decision.reason)
     }
 }
