@@ -1,14 +1,51 @@
 const adminHeaders={'X-Hero-Admin-Request':'1','Content-Type':'application/json'};
-let catalog=null,manifest=null,chosenFile=null,editingId=null,convertSourceFile=null,convertSourceUrl=null,convertedBlob=null,convertedUrl=null,convertedName=null;
+let catalog=null,manifest=null,chosenFile=null,editingId=null,editingBrandId=null,convertSourceFile=null,convertSourceUrl=null,convertedBlob=null,convertedUrl=null,convertedName=null;
 const $=id=>document.getElementById(id);
 
 function setStatus(el,text,kind=''){el.className='status'+(kind?' '+kind:'');el.textContent=text}
-function switchTab(name){const ids={catalog:'catalogPanel',hero:'heroPanel',tools:'toolsPanel'};document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));for(const [tab,id] of Object.entries(ids))$(id).classList.toggle('hidden',tab!==name)}
+function switchTab(name){const ids={brands:'brandsPanel',catalog:'catalogPanel',hero:'heroPanel',tools:'toolsPanel'};document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===name));for(const [tab,id] of Object.entries(ids))$(id).classList.toggle('hidden',tab!==name)}
 document.querySelectorAll('.tab').forEach(x=>x.onclick=()=>switchTab(x.dataset.tab));
 
 async function loadCatalog(){
-  try{const r=await fetch('api/catalog/state');const d=await r.json();if(!r.ok)throw new Error(d.error||'读取车型库失败');catalog=d;renderCatalog();renderHeroKeys();setStatus($('catalogStatus'),`车型目录已加载 · v${d.catalogVersion} · App 将在有网络时后台同步，本地库始终可用。`,'ok')}catch(e){setStatus($('catalogStatus'),e.message,'error')}
+  try{
+    const r=await fetch('api/catalog/state');const d=await r.json();if(!r.ok)throw new Error(d.error||'读取车型库失败');catalog=d;
+    renderBrands();renderCatalog();renderVehicleBrandOptions();renderHeroKeys();
+    setStatus($('brandStatus'),`品牌目录已加载 · Catalog v${d.catalogVersion} · Logo 发布后 App 会通过车型库后台同步。`,'ok');
+    setStatus($('catalogStatus'),`车型目录已加载 · v${d.catalogVersion} · App 将在有网络时后台同步，本地库始终可用。`,'ok')
+  }catch(e){setStatus($('brandStatus'),e.message,'error');setStatus($('catalogStatus'),e.message,'error')}
 }
+
+function renderBrands(){
+  if(!catalog)return;
+  const q=$('brandSearch').value.trim().toLowerCase();
+  const brands=catalog.brands||[];
+  const rows=brands.filter(b=>!q||`${b.brandId} ${b.name} ${b.englishName||''}`.toLowerCase().includes(q));
+  $('brandMeta').textContent=`${brands.filter(b=>b.isActive!==false).length} 在用 / ${brands.length} 总计`;
+  $('brandList').innerHTML='';
+  for(const b of rows){
+    const row=document.createElement('div');row.className='vehicle-row'+(b.isActive===false?' retired':'');
+    const a=document.createElement('div');const title=document.createElement('div');title.className='vehicle-title';title.textContent=b.name;const badge=document.createElement('span');badge.className='badge'+(b.isActive===false?' off':'');badge.textContent=b.isActive===false?'已下架':'在用';title.appendChild(badge);const sub=document.createElement('div');sub.className='vehicle-sub';sub.textContent=`${b.englishName||'--'} · ${b.brandId}`;a.append(title,sub);
+    const light=document.createElement('div');light.className='vehicle-facts';light.textContent=b.logoLightUrl?`Light Logo · v${b.logoLightVersion||0}`:'Light Logo · 未发布';if(b.logoLightUrl){const img=document.createElement('img');img.src=b.logoLightUrl;img.alt=`${b.name} light logo`;img.style.width='34px';img.style.height='34px';img.style.objectFit='contain';img.style.marginLeft='8px';img.style.verticalAlign='middle';light.appendChild(img)}
+    const dark=document.createElement('div');dark.className='vehicle-facts';dark.textContent=b.logoDarkUrl?`Dark Logo · v${b.logoDarkVersion||0}`:'Dark Logo · 未发布';if(b.logoDarkUrl){const img=document.createElement('img');img.src=b.logoDarkUrl;img.alt=`${b.name} dark logo`;img.style.width='34px';img.style.height='34px';img.style.objectFit='contain';img.style.marginLeft='8px';img.style.verticalAlign='middle';dark.appendChild(img)}
+    const acts=document.createElement('div');acts.className='row-actions';
+    const edit=document.createElement('button');edit.className='secondary';edit.textContent='编辑';edit.onclick=()=>openBrand(b);
+    const lightUpload=document.createElement('button');lightUpload.className='secondary';lightUpload.textContent='浅色 Logo';lightUpload.onclick=()=>chooseBrandLogo(b,'light');
+    const darkUpload=document.createElement('button');darkUpload.className='secondary';darkUpload.textContent='深色 Logo';darkUpload.onclick=()=>chooseBrandLogo(b,'dark');
+    const status=document.createElement('button');status.className=b.isActive===false?'secondary':'danger';status.textContent=b.isActive===false?'恢复':'下架';status.onclick=()=>setBrandStatus(b,b.isActive===false);
+    acts.append(edit,lightUpload,darkUpload,status);row.append(a,light,dark,acts);$('brandList').appendChild(row)
+  }
+}
+$('brandSearch').oninput=renderBrands;$('addBrand').onclick=()=>openBrand(null);
+
+function openBrand(b){editingBrandId=b?.brandId||null;$('brandDialogTitle').textContent=b?'编辑品牌':'新增品牌';const f=$('brandForm');f.reset();for(const name of ['brandId','name','englishName'])if(b&&b[name]!=null)f.elements[name].value=b[name];f.elements.brandId.readOnly=!!b;setStatus($('brandFormStatus'),'品牌是车型的上级主数据。Logo 单独版本化发布，不会因为修改品牌名称覆盖图片文件。');$('brandDialog').showModal()}
+function closeBrandDialog(){$('brandDialog').close();editingBrandId=null}
+$('closeBrandDialog').onclick=closeBrandDialog;$('cancelBrandDialog').onclick=closeBrandDialog;
+$('brandForm').onsubmit=async e=>{e.preventDefault();const body=Object.fromEntries(new FormData(e.currentTarget).entries());try{setStatus($('brandFormStatus'),'正在保存…');const r=await fetch('api/brand/save',{method:'POST',headers:adminHeaders,body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存品牌失败');await loadCatalog();closeBrandDialog()}catch(err){setStatus($('brandFormStatus'),err.message,'error')}};
+async function setBrandStatus(b,isActive){const verb=isActive?'恢复':'下架';if(!confirm(`${verb}品牌 ${b.name}？\n\n下架品牌后，其车型不会再提供给新用户选择；已有用户车辆和历史记录不会删除。`))return;try{const r=await fetch('api/brand/status',{method:'POST',headers:adminHeaders,body:JSON.stringify({brandId:b.brandId,isActive})});const d=await r.json();if(!r.ok)throw new Error(d.error||`${verb}失败`);await loadCatalog()}catch(e){setStatus($('brandStatus'),e.message,'error')}}
+function chooseBrandLogo(b,variant){const input=document.createElement('input');input.type='file';input.accept='image/png,image/webp,.png,.webp';input.onchange=()=>{const file=input.files?.[0];if(file)publishBrandLogo(b,variant,file)};input.click()}
+async function publishBrandLogo(b,variant,file){const label=variant==='light'?'浅色背景版':'深色背景版';setStatus($('brandStatus'),`正在校验并发布 ${b.name} ${label}…`);const body=new FormData();body.append('brandId',b.brandId);body.append('variant',variant);body.append('file',file);try{const r=await fetch('api/brand/logo',{method:'POST',headers:{'X-Hero-Admin-Request':'1'},body});const d=await r.json();if(!r.ok)throw new Error(d.error||'Logo 发布失败');await loadCatalog();setStatus($('brandStatus'),`${b.name} ${label}发布成功 · v${d.version} · 512×512 WebP · ${(d.outputBytes/1024).toFixed(0)} KB`,'ok')}catch(e){setStatus($('brandStatus'),e.message,'error')}}
+
+function renderVehicleBrandOptions(selectedId=null){const select=$('vehicleBrandSelect');if(!select||!catalog)return;const previous=selectedId||select.value;select.innerHTML='';for(const b of catalog.brands||[]){if(b.isActive===false&&b.brandId!==previous)continue;const o=document.createElement('option');o.value=b.brandId;o.textContent=`${b.name}${b.englishName?` · ${b.englishName}`:''}`;select.appendChild(o)}if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous}
 function renderCatalog(){
   if(!catalog)return;
   const q=$('catalogSearch').value.trim().toLowerCase();
@@ -18,16 +55,16 @@ function renderCatalog(){
   for(const v of rows){
     const row=document.createElement('div');row.className='vehicle-row'+(v.isActive===false?' retired':'');row.tabIndex=0;row.setAttribute('role','button');row.setAttribute('aria-label',`查看 ${v.brand} ${v.modelName} 图片`);row.onclick=e=>{if(!e.target.closest('button'))openArtwork(v)};row.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('button')){e.preventDefault();openArtwork(v)}};
     const a=document.createElement('div');const title=document.createElement('div');title.className='vehicle-title';title.textContent=`${v.brand} ${v.modelName}`;const badge=document.createElement('span');badge.className='badge'+(v.isActive===false?' off':'');badge.textContent=v.isActive===false?'已下架':'在用';title.appendChild(badge);const sub=document.createElement('div');sub.className='vehicle-sub';sub.textContent=`${v.trimName||v.series} · ${v.powertrainType} · ${v.catalogId}`;a.append(title,sub);
-    const b=document.createElement('div');b.className='vehicle-facts';b.textContent=`${v.batteryCapacityKwh??'--'} kWh · ${v.rangeKm??'--'} km`;
-    const c=document.createElement('div');c.className='vehicle-facts';c.textContent=`Hero: ${v.heroArtworkKey||'未配置'}`;
+    const b=document.createElement('div');b.className='vehicle-facts';b.textContent=`${v.batteryCapacityKwh??'--'} kWh · ${v.rangeKm??'--'} km${v.rangeStandard?` ${v.rangeStandard}`:''}`;
+    const c=document.createElement('div');c.className='vehicle-facts';c.textContent=`Brand: ${v.brandId||'--'} · Hero: ${v.heroArtworkKey||'未配置'}`;
     const acts=document.createElement('div');acts.className='row-actions';const image=document.createElement('button');image.className='secondary';image.textContent='图片';image.onclick=e=>{e.stopPropagation();openArtwork(v)};const edit=document.createElement('button');edit.className='secondary';edit.textContent='编辑';edit.onclick=e=>{e.stopPropagation();openVehicle(v)};const status=document.createElement('button');status.className=v.isActive===false?'secondary':'danger';status.textContent=v.isActive===false?'恢复':'下架';status.onclick=e=>{e.stopPropagation();setVehicleStatus(v,v.isActive===false)};acts.append(image,edit,status);row.append(a,b,c,acts);$('vehicleList').appendChild(row)
   }
 }
 $('catalogSearch').oninput=renderCatalog;$('addVehicle').onclick=()=>openVehicle(null);
-function openVehicle(v){editingId=v?.catalogId||null;$('dialogTitle').textContent=v?'编辑车型':'新增车型';const f=$('vehicleForm');f.reset();for(const name of ['catalogId','brand','series','modelName','trimName','modelYear','powertrainType','batteryCapacityKwh','rangeKm','heroArtworkKey']){if(v&&v[name]!=null)f.elements[name].value=v[name]}f.elements.catalogId.readOnly=!!v;setStatus($('formStatus'),'保存只更新服务器车型目录；用户已经添加的车辆参数快照不会被改写。');$('vehicleDialog').showModal()}
+function openVehicle(v){editingId=v?.catalogId||null;$('dialogTitle').textContent=v?'编辑车型':'新增车型';const f=$('vehicleForm');f.reset();renderVehicleBrandOptions(v?.brandId||null);for(const name of ['catalogId','series','modelName','trimName','modelYear','powertrainType','batteryCapacityKwh','rangeKm','rangeStandard','heroArtworkKey'])if(v&&v[name]!=null)f.elements[name].value=v[name];f.elements.catalogId.readOnly=!!v;setStatus($('formStatus'),'保存只更新服务器标准车型目录；品牌、车型、电池和续航在 App 中均只读。');$('vehicleDialog').showModal()}
 function closeVehicleDialog(){$('vehicleDialog').close();editingId=null}
 $('closeDialog').onclick=closeVehicleDialog;$('cancelDialog').onclick=closeVehicleDialog;
-$('vehicleForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const fd=new FormData(f);const body=Object.fromEntries(fd.entries());for(const k of ['modelYear','batteryCapacityKwh','rangeKm'])if(body[k]==='')body[k]=null;try{setStatus($('formStatus'),'正在保存…');const r=await fetch('api/catalog/save',{method:'POST',headers:adminHeaders,body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');await loadCatalog();closeVehicleDialog()}catch(err){setStatus($('formStatus'),err.message,'error')}};
+$('vehicleForm').onsubmit=async e=>{e.preventDefault();const f=e.currentTarget;const body=Object.fromEntries(new FormData(f).entries());for(const k of ['modelYear','batteryCapacityKwh','rangeKm'])if(body[k]==='')body[k]=null;try{setStatus($('formStatus'),'正在保存…');const r=await fetch('api/catalog/save',{method:'POST',headers:adminHeaders,body:JSON.stringify(body)});const d=await r.json();if(!r.ok)throw new Error(d.error||'保存失败');await loadCatalog();closeVehicleDialog()}catch(err){setStatus($('formStatus'),err.message,'error')}};
 async function setVehicleStatus(v,isActive){const verb=isActive?'恢复':'下架';if(!confirm(`${verb} ${v.brand} ${v.modelName}？\n\n已添加到用户本地的车辆和历史记录不会被删除。`))return;try{const r=await fetch('api/catalog/status',{method:'POST',headers:adminHeaders,body:JSON.stringify({catalogId:v.catalogId,isActive})});const d=await r.json();if(!r.ok)throw new Error(d.error||`${verb}失败`);await loadCatalog()}catch(e){setStatus($('catalogStatus'),e.message,'error')}}
 
 async function loadHero(){
@@ -66,7 +103,7 @@ async function renderArtworkHistory(root,v,key,art,mainImg,frame){
     const card=document.createElement('div');card.className='history-card'+(item.version===currentVersion?' is-current':'');const thumb=document.createElement('div');thumb.className='history-thumb';const image=document.createElement('img');image.src=item.url;image.alt=`${key} v${item.version}`;image.loading='lazy';thumb.append(image);thumb.onclick=()=>previewHistory(item.url,mainImg,frame);
     const body=document.createElement('div');body.className='history-body';const title=document.createElement('div');title.className='history-title';const version=document.createElement('span');version.textContent=`v${item.version}`;title.append(version);if(item.version===currentVersion){const badge=document.createElement('span');badge.className='badge';badge.textContent='当前';title.append(badge)}const size=document.createElement('div');size.className='history-size';size.textContent=item.bytes?`${(item.bytes/1024).toFixed(0)} KB · immutable WebP`:'immutable WebP';const actions=document.createElement('div');actions.className='history-actions';const preview=document.createElement('button');preview.className='secondary';preview.textContent='预览';preview.onclick=()=>previewHistory(item.url,mainImg,frame);const download=document.createElement('button');download.className='secondary';download.textContent='下载';download.onclick=()=>downloadRemoteArtwork(item.url,key,item.version);actions.append(preview,download);if(item.version!==currentVersion){const rollback=document.createElement('button');rollback.textContent='回滚到此版';rollback.onclick=()=>rollbackArtworkVersion(v,key,item.version,item.url);actions.append(rollback)}body.append(title,size,actions);card.append(thumb,body);list.append(card)
   }
-  section.append(list);if(first>1){const note=document.createElement('div');note.className='history-note';note.textContent=`为避免一次请求过多，页面只检查最近 30 个版本；更早文件仍保留在服务器。`;section.append(note)}
+  section.append(list);if(first>1){const note=document.createElement('div');note.className='history-note';note.textContent='为避免一次请求过多，页面只检查最近 30 个版本；更早文件仍保留在服务器。';section.append(note)}
 }
 function previewHistory(url,mainImg,frame){mainImg.src=url;frame.scrollIntoView({behavior:'smooth',block:'nearest'})}
 async function rollbackArtworkVersion(v,key,sourceVersion,url){
@@ -88,4 +125,4 @@ $('downloadConverted').onclick=()=>{if(convertedBlob&&convertedName)downloadBlob
 function safeFileName(value){return String(value||'image').toLowerCase().replace(/[^a-z0-9._-]+/g,'_').replace(/^_+|_+$/g,'')||'image'}
 function downloadBlob(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500)}
 
-Promise.all([loadCatalog(),loadHero()]).then(renderHeroKeys);
+Promise.all([loadCatalog(),loadHero()]).then(()=>{renderBrands();renderCatalog();renderHeroKeys()});
