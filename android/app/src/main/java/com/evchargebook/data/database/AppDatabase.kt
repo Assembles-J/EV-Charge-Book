@@ -6,11 +6,13 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.evchargebook.data.dao.AutoTripDetectionDao
 import com.evchargebook.data.dao.ChargingRecordDao
 import com.evchargebook.data.dao.TripDao
-import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleCatalogDao
+import com.evchargebook.data.dao.VehicleDao
 import com.evchargebook.data.dao.VehicleStateDao
+import com.evchargebook.data.entity.AutoTripDetectionSessionEntity
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
@@ -27,10 +29,11 @@ import com.evchargebook.data.entity.VehicleStateEntity
         TripSessionEntity::class,
         TripPointEntity::class,
         TripDiagnosticEventEntity::class,
-        VehicleStateEntity::class
+        VehicleStateEntity::class,
+        AutoTripDetectionSessionEntity::class,
     ],
-    version = 12,
-    exportSchema = false
+    version = 13,
+    exportSchema = false,
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun vehicleDao(): VehicleDao
@@ -38,6 +41,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun chargingRecordDao(): ChargingRecordDao
     abstract fun tripDao(): TripDao
     abstract fun vehicleStateDao(): VehicleStateDao
+    abstract fun autoTripDetectionDao(): AutoTripDetectionDao
 
     companion object {
         private val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -166,6 +170,33 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS auto_trip_detection_sessions (
+                        id TEXT NOT NULL,
+                        vehicleId INTEGER NOT NULL,
+                        deviceAddressHash TEXT NOT NULL,
+                        deviceNameSnapshot TEXT,
+                        connectionEpoch TEXT NOT NULL,
+                        state TEXT NOT NULL,
+                        connectedAtEpochMillis INTEGER NOT NULL,
+                        ignoredAtEpochMillis INTEGER,
+                        closedAtEpochMillis INTEGER,
+                        tripId INTEGER,
+                        updatedAtEpochMillis INTEGER NOT NULL,
+                        PRIMARY KEY(id)
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_auto_trip_detection_sessions_vehicleId ON auto_trip_detection_sessions(vehicleId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_auto_trip_detection_sessions_deviceAddressHash ON auto_trip_detection_sessions(deviceAddressHash)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_auto_trip_detection_sessions_state ON auto_trip_detection_sessions(state)")
+                db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS index_auto_trip_detection_sessions_deviceAddressHash_connectionEpoch ON auto_trip_detection_sessions(deviceAddressHash, connectionEpoch)")
+            }
+        }
+
         @Volatile
         private var instance: AppDatabase? = null
 
@@ -187,7 +218,8 @@ abstract class AppDatabase : RoomDatabase() {
                         MIGRATION_8_9,
                         MIGRATION_9_10,
                         MIGRATION_10_11,
-                        MIGRATION_11_12
+                        MIGRATION_11_12,
+                        MIGRATION_12_13,
                     )
                     .build()
                     .also { instance = it }
