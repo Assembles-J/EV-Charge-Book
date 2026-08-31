@@ -65,7 +65,7 @@ fun VehicleScreen(
                     OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Edit, null)
                         Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                        Text("编辑当前车辆")
+                        Text("编辑车辆名称")
                     }
                 }
             } else {
@@ -94,7 +94,7 @@ fun VehicleScreen(
     archiveCandidate?.let { candidate ->
         AlertDialog(
             onDismissRequest = { archiveCandidate = null },
-            title = { Text("归档 ${candidate.brand} ${candidate.model}？") },
+            title = { Text("归档 ${candidate.displayName}？") },
             text = { Text("车辆将不再出现在切换列表中，但历史充电记录仍会保留。") },
             confirmButton = { TextButton(onClick = { onArchive(candidate); archiveCandidate = null }) { Text("归档") } },
             dismissButton = { TextButton(onClick = { archiveCandidate = null }) { Text("取消") } }
@@ -105,7 +105,12 @@ fun VehicleScreen(
 @Composable
 private fun VehicleSpecificationCard(vehicle: VehicleEntity) {
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-        SettingsSectionTitle("车辆规格", "VEHICLE SPECS")
+        SettingsSectionTitle("车辆规格", "VEHICLE SPECS · READ ONLY")
+        Text(
+            "${vehicle.brand} ${vehicle.model} · 标准车型资料由车型库维护",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.large,
@@ -166,11 +171,11 @@ private fun EmptyGarage(onAdd: () -> Unit) {
                 Text("VEHICLE / EMPTY", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
             }
             Text("添加你的第一辆车", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            Text("车辆资料会用于首页主视觉、充电统计和行程记录。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("从后台车型库选择标准车型；车型参数只读，添加后可以修改车辆名称。", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Button(onClick = onAdd, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.Add, null)
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text("添加车辆")
+                Text("选择车型")
             }
         }
     }
@@ -187,8 +192,8 @@ private fun VehicleRow(vehicle: VehicleEntity, onSelect: () -> Unit, onArchive: 
             }
             Spacer(Modifier.width(MaterialTheme.spacing.sm))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("${one(vehicle.batteryCapacityKwh)} kWh · ${vehicle.rangeKm} km", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(vehicle.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("${vehicle.brand} ${vehicle.model}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onSelect) { Text("切换") }
             IconButton(onClick = onArchive) { Icon(Icons.Default.Archive, "归档车辆", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
