@@ -10,7 +10,7 @@ import org.junit.Test
 
 class TripDiagnosticExporterTest {
     @Test
-    fun `exports trip summary events and point deltas without interpolation`() {
+    fun `exports trip summary events point deltas and environment without interpolation`() {
         val trip = TripSessionEntity(
             id = 42L,
             vehicleId = 7L,
@@ -51,10 +51,24 @@ class TripDiagnosticExporterTest {
             )
         )
 
-        val csv = TripDiagnosticExporter.toCsv(trip, points, events)
+        val csv = TripDiagnosticExporter.toCsv(
+            trip = trip,
+            points = points,
+            events = events,
+            environment = mapOf(
+                "appVersion" to "0.7-test",
+                "manufacturer" to "Example",
+                "model" to "Device X",
+                "sdkInt" to "36",
+            ),
+        )
 
         assertTrue(csv.contains("# tripId=42"))
         assertTrue(csv.contains("# status=COMPLETED"))
+        assertTrue(csv.contains("# env.appVersion=0.7-test"))
+        assertTrue(csv.contains("# env.manufacturer=Example"))
+        assertTrue(csv.contains("# env.model=Device X"))
+        assertTrue(csv.contains("# env.sdkInt=36"))
         assertTrue(csv.contains("LOCATION_CALLBACK_GAP"))
         assertTrue(csv.contains("8500,6500,"))
         assertTrue(csv.contains("\"gps\""))
