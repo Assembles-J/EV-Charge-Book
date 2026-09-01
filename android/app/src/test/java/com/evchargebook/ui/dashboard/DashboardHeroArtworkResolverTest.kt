@@ -28,14 +28,14 @@ class DashboardHeroArtworkResolverTest {
     }
 
     @Test
-    fun `legacy C16 without catalog identity resolves from managed brand and series`() {
-        val vehicle = vehicle(catalogVehicleId = null, model = "C16")
+    fun `legacy C16 backup without catalog identity resolves from managed brand and model`() {
+        val vehicle = vehicle(catalogVehicleId = null, model = "C16 2026款")
         assertEquals("leapmotor-c16-2026", DashboardHeroArtworkResolver.resolve(vehicle, listOf(c16)))
     }
 
     @Test
     fun `legacy model never crosses brand boundary`() {
-        val vehicle = vehicle(catalogVehicleId = null, brand = "其他品牌", model = "C16")
+        val vehicle = vehicle(catalogVehicleId = null, brand = "其他品牌", model = "C16 2026款")
         assertNull(DashboardHeroArtworkResolver.resolve(vehicle, listOf(c16)))
     }
 
@@ -48,7 +48,7 @@ class DashboardHeroArtworkResolverTest {
         catalogVehicleId = catalogVehicleId,
         brand = brand,
         model = model,
-        batteryCapacityKwh = 67.7,
-        rangeKm = 520,
+        batteryCapacityKwh = 81.9,
+        rangeKm = 630,
     )
 }
