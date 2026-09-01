@@ -32,34 +32,7 @@ object TripDiagnosticExporter {
         appendLine("# maxSpeedMps=${nullableNumber(trip.maxSpeedMps)}")
         appendLine("# points=${points.size}")
         appendLine("# diagnosticEvents=${events.size}")
-        appendLine()
-        appendLine("[events]")
-        appendLine("occurredAtEpochMillis,type,provider,detail")
-        events.sortedBy { it.occurredAtEpochMillis }.forEach { event ->
-            append(event.occurredAtEpochMillis).append(',')
-            append(csv(event.type)).append(',')
-            append(csv(event.provider)).append(',')
-            appendLine(csv(event.detail))
-        }
-        appendLine()
-        appendLine("[points]")
-        appendLine("capturedAtEpochMillis,deltaMs,latitude,longitude,altitudeMeters,speedMps,bearingDegrees,horizontalAccuracyMeters,verticalAccuracyMeters,speedAccuracyMps,provider")
-        var previousTimestamp: Long? = null
-        points.sortedBy { it.capturedAtEpochMillis }.forEach { point ->
-            val deltaMs = previousTimestamp?.let { point.capturedAtEpochMillis - it }
-            append(point.capturedAtEpochMillis).append(',')
-            append(deltaMs ?: "").append(',')
-            append(number(point.latitude)).append(',')
-            append(number(point.longitude)).append(',')
-            append(nullableNumber(point.altitudeMeters)).append(',')
-            append(nullableNumber(point.speedMps)).append(',')
-            append(nullableNumber(point.bearingDegrees)).append(',')
-            append(nullableNumber(point.horizontalAccuracyMeters)).append(',')
-            append(nullableNumber(point.verticalAccuracyMeters)).append(',')
-            append(nullableNumber(point.speedAccuracyMps)).append(',')
-            appendLine(csv(point.provider))
-            previousTimestamp = point.capturedAtEpochMillis
-        }
+        appendDiagnostics(points, events)
     }
 
     fun toCsv(
@@ -71,6 +44,13 @@ object TripDiagnosticExporter {
         appendLine("# tripId=$tripId")
         appendLine("# points=${points.size}")
         appendLine("# diagnosticEvents=${events.size}")
+        appendDiagnostics(points, events)
+    }
+
+    private fun StringBuilder.appendDiagnostics(
+        points: List<TripPointEntity>,
+        events: List<TripDiagnosticEventEntity>,
+    ) {
         appendLine()
         appendLine("[events]")
         appendLine("occurredAtEpochMillis,type,provider,detail")
