@@ -78,7 +78,14 @@ fun TripScreen(
         trips.firstOrNull { it.id == id } ?: activeTrip?.takeIf { it.id == id }
     }
     if (selectedTrip != null) {
-        TripDetailScreenV06(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
+        Box(Modifier.fillMaxSize()) {
+            TripDetailScreenV06(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
+            TripDiagnosticExportAction(
+                trip = selectedTrip,
+                points = selectedTripPoints,
+                modifier = Modifier.align(Alignment.BottomEnd)
+            )
+        }
         return
     }
 
