@@ -1,5 +1,6 @@
 package com.evchargebook.ui.trip
 
+import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -18,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.evchargebook.BuildConfig
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
@@ -81,7 +83,19 @@ internal fun TripDiagnosticExportAction(
                             .tripDao()
                             .getDiagnosticEvents(trip.id)
                     }
-                    TripDiagnosticExporter.toCsv(trip, points, events)
+                    TripDiagnosticExporter.toCsv(
+                        trip = trip,
+                        points = points,
+                        events = events,
+                        environment = mapOf(
+                            "appVersion" to BuildConfig.VERSION_NAME,
+                            "sdkInt" to Build.VERSION.SDK_INT.toString(),
+                            "manufacturer" to Build.MANUFACTURER,
+                            "brand" to Build.BRAND,
+                            "model" to Build.MODEL,
+                            "device" to Build.DEVICE,
+                        ),
+                    )
                 }.onSuccess { content ->
                     pendingContent = content
                     val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
