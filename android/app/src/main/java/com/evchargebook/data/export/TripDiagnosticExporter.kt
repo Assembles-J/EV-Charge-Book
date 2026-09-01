@@ -17,6 +17,7 @@ object TripDiagnosticExporter {
         trip: TripSessionEntity,
         points: List<TripPointEntity>,
         events: List<TripDiagnosticEventEntity>,
+        environment: Map<String, String> = emptyMap(),
     ): String = buildString {
         appendLine("# EV Charge Book Trip GPS diagnostics")
         appendLine("# tripId=${trip.id}")
@@ -30,6 +31,9 @@ object TripDiagnosticExporter {
         appendLine("# stoppedSeconds=${trip.stoppedSeconds ?: ""}")
         appendLine("# averageSpeedMps=${nullableNumber(trip.averageSpeedMps)}")
         appendLine("# maxSpeedMps=${nullableNumber(trip.maxSpeedMps)}")
+        environment.toSortedMap().forEach { (key, value) ->
+            appendLine("# env.${safeHeader(key)}=${safeHeader(value)}")
+        }
         appendLine("# points=${points.size}")
         appendLine("# diagnosticEvents=${events.size}")
         appendDiagnostics(points, events)
@@ -84,6 +88,8 @@ object TripDiagnosticExporter {
             previousTimestamp = point.capturedAtEpochMillis
         }
     }
+
+    private fun safeHeader(value: String): String = value.replace('\n', ' ').replace('\r', ' ')
 
     private fun csv(value: String?): String {
         if (value.isNullOrEmpty()) return ""
