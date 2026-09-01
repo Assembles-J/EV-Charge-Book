@@ -73,4 +73,32 @@ class TripDiagnosticExporterTest {
         assertTrue(csv.contains("8500,6500,"))
         assertTrue(csv.contains("\"gps\""))
     }
+
+    @Test
+    fun `long gap under three kilometres is exported only as an estimate candidate`() {
+        val points = listOf(
+            TripPointEntity(
+                id = 1L,
+                tripId = 42L,
+                capturedAtEpochMillis = 1_000L,
+                latitude = 31.0000,
+                longitude = 121.0000,
+                provider = "gps",
+            ),
+            TripPointEntity(
+                id = 2L,
+                tripId = 42L,
+                capturedAtEpochMillis = 121_000L,
+                latitude = 31.0010,
+                longitude = 121.0010,
+                provider = "gps",
+            ),
+        )
+
+        val csv = TripDiagnosticExporter.toCsv(42L, points, emptyList())
+
+        assertTrue(csv.contains("[longGaps]"))
+        assertTrue(csv.contains("1000,121000,120000,"))
+        assertTrue(csv.contains(",true\n"))
+    }
 }
