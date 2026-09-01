@@ -6,11 +6,13 @@ import androidx.lifecycle.viewModelScope
 import com.evchargebook.bluetooth.BluetoothPromptSettings
 import com.evchargebook.bluetooth.PairedBluetoothDevice
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.data.repository.StartChargingSessionRequest
 import com.evchargebook.domain.ChargerCategorySummary
 import com.evchargebook.domain.ChargerTypeAnalytics
 import com.evchargebook.domain.ChargingIntervalAnalytics
@@ -38,6 +40,7 @@ data class MainUiState(
     val bluetoothSettings: BluetoothPromptSettings = BluetoothPromptSettings(),
     val pairedBluetoothDevices: List<PairedBluetoothDevice> = emptyList(),
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
+    val activeChargingSession: ChargingSessionEntity? = null,
     val trips: List<TripSessionEntity> = emptyList(),
     val activeTrip: TripSessionEntity? = null,
     val selectedTripId: Long? = null,
@@ -76,6 +79,7 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch { repository.ensureDefaultVehicle() }
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
+        viewModelScope.launch { repository.activeChargingSession.collect { session -> _uiState.value = _uiState.value.copy(activeChargingSession = session) } }
         viewModelScope.launch {
             repository.vehicleState.collect { vehicleState ->
                 _uiState.value = _uiState.value.copy(
@@ -144,8 +148,9 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch {
             runCatching { repository.exportBackup(appVersion) }
                 .onSuccess { content ->
-                    if (_uiState.value.activeTrip != null) {
-                        _uiState.value = _uiState.value.copy(successMessage = "已生成备份；当前行程仍在进行，这是进行中快照")
+                    when {
+                        _uiState.value.activeTrip != null -> _uiState.value = _uiState.value.copy(successMessage = "已生成备份；当前行程仍在进行，这是进行中快照")
+                        _uiState.value.activeChargingSession != null -> _uiState.value = _uiState.value.copy(successMessage = "已生成备份；当前充电会话已包含在快照中")
                     }
                     onReady(content)
                 }
@@ -154,14 +159,38 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     }
 
     fun restoreBackup(content: String) {
-        if (_uiState.value.activeTrip != null) {
-            _uiState.value = _uiState.value.copy(errorMessage = "行程进行中，结束行程后才能恢复备份")
+        if (_uiState.value.activeTrip != null || _uiState.value.activeChargingSession != null) {
+            _uiState.value = _uiState.value.copy(errorMessage = "有进行中的行程或充电，请结束后再恢复备份")
             return
         }
         viewModelScope.launch {
             runCatching { repository.restoreBackup(content) }
                 .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "本地备份已恢复") }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "备份恢复失败") }
+        }
+    }
+
+    fun startChargingSession(request: StartChargingSessionRequest) {
+        viewModelScope.launch {
+            runCatching { repository.startChargingSession(request) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电已开始记录") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法开始充电") }
+        }
+    }
+
+    fun updateActiveChargingSession(session: ChargingSessionEntity) {
+        viewModelScope.launch {
+            runCatching { repository.updateActiveChargingSession(session) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "充电信息已更新") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法更新充电信息") }
+        }
+    }
+
+    fun cancelChargingSession(sessionId: String) {
+        viewModelScope.launch {
+            runCatching { repository.cancelChargingSession(sessionId) }
+                .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "已取消本次充电记录") }
+                .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法取消充电") }
         }
     }
 
@@ -209,11 +238,13 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
 
     fun selectVehicle(vehicleId: Long) {
         val activeTrip = _uiState.value.activeTrip
+        val activeCharging = _uiState.value.activeChargingSession
         viewModelScope.launch {
             runCatching { repository.selectVehicle(vehicleId) }
                 .onSuccess {
-                    if (activeTrip != null && activeTrip.vehicleId != vehicleId) {
-                        _uiState.value = _uiState.value.copy(successMessage = "已切换当前车辆；正在进行的行程仍归属原车辆")
+                    when {
+                        activeTrip != null && activeTrip.vehicleId != vehicleId -> _uiState.value = _uiState.value.copy(successMessage = "已切换当前车辆；正在进行的行程仍归属原车辆")
+                        activeCharging != null && activeCharging.vehicleId != vehicleId -> _uiState.value = _uiState.value.copy(successMessage = "已切换当前车辆；正在进行的充电仍归属原车辆")
                     }
                 }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message) }
@@ -221,8 +252,8 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     }
 
     fun archiveVehicle(vehicleId: Long) {
-        if (_uiState.value.activeTrip?.vehicleId == vehicleId) {
-            _uiState.value = _uiState.value.copy(errorMessage = "该车辆正在记录行程，请结束行程后再归档")
+        if (_uiState.value.activeTrip?.vehicleId == vehicleId || _uiState.value.activeChargingSession?.vehicleId == vehicleId) {
+            _uiState.value = _uiState.value.copy(errorMessage = "该车辆有进行中的行程或充电，请结束后再归档")
             return
         }
         viewModelScope.launch {

@@ -38,6 +38,7 @@ import com.evchargebook.ui.dashboard.DashboardScreen
 import com.evchargebook.ui.records.AddRecordScreen
 import com.evchargebook.ui.records.RecordEditScreen
 import com.evchargebook.ui.records.RecordsScreen
+import com.evchargebook.ui.records.StartChargingScreen
 import com.evchargebook.ui.stats.StatsScreen
 import com.evchargebook.ui.theme.EvChargeTheme
 import com.evchargebook.ui.theme.LocalAppThemeController
@@ -121,6 +122,8 @@ fun MainApp(
     var openBluetoothAfterNotificationPermission by remember { mutableStateOf(false) }
     var catalogSelection by remember { mutableStateOf<com.evchargebook.data.entity.VehicleCatalogEntity?>(null) }
     var addRecord by remember { mutableStateOf(false) }
+    var startCharging by remember { mutableStateOf(false) }
+    var editActiveCharging by remember { mutableStateOf(false) }
     var editingRecord by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingExportContent by remember { mutableStateOf<String?>(null) }
     var pendingCsvContent by remember { mutableStateOf<String?>(null) }
@@ -305,7 +308,7 @@ fun MainApp(
         showTripCompletion = true
     }
 
-    val hasOverlayPage = showTripCompletion || editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || editingRecord != null || state.selectedTripId != null
+    val hasOverlayPage = showTripCompletion || editVehicle || addVehicle || selectCatalogVehicle || bluetoothPrompt || addRecord || startCharging || editActiveCharging || editingRecord != null || state.selectedTripId != null
     val themeController = LocalAppThemeController.current
     SideEffect {
         (context as? Activity)?.window?.let { window ->
@@ -320,6 +323,8 @@ fun MainApp(
             showTripCompletion -> showTripCompletion = false
             state.selectedTripId != null -> viewModel.closeTripDetail()
             editingRecord != null -> editingRecord = null
+            editActiveCharging -> editActiveCharging = false
+            startCharging -> startCharging = false
             addRecord -> addRecord = false
             bluetoothPrompt -> bluetoothPrompt = false
             selectCatalogVehicle -> selectCatalogVehicle = false
@@ -411,6 +416,26 @@ fun MainApp(
     ) { padding ->
         Surface(Modifier.padding(padding), color = MaterialTheme.colorScheme.background) {
             when {
+                startCharging || editActiveCharging -> state.vehicle?.let { vehicle ->
+                    StartChargingScreen(
+                        vehicle = vehicle,
+                        currentSoc = state.currentSoc,
+                        commonPlaces = state.chargingPlaceSummary.map { it.displayName },
+                        existingSession = state.activeChargingSession.takeIf { editActiveCharging },
+                        onBack = {
+                            startCharging = false
+                            editActiveCharging = false
+                        },
+                        onStart = { request ->
+                            viewModel.startChargingSession(request)
+                            startCharging = false
+                        },
+                        onUpdate = { session ->
+                            viewModel.updateActiveChargingSession(session)
+                            editActiveCharging = false
+                        },
+                    )
+                }
                 addRecord -> AddRecordScreen(
                     vehicleId = state.vehicle?.id ?: 0L,
                     records = state.chargingRecords,
@@ -490,7 +515,22 @@ fun MainApp(
                         onOpenChargingRecords = { tab = 1 },
                         onEditChargingRecord = { editingRecord = it }
                     )
-                    1 -> RecordsScreen(state.chargingRecords, viewModel::deleteChargingRecord, { addRecord = true }, { editingRecord = it })
+                    1 -> RecordsScreen(
+                        records = state.chargingRecords,
+                        activeSession = state.activeChargingSession,
+                        onDelete = viewModel::deleteChargingRecord,
+                        onStartCharging = {
+                            if (state.vehicle == null) {
+                                scope.launch { snackbarHostState.showSnackbar("请先添加并选择车辆") }
+                            } else if (state.activeChargingSession == null) {
+                                startCharging = true
+                            }
+                        },
+                        onMaintainRecord = { addRecord = true },
+                        onEdit = { editingRecord = it },
+                        onEditActive = { editActiveCharging = true },
+                        onCancelActive = { session -> viewModel.cancelChargingSession(session.id) },
+                    )
                     2 -> StatsScreen(state)
                     3 -> {
                         if (state.activeTrip == null && state.selectedTripId == null) {
@@ -563,7 +603,7 @@ fun MainApp(
         AlertDialog(
             onDismissRequest = { pendingRestoreContent = null },
             title = { Text("覆盖当前本地数据？") },
-            text = { Text("恢复备份会删除当前车辆、充电记录和行程数据，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
+            text = { Text("恢复备份会删除当前车辆、充电记录、充电会话和行程数据，再写入备份内容。此操作不可撤销，建议先导出当前备份。") },
             confirmButton = { TextButton(onClick = { pendingRestoreContent = null; viewModel.restoreBackup(content) }) { Text("确认恢复", color = MaterialTheme.colorScheme.error) } },
             dismissButton = { TextButton(onClick = { pendingRestoreContent = null }) { Text("取消") } }
         )

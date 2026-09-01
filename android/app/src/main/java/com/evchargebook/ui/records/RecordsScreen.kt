@@ -18,24 +18,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SmallFloatingActionButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -45,9 +47,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
+import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
+import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -57,11 +61,16 @@ import java.util.Locale
 @Composable
 fun RecordsScreen(
     records: List<ChargingRecordEntity>,
+    activeSession: ChargingSessionEntity?,
     onDelete: (ChargingRecordEntity) -> Unit,
-    onAdd: () -> Unit,
-    onEdit: (ChargingRecordEntity) -> Unit
+    onStartCharging: () -> Unit,
+    onMaintainRecord: () -> Unit,
+    onEdit: (ChargingRecordEntity) -> Unit,
+    onEditActive: (ChargingSessionEntity) -> Unit,
+    onCancelActive: (ChargingSessionEntity) -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<ChargingRecordEntity?>(null) }
+    var pendingCancel by remember { mutableStateOf<ChargingSessionEntity?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -70,37 +79,57 @@ fun RecordsScreen(
                 title = {
                     Text("充电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
-        floatingActionButton = {
-            SmallFloatingActionButton(onClick = onAdd) {
-                Icon(Icons.Default.Add, contentDescription = "记录充电")
-            }
-        }
     ) { padding ->
-        if (records.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(padding)) {
-                EmptyState("还没有充电记录", "从第一笔充电开始建立你的能耗账本。", "记录第一次充电", onAdd)
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+        ) {
+            item {
+                ChargingEntryActions(
+                    hasActiveSession = activeSession != null,
+                    onStartCharging = onStartCharging,
+                    onMaintainRecord = onMaintainRecord,
+                )
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-            ) {
+
+            activeSession?.let { session ->
+                item {
+                    ActiveChargingCard(
+                        session = session,
+                        onEdit = { onEditActive(session) },
+                        onCancel = { pendingCancel = session },
+                    )
+                }
+            }
+
+            if (records.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().height(260.dp)) {
+                        EmptyState(
+                            "还没有已完成的充电记录",
+                            if (activeSession != null) "当前充电仍在进行；完成后会进入历史账本。" else "可以开始记录充电，也可以补录已有账单。",
+                            "补录历史充电",
+                            onMaintainRecord,
+                        )
+                    }
+                }
+            } else {
                 item { LedgerSummaryV06(records) }
                 item {
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(top = MaterialTheme.spacing.xs),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text("最近记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                         Spacer(Modifier.weight(1f))
                         Text(
                             "${records.size} 笔",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -108,11 +137,11 @@ fun RecordsScreen(
                     RecordTimelineItemV06(
                         record = record,
                         onEdit = { onEdit(record) },
-                        onDelete = { pendingDelete = record }
+                        onDelete = { pendingDelete = record },
                     )
                 }
-                item { Spacer(Modifier.height(64.dp)) }
             }
+            item { Spacer(Modifier.height(MaterialTheme.spacing.lg)) }
         }
     }
 
@@ -126,8 +155,130 @@ fun RecordsScreen(
                     Text("删除", color = MaterialTheme.colorScheme.error)
                 }
             },
-            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } }
+            dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("取消") } },
         )
+    }
+
+    pendingCancel?.let { session ->
+        AlertDialog(
+            onDismissRequest = { pendingCancel = null },
+            title = { Text("取消这次充电？") },
+            text = { Text("取消只结束本地进行中会话，不会生成一笔已完成充电记录。") },
+            confirmButton = {
+                TextButton(onClick = { onCancelActive(session); pendingCancel = null }) {
+                    Text("取消本次充电", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingCancel = null }) { Text("继续记录") } },
+        )
+    }
+}
+
+@Composable
+private fun ChargingEntryActions(
+    hasActiveSession: Boolean,
+    onStartCharging: () -> Unit,
+    onMaintainRecord: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+    ) {
+        Button(
+            onClick = onStartCharging,
+            enabled = !hasActiveSession,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text(if (hasActiveSession) "充电进行中" else "开始充电")
+        }
+        OutlinedButton(
+            onClick = onMaintainRecord,
+            modifier = Modifier.weight(1f),
+        ) {
+            Text("充电记录维护")
+        }
+    }
+}
+
+@Composable
+private fun ActiveChargingCard(
+    session: ChargingSessionEntity,
+    onEdit: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    var now by remember(session.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(session.id) {
+        while (true) {
+            delay(30_000)
+            now = System.currentTimeMillis()
+        }
+    }
+    val elapsed = (now - session.startedAtEpochMillis).coerceAtLeast(0L)
+    val facts = listOfNotNull(
+        session.chargerType?.takeIf { it.isNotBlank() },
+        session.startSoc?.let { "开始 $it%" },
+        session.targetSoc?.let { "目标 $it%" },
+        session.unitPricePerKwh?.let { "¥${two(it)}/kWh" },
+    )
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("充电中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    formatElapsed(elapsed),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+            Text(
+                session.location?.takeIf { it.isNotBlank() } ?: "未记录充电地点",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                "开始于 ${format(session.startedAtEpochMillis)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (facts.isNotEmpty()) {
+                Text(
+                    facts.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            session.remark?.takeIf { it.isNotBlank() }?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onCancel) { Text("取消") }
+                TextButton(onClick = onEdit) { Text("编辑") }
+            }
+        }
     }
 }
 
@@ -139,17 +290,17 @@ private fun LedgerSummaryV06(records: List<ChargingRecordEntity>) {
     val metrics = listOf(
         "电网补能" to "${one(totalEnergy)} kWh",
         "记录" to "${records.size} 笔",
-        "桩端均价" to "¥ ${two(averagePrice)}"
+        "桩端均价" to "¥ ${two(averagePrice)}",
     )
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
@@ -157,16 +308,14 @@ private fun LedgerSummaryV06(records: List<ChargingRecordEntity>) {
                 Text(
                     "累计账本",
                     style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("累计支出", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(
-                    "¥ ${two(totalCost)}",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
+            Row(verticalAlignment = Alignment.Bottom) {
+                Column {
+                    Text("累计支出", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("¥ ${two(totalCost)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .24f))
             ResponsiveMetricGrid(metrics.size) { index, modifier ->
@@ -189,20 +338,20 @@ private fun LedgerMetricV06(label: String, value: String, modifier: Modifier) {
 private fun RecordTimelineItemV06(
     record: ChargingRecordEntity,
     onEdit: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onEdit)
             .padding(vertical = MaterialTheme.spacing.xs),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.Top,
     ) {
         ChargingRailV06()
         Spacer(Modifier.width(MaterialTheme.spacing.sm))
         Column(
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp)
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
@@ -211,25 +360,21 @@ private fun RecordTimelineItemV06(
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis,
                     )
                     Text(
                         format(record.chargeTimeEpochMillis),
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 Spacer(Modifier.width(MaterialTheme.spacing.sm))
                 Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "¥ ${two(record.cost)}",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                     Text(
                         "+${one(record.energyKwh)} kWh",
                         style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
             }
@@ -238,11 +383,11 @@ private fun RecordTimelineItemV06(
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
                         "SOC ${record.startSoc}% → ${record.endSoc}% · ¥ ${two(record.pricePerKwh)}/kWh",
-                        style = MaterialTheme.typography.bodySmall
+                        style = MaterialTheme.typography.bodySmall,
                     )
                     val extras = listOfNotNull(
                         record.chargerType?.takeIf { it.isNotBlank() },
-                        record.odometerKm?.let { "里程 ${formatKm(it)} km" }
+                        record.odometerKm?.let { "里程 ${formatKm(it)} km" },
                     )
                     if (extras.isNotEmpty()) {
                         Text(
@@ -250,7 +395,7 @@ private fun RecordTimelineItemV06(
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
                         )
                     }
                 }
@@ -259,7 +404,7 @@ private fun RecordTimelineItemV06(
                         Icons.Default.DeleteOutline,
                         contentDescription = "删除此记录",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(18.dp),
                     )
                 }
             }
@@ -274,14 +419,14 @@ private fun ChargingRailV06() {
         Surface(
             modifier = Modifier.size(28.dp),
             shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary.copy(alpha = .10f)
+            color = MaterialTheme.colorScheme.primary.copy(alpha = .10f),
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Icon(
                     Icons.Default.Bolt,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(15.dp),
                 )
             }
         }
@@ -289,7 +434,7 @@ private fun ChargingRailV06() {
             Modifier
                 .width(1.dp)
                 .height(66.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = .32f))
+                .background(MaterialTheme.colorScheme.outline.copy(alpha = .32f)),
         )
     }
 }
@@ -298,6 +443,13 @@ private fun format(value: Long) = DateTimeFormatter.ofPattern("M月d日 HH:mm")
     .withLocale(Locale.SIMPLIFIED_CHINESE)
     .withZone(ZoneId.systemDefault())
     .format(Instant.ofEpochMilli(value))
+
+private fun formatElapsed(milliseconds: Long): String {
+    val totalMinutes = milliseconds / 60_000L
+    val hours = totalMinutes / 60L
+    val minutes = totalMinutes % 60L
+    return if (hours > 0L) "${hours}小时${minutes}分" else "${minutes}分钟"
+}
 
 private fun formatKm(value: Double) =
     if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
