@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.ErrorOutline
 import androidx.compose.material.icons.rounded.SystemUpdateAlt
 import androidx.compose.material3.AlertDialog
@@ -33,16 +32,14 @@ import com.evchargebook.ui.theme.EVDesignTokens
 /**
  * Release-only update flow.
  *
- * There is deliberately no floating Popup while an APK is downloading. A Popup creates a
- * separate Android window and physical devices can report a touchable region that does not
- * exactly match its translated visual bounds. That made normal Dashboard/navigation controls
- * untappable even though the updater looked non-modal.
+ * The app shows exactly one update-information decision dialog per discovered version. After the
+ * user confirms, DownloadManager owns the background transfer and the verified APK is handed
+ * directly to Android's package installer. There is deliberately no second app-level "ready to
+ * install" dialog: Android's installer is already the authoritative final confirmation surface.
  *
- * The updater is modal only at explicit decision points:
- * 1. ask before download;
- * 2. ask after the verified APK is ready to install.
- *
- * DownloadManager owns progress in between, so every app screen remains fully interactive.
+ * A separate permission explanation is only shown when Android blocks package installation from
+ * this source. Download progress stays in the system notification so normal app navigation remains
+ * fully interactive while the APK is being downloaded and verified.
  */
 @Composable
 fun AppUpdatePrompt() {
@@ -65,9 +62,8 @@ fun AppUpdatePrompt() {
 
         when (restored) {
             is RestoredUpdateDownload.Ready -> {
-                // Install-ready state is durable, so it must win over in-memory prompt dedupe.
-                // If Activity/Compose state is recreated while the verified APK still exists,
-                // always restore the install action rather than silently hiding the update.
+                // A verified package is already durable. Skip any second update-information dialog
+                // and continue directly to the Android installer/permission handoff.
                 update = restored.info
                 downloadedUri = restored.uri
                 phase = UpdatePhase.READY
@@ -124,6 +120,25 @@ fun AppUpdatePrompt() {
             }
     }
 
+    // READY is a transient handoff state, not another information dialog. Move to INSTALLING before
+    // launching any external Activity so recomposition/resume cannot launch the installer twice.
+    LaunchedEffect(phase, downloadedUri) {
+        if (phase != UpdatePhase.READY) return@LaunchedEffect
+        val uri = downloadedUri ?: return@LaunchedEffect
+        if (!manager.canRequestPackageInstalls()) {
+            phase = UpdatePhase.PERMISSION_REQUIRED
+            manager.openInstallPermissionSettings(activity)
+        } else {
+            phase = UpdatePhase.INSTALLING
+            runCatching { manager.launchInstaller(activity, uri) }
+                .onFailure { error ->
+                    Log.w(TAG, "Failed to launch package installer", error)
+                    errorMessage = error.message ?: "无法打开 Android 系统安装界面"
+                    phase = UpdatePhase.FAILED
+                }
+        }
+    }
+
     val info = update
 
     fun deferOptionalUpdate() {
@@ -135,7 +150,7 @@ fun AppUpdatePrompt() {
 
     fun startDownload() {
         if (info == null) return
-        // Hide the decision dialog synchronously before starting background work.
+        // Hide the only update-information decision dialog synchronously before background work.
         phase = UpdatePhase.DOWNLOADING
         resumeDownloadId = null
         downloadToken += 1
@@ -147,13 +162,21 @@ fun AppUpdatePrompt() {
             phase = UpdatePhase.PERMISSION_REQUIRED
             manager.openInstallPermissionSettings(activity)
         } else {
-            manager.launchInstaller(activity, uri)
+            phase = UpdatePhase.INSTALLING
+            runCatching { manager.launchInstaller(activity, uri) }
+                .onFailure { error ->
+                    Log.w(TAG, "Failed to launch package installer", error)
+                    errorMessage = error.message ?: "无法打开 Android 系统安装界面"
+                    phase = UpdatePhase.FAILED
+                }
         }
     }
 
     when (phase) {
         UpdatePhase.IDLE,
-        UpdatePhase.DOWNLOADING -> Unit
+        UpdatePhase.DOWNLOADING,
+        UpdatePhase.READY,
+        UpdatePhase.INSTALLING -> Unit
 
         UpdatePhase.DISCOVERED -> {
             val current = info ?: return
@@ -164,7 +187,7 @@ fun AppUpdatePrompt() {
                 lines = listOf(
                     "是否现在下载更新？",
                     "确认后由 Android 下载管理器在后台下载并校验，进度会显示在系统通知栏。",
-                    "下载期间总览、记录、统计、行程和车辆页面都可以正常使用。"
+                    "校验成功后会直接进入 Android 系统安装界面，不再重复显示更新信息。"
                 ),
                 confirmText = "更新",
                 dismissText = if (current.mandatory) null else "稍后",
@@ -173,31 +196,14 @@ fun AppUpdatePrompt() {
             )
         }
 
-        UpdatePhase.READY -> {
-            val current = info ?: return
-            UpdateDecisionDialog(
-                icon = Icons.Rounded.CheckCircle,
-                accent = EVDesignTokens.Energy.success,
-                title = "${current.versionName} 已准备好",
-                lines = listOf(
-                    "更新包已下载并通过 SHA-256 完整性校验。",
-                    "点击安装后会进入 Android 系统安装界面；即使关闭并重新打开 App，也不会重复下载。"
-                ),
-                confirmText = "安装",
-                dismissText = if (current.mandatory) null else "稍后",
-                onConfirm = ::continueInstall,
-                onDismiss = ::deferOptionalUpdate
-            )
-        }
-
         UpdatePhase.PERMISSION_REQUIRED -> {
             val current = info ?: return
             UpdateDecisionDialog(
-                icon = Icons.Rounded.CheckCircle,
+                icon = Icons.Rounded.SystemUpdateAlt,
                 accent = EVDesignTokens.Energy.warning,
                 title = "允许安装此来源应用",
                 lines = listOf(
-                    "Android 需要先允许 EV Charge Book 安装下载的更新包。",
+                    "Android 需要先允许 EV Charge Book 安装已经下载并校验通过的更新包。",
                     "完成系统授权后返回这里，再点击继续安装。"
                 ),
                 confirmText = "继续安装",
@@ -214,9 +220,9 @@ fun AppUpdatePrompt() {
                 accent = EVDesignTokens.Energy.danger,
                 title = "更新失败",
                 lines = listOf(errorMessage ?: "更新包下载失败，请稍后重试"),
-                confirmText = "重试",
+                confirmText = if (downloadedUri == null) "重试" else "重试安装",
                 dismissText = if (current.mandatory) null else "稍后",
-                onConfirm = ::startDownload,
+                onConfirm = if (downloadedUri == null) ::startDownload else ::continueInstall,
                 onDismiss = ::deferOptionalUpdate
             )
         }
@@ -301,6 +307,7 @@ private enum class UpdatePhase {
     DISCOVERED,
     DOWNLOADING,
     READY,
+    INSTALLING,
     PERMISSION_REQUIRED,
     FAILED
 }
