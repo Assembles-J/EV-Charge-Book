@@ -80,6 +80,12 @@ fun TripScreen(
     if (selectedTrip != null) {
         Box(Modifier.fillMaxSize()) {
             TripDetailScreenV06(selectedTrip, vehicles, selectedTripPoints, onCloseDetail)
+            TripPlaybackOverlayAction(
+                points = selectedTripPoints,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(end = 20.dp, bottom = 88.dp)
+            )
             TripDiagnosticExportAction(
                 trip = selectedTrip,
                 points = selectedTripPoints,
