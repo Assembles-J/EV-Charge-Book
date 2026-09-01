@@ -89,7 +89,7 @@ internal fun TripTrendPlotV06(
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
                 text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, minTime, unit) }
-                    ?: "双指平移/缩放 · 点按或长按拖动读点",
+                    ?: "长按左右拖动读点 · 双指缩放/平移",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1
@@ -210,14 +210,21 @@ internal fun TripTrendPlotV06(
 
                 selectedSample?.takeIf { it.timestamp in visibleStartTime..visibleEndTime }?.let { sample ->
                     val selected = point(sample)
+                    val crosshairColor = gridColor.copy(alpha = 0.85f)
                     drawLine(
-                        color = gridColor.copy(alpha = 0.75f),
+                        color = crosshairColor,
                         start = Offset(selected.x, 0f),
                         end = Offset(selected.x, size.height),
                         strokeWidth = 1.dp.toPx()
                     )
-                    drawCircle(accent.copy(alpha = 0.22f), radius = 6.dp.toPx(), center = selected)
-                    drawCircle(accent, radius = 3.dp.toPx(), center = selected)
+                    drawLine(
+                        color = crosshairColor,
+                        start = Offset(0f, selected.y),
+                        end = Offset(size.width, selected.y),
+                        strokeWidth = 1.dp.toPx()
+                    )
+                    drawCircle(accent.copy(alpha = 0.22f), radius = 7.dp.toPx(), center = selected)
+                    drawCircle(accent, radius = 3.5.dp.toPx(), center = selected)
                 }
             }
         }

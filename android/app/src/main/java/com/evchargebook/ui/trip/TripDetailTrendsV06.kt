@@ -51,14 +51,7 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
                 modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
             ) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "横轴为行程时间，纵轴为可信样本值；海拔使用稳健滤波，超过 2 分钟的缺口保持断开。",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                Text("趋势", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
 
                 BoxWithConstraints(Modifier.fillMaxWidth()) {
                     val compact = maxWidth < 360.dp

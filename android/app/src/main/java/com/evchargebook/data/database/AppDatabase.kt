@@ -203,7 +203,7 @@ abstract class AppDatabase : RoomDatabase() {
 
         private val MIGRATION_13_14 = object : Migration(13, 14) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE vehicles ADD COLUMN nickname TEXT")
+                db.execSQL("ALTER TABLE vehicles ADD COLUMN nickname TEXT DEFAULT NULL")
             }
         }
 

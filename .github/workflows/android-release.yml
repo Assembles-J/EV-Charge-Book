@@ -11,6 +11,10 @@ on:
         description: Release series, for example 0.7
         required: true
         default: '0.7'
+  push:
+    branches: [main]
+    paths:
+      - '.github/release-trigger'
 
 permissions:
   contents: read
@@ -25,11 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     env:
-      # Version values exist only inside the manual production release workflow.
-      # Normal commits / Android CI keep the dev version from build.gradle.kts.
+      # workflow_dispatch remains the normal human entry point. The release-trigger path is a
+      # controlled fallback for automation clients that can write repository content but cannot
+      # create workflow_dispatch events. Both paths publish the current main line by default.
+      RELEASE_REF: ${{ github.event.inputs.ref || 'main' }}
+      RELEASE_SERIES: ${{ github.event.inputs.release_series || '0.7' }}
       VERSION_CODE: ${{ github.run_number }}
-      VERSION_NAME: ${{ inputs.release_series }}.${{ github.run_number }}
-      APK_FILE: ev-charge-book-${{ inputs.release_series }}.${{ github.run_number }}.apk
+      VERSION_NAME: ${{ github.event.inputs.release_series || '0.7' }}.${{ github.run_number }}
+      APK_FILE: ev-charge-book-${{ github.event.inputs.release_series || '0.7' }}.${{ github.run_number }}.apk
       UPDATE_MANIFEST_URL: https://groupim.cn/ev-charge-book/release-meta/latest.json
       ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
       ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -40,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.ref }}
+          ref: ${{ env.RELEASE_REF }}
           fetch-depth: 1
 
       - name: Resolve checked-out commit
@@ -214,7 +221,7 @@ jobs:
           {
             echo "## EV Charge Book production release"
             echo ""
-            echo "- Ref: \`${{ inputs.ref }}\`"
+            echo "- Ref: \`${{ env.RELEASE_REF }}\`"
             echo "- Commit: \`${{ steps.source.outputs.sha }}\`"
             echo "- Version: \`${{ env.VERSION_NAME }}\`"
             echo "- Version code: \`${{ env.VERSION_CODE }}\`"

@@ -40,7 +40,7 @@
         <div>
           <div class="eyebrow">BRAND ASSET</div>
           <h2>品牌 Logo 配置</h2>
-          <p class="meta">Logo 按品牌配置一次，同一个 <code>brandId</code> 下的所有车型自动复用，不需要逐车型上传。</p>
+          <p class="meta">Logo 按品牌配置一次，同一个 <code>brandId</code> 下的所有车型自动复用，不需要逐车型上传。品牌列表可直接点击查看 Logo、旗下车型和重复数据提示。</p>
         </div>
         <select id="brandLogoBrandSelect" aria-label="选择要配置 Logo 的品牌"></select>
       </div>
@@ -91,11 +91,11 @@
   <section class="panel hidden" id="heroPanel">
     <div class="grid">
       <div>
-        <label for="artworkKey">Hero key</label>
+        <label for="artworkKey">Hero 语义 Key（不含 -dark / -light）</label>
         <input id="artworkKey" list="heroKeys" placeholder="例如 leapmotor-c16-2026" autocomplete="off" />
         <datalist id="heroKeys"></datalist>
         <div class="current" id="heroCurrent"></div>
-        <p class="meta">这里保留旧的单项 Hero 发布能力。新车型整套资源建议使用顶部「资源工作台」，可一次维护 Dark / Light Hero、Logo 和车型 JSON。</p>
+        <p class="meta">单项 Hero 发布明确区分 Dark / Light。Catalog 只保存一个语义 Key，页面会自动派生主题资源 Key；新车型整套资源仍建议使用顶部「资源工作台」。</p>
       </div>
       <div>
         <label>新 Hero 原图</label>
@@ -202,6 +202,8 @@
 </dialog>
 
 <script src="static/admin.js"></script>
+<script src="static/admin-hero-variants.js"></script>
+<script src="static/admin-brand-details.js"></script>
 <script src="static/catalog-tools.js"></script>
 <script src="static/batch-upload.js"></script>
 </body>

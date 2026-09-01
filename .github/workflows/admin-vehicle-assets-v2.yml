@@ -1,0 +1,60 @@
+name: Admin Vehicle Assets V2
+
+on:
+  pull_request:
+    paths:
+      - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
+      - 'hero-admin/static/admin-hero-variants.js'
+      - 'hero-admin/static/admin-brand-details.js'
+      - 'hero-admin/templates/index.html'
+      - '.github/workflows/admin-vehicle-assets-v2.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'hero-admin/static/asset-bundle-prompt.html'
+      - 'hero-admin/static/asset-bundle-builder.js'
+      - 'hero-admin/static/admin-hero-variants.js'
+      - 'hero-admin/static/admin-brand-details.js'
+      - 'hero-admin/templates/index.html'
+      - '.github/workflows/admin-vehicle-assets-v2.yml'
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check asset bundle builder syntax
+        run: node --check hero-admin/static/asset-bundle-builder.js
+      - name: Check Hero variant syntax
+        run: node --check hero-admin/static/admin-hero-variants.js
+      - name: Check brand detail syntax
+        run: node --check hero-admin/static/admin-brand-details.js
+      - name: Verify resource bundle builder behavior
+        run: |
+          node <<'NODE'
+          require('./hero-admin/static/asset-bundle-builder.js');
+          const t=globalThis.__evAssetBundleBuilderTest;
+          if(!t) throw new Error('asset bundle test API missing');
+          const bundle=t.buildResourceBundle({
+            mode:'create',
+            brand:{brandId:'byd',name:'比亚迪',englishName:'BYD',isActive:true,logoLightUrl:'/logo-light.webp',logoLightVersion:3,logoDarkUrl:'/logo-dark.webp',logoDarkVersion:2},
+            catalogId:'byd-seal-08-ev-2026',series:'海豹08',modelName:'海豹08 EV 2026款',modelYear:'2026',trimName:'',powertrainType:'BEV',batteryCapacityKwh:'',rangeKm:'',rangeStandard:'',heroKey:'byd-seal-08-ev-2026'
+          });
+          if(bundle.heroKey!=='byd-seal-08-ev-2026') throw new Error('manual Hero Key was not preserved');
+          if(bundle.catalogImport.vehicles[0].heroArtworkKey!==bundle.heroKey) throw new Error('vehicle Hero Key mismatch');
+          if(bundle.assets.hero.dark!=='hero_byd-seal-08-ev-2026_dark.png'||bundle.assets.hero.light!=='hero_byd-seal-08-ev-2026_light.png') throw new Error('Dark/Light Hero assets missing');
+          if(bundle.assets.brandLogo.light!==null||bundle.assets.brandLogo.dark!==null) throw new Error('existing brand logos should be reused');
+          if(bundle.catalogImport.vehicles[0].batteryCapacityKwh!==null||bundle.catalogImport.vehicles[0].rangeKm!==null) throw new Error('unknown specs must stay null');
+          NODE
+      - name: Verify Web entrypoints
+        run: |
+          set -euo pipefail
+          grep -F 'asset-bundle-builder.js' hero-admin/static/asset-bundle-prompt.html
+          grep -F 'Web 自动生成 Resource JSON' hero-admin/static/asset-bundle-prompt.html
+          grep -F '指定 Hero Key（手工输入' hero-admin/static/asset-bundle-prompt.html
+          grep -F 'admin-hero-variants.js' hero-admin/templates/index.html
+          grep -F 'admin-brand-details.js' hero-admin/templates/index.html
+          grep -F 'Hero 主题版本' hero-admin/static/admin-hero-variants.js
+          grep -F '旗下车型' hero-admin/static/admin-brand-details.js
+          grep -F '确认合并并下架当前品牌' hero-admin/static/admin-brand-details.js
