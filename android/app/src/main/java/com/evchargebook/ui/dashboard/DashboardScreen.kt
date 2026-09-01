@@ -57,6 +57,7 @@ fun DashboardScreen(
     val dashboardTrip = state.activeTrip
         ?.takeIf { it.vehicleId == selectedVehicleId }
         ?: latestCompletedTrip
+    val dashboardArtworkKey = DashboardHeroArtworkResolver.resolve(state.vehicle, state.catalogVehicles)
 
     LazyColumn(
         modifier = Modifier
@@ -77,6 +78,7 @@ fun DashboardScreen(
                 currentSoc = state.currentSoc,
                 currentMileageKm = state.currentMileageKm,
                 latestTrip = latestCompletedTrip,
+                artworkKey = dashboardArtworkKey,
                 edgeToEdgeTop = true,
                 vehicleSwitchEnabled = state.activeTrip == null,
                 onSelectVehicle = onSelectVehicle

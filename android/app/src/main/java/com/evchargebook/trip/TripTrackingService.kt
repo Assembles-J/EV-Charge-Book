@@ -1,6 +1,7 @@
 package com.evchargebook.trip
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -14,6 +15,7 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -68,9 +70,11 @@ class TripTrackingService : Service() {
     @Volatile private var tripStartedAtEpochMillis: Long = 0L
     @Volatile private var currentDistanceMeters: Double = 0.0
     @Volatile private var lastCallbackAtEpochMillis: Long? = null
+    @Volatile private var lastCallbackProvider: String? = null
     @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
     @Volatile private var lastAcceptedProvider: String? = null
     @Volatile private var rejectedPointCount: Int = 0
+    @Volatile private var lastHealthStatus: TripGpsHealthStatus? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -126,9 +130,11 @@ class TripTrackingService : Service() {
         tripStartedAtEpochMillis = 0L
         currentDistanceMeters = 0.0
         lastCallbackAtEpochMillis = null
+        lastCallbackProvider = null
         lastAcceptedPointAtEpochMillis = null
         lastAcceptedProvider = null
         rejectedPointCount = 0
+        lastHealthStatus = null
 
         val foregroundStarted = runCatching {
             ServiceCompat.startForeground(
@@ -161,6 +167,7 @@ class TripTrackingService : Service() {
                 if (redelivered) TripDiagnosticEventType.SERVICE_REDELIVERED else TripDiagnosticEventType.SERVICE_START,
                 detail = if (redelivered) "START_REDELIVER_INTENT redelivery" else "foreground tracking started"
             )
+            recordEvent(tripId, TripDiagnosticEventType.POWER_STATE, detail = powerStateDetail())
             lastPoint = tripDao.getPoints(tripId).lastOrNull()
             lastPoint?.let {
                 lastAcceptedPointAtEpochMillis = it.capturedAtEpochMillis
@@ -202,8 +209,35 @@ class TripTrackingService : Service() {
                 locationSource = source
                 source.start callback@{ location ->
                     val activeTripId = currentTripId ?: return@callback
-                    lastCallbackAtEpochMillis = System.currentTimeMillis()
+                    val callbackAt = System.currentTimeMillis()
+                    val previousCallbackAt = lastCallbackAtEpochMillis
+                    val previousProvider = lastCallbackProvider
+                    val provider = location.provider
+                    val callbackGapMs = previousCallbackAt?.let { (callbackAt - it).coerceAtLeast(0L) }
+                    lastCallbackAtEpochMillis = callbackAt
+                    lastCallbackProvider = provider
                     serviceScope.launch {
+                        if (previousProvider == null || previousProvider != provider) {
+                            recordEvent(
+                                activeTripId,
+                                TripDiagnosticEventType.LOCATION_SOURCE,
+                                provider = provider,
+                                detail = if (previousProvider == null) {
+                                    "first_callback"
+                                } else {
+                                    "provider_changed previous=$previousProvider current=$provider callbackGapMs=${callbackGapMs ?: 0L}"
+                                }
+                            )
+                        }
+                        if (callbackGapMs != null && callbackGapMs >= CALLBACK_GAP_DIAGNOSTIC_MS) {
+                            recordEvent(
+                                activeTripId,
+                                TripDiagnosticEventType.LOCATION_CALLBACK_GAP,
+                                provider = provider,
+                                detail = "callbackGapMs=$callbackGapMs captureTime=${location.time}"
+                            )
+                            recordEvent(activeTripId, TripDiagnosticEventType.POWER_STATE, provider = provider, detail = powerStateDetail())
+                        }
                         pointMutex.withLock { handleLocation(activeTripId, location) }
                     }
                 }
@@ -232,6 +266,20 @@ class TripTrackingService : Service() {
                     interruptForRepair(tripId, repairReason)
                     break
                 }
+                val snapshot = currentHealthSnapshot()
+                if (snapshot.status != lastHealthStatus) {
+                    val previous = lastHealthStatus
+                    lastHealthStatus = snapshot.status
+                    recordEvent(
+                        tripId,
+                        TripDiagnosticEventType.GPS_HEALTH_TRANSITION,
+                        provider = lastCallbackProvider,
+                        detail = "previous=${previous?.name ?: "none"} current=${snapshot.status.name} callbackAgeSeconds=${snapshot.secondsSinceLastCallback ?: -1} acceptedAgeSeconds=${snapshot.secondsSinceLastAcceptedPoint ?: -1}"
+                    )
+                    if (snapshot.status in setOf(TripGpsHealthStatus.DEGRADED, TripGpsHealthStatus.LOST, TripGpsHealthStatus.LONG_GAP)) {
+                        recordEvent(tripId, TripDiagnosticEventType.POWER_STATE, provider = lastCallbackProvider, detail = powerStateDetail())
+                    }
+                }
                 updateNotification()
                 delay(HEALTH_REFRESH_INTERVAL_MS)
             }
@@ -256,6 +304,19 @@ class TripTrackingService : Service() {
 
     private fun providerEnabled(provider: String): Boolean =
         runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
+
+    private fun powerStateDetail(): String {
+        val power = getSystemService(PowerManager::class.java)
+        val activity = getSystemService(ActivityManager::class.java)
+        val deviceIdle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) power.isDeviceIdleMode else false
+        val ignoringBatteryOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            runCatching { power.isIgnoringBatteryOptimizations(packageName) }.getOrDefault(false)
+        } else {
+            true
+        }
+        val backgroundRestricted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) activity.isBackgroundRestricted else false
+        return "powerSave=${power.isPowerSaveMode} deviceIdle=$deviceIdle interactive=${power.isInteractive} ignoringBatteryOptimizations=$ignoringBatteryOptimizations backgroundRestricted=$backgroundRestricted"
+    }
 
     private suspend fun interruptForRepair(tripId: Long, reason: TripTrackingRepairReason) {
         if (!repairInProgress.compareAndSet(false, true)) return
@@ -596,6 +657,7 @@ class TripTrackingService : Service() {
         private const val NOTIFICATION_ID = 2201
         private const val REPAIR_NOTIFICATION_ID = 2202
         private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
+        private const val CALLBACK_GAP_DIAGNOSTIC_MS = 5_000L
         private const val MAX_DETAIL_LENGTH = 160
 
         fun start(context: Context, tripId: Long) {

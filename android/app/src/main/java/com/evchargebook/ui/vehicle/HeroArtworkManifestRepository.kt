@@ -22,6 +22,10 @@ import java.net.URL
  * 2. let Coil resolve the versioned image from memory/disk cache before network;
  * 3. refresh the manifest once in the background for the next Hero resolve.
  *
+ * On a cold install there is no last-known-good manifest yet. In that one cache-miss case the
+ * current resolve is allowed to fetch the manifest once so the first Dashboard render does not
+ * silently fall back to an empty Hero until the user revisits the screen.
+ *
  * A network failure must never delay or clear an already cached Hero mapping.
  *
  * VehicleCatalog stores one stable semantic base key. The manifest may publish:
@@ -59,9 +63,17 @@ object HeroArtworkManifestRepository {
     suspend fun resolve(context: Context, artworkKey: String): RemoteArtwork? {
         val appContext = context.applicationContext
         ensureCachedManifestLoaded(appContext)
-        startRemoteRefresh(appContext)
         val preferLight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
             Configuration.UI_MODE_NIGHT_YES
+
+        resolveCached(artworkKey, preferLight)?.let { cached ->
+            startRemoteRefresh(appContext)
+            return cached
+        }
+
+        // A fresh install has no persisted manifest. Fetch once for the current request instead of
+        // returning null and requiring a second Dashboard visit/app launch before any Hero appears.
+        refreshManifestNow(appContext)
         return resolveCached(artworkKey, preferLight)
     }
 
@@ -117,11 +129,22 @@ object HeroArtworkManifestRepository {
         }
     }
 
+    private suspend fun refreshManifestNow(context: Context): Boolean {
+        val remoteJson = fetchManifest(BuildConfig.HERO_ARTWORK_MANIFEST_URL) ?: return false
+        val remote = parseManifest(remoteJson)
+        if (remote.isEmpty()) return false
+
+        artworks = remote
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_MANIFEST_JSON, remoteJson)
+            .apply()
+        synchronized(this) { refreshStarted = true }
+        return true
+    }
+
     /**
-     * Refresh once per app process without blocking the current Hero render.
-     *
-     * The refreshed mapping is persisted and becomes available on the next Hero resolve
-     * (for example when returning to Dashboard or on the next app launch).
+     * Refresh once per app process without blocking an already-resolved Hero render.
      */
     private fun startRemoteRefresh(context: Context) {
         if (refreshStarted) return

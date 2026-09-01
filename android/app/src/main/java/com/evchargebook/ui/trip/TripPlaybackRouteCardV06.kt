@@ -5,8 +5,10 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -39,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.rotate
@@ -60,6 +64,15 @@ import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+
+private val SpeedDeepRedV06 = Color(0xFFD32F2F)
+private val SpeedRedV06 = Color(0xFFE53935)
+private val SpeedAmberV06 = Color(0xFFFF9800)
+private val SpeedYellowV06 = Color(0xFFFDD835)
+private val SpeedGreenV06 = Color(0xFF43A047)
+private val SpeedBlueV06 = Color(0xFF1E88E5)
+private val SpeedDeepBlueV06 = Color(0xFF1565C0)
+private val SpeedUnknownV06 = Color(0xFF7A7F86)
 
 /**
  * Completed-Trip playback surface for the current no-basemap renderer.
@@ -175,6 +188,8 @@ internal fun TripPlaybackRouteCardV06(
                 }
             }
 
+            SpeedLegendV06()
+
             if (playbackMode && playable) {
                 geometry?.takeIf { it.isDrawable }?.let { routeGeometry ->
                     PlaybackCanvasV06(
@@ -196,22 +211,11 @@ internal fun TripPlaybackRouteCardV06(
                         elapsedMillis = it.toLong().coerceIn(0L, totalMillis)
                     },
                     valueRange = 0f..totalMillis.toFloat().coerceAtLeast(1f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .semantics { contentDescription = "行程回放进度" }
+                    modifier = Modifier.fillMaxWidth().semantics { contentDescription = "行程回放进度" }
                 )
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            elapsedMillis = 0L
-                            playing = false
-                        },
-                        modifier = Modifier.size(48.dp)
-                    ) {
+                Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { elapsedMillis = 0L; playing = false }, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Default.Replay, contentDescription = "重新开始回放")
                     }
                     Spacer(Modifier.width(MaterialTheme.spacing.xs))
@@ -222,10 +226,7 @@ internal fun TripPlaybackRouteCardV06(
                         },
                         modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(
-                            imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (playing) "暂停回放" else "开始回放"
-                        )
+                        Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, contentDescription = if (playing) "暂停回放" else "开始回放")
                     }
                     Spacer(Modifier.width(MaterialTheme.spacing.sm))
                     Text(
@@ -236,10 +237,7 @@ internal fun TripPlaybackRouteCardV06(
                     )
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)
-                ) {
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
                     TripPlaybackTimeline.speedPresets.forEach { preset ->
                         val selected = speed == preset
                         Surface(
@@ -277,6 +275,29 @@ internal fun TripPlaybackRouteCardV06(
 }
 
 @Composable
+private fun SpeedLegendV06() {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        SpeedLegendItemV06("低速", SpeedRedV06)
+        SpeedLegendItemV06("中速", SpeedYellowV06)
+        SpeedLegendItemV06("较快", SpeedGreenV06)
+        SpeedLegendItemV06("高速", SpeedBlueV06)
+        SpeedLegendItemV06("未知", SpeedUnknownV06)
+    }
+}
+
+@Composable
+private fun SpeedLegendItemV06(label: String, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(Modifier.size(6.dp).background(color, CircleShape))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
 private fun PlaybackCanvasV06(
     points: List<TripPointEntity>,
     frame: TripPlaybackFrame?,
@@ -285,7 +306,7 @@ private fun PlaybackCanvasV06(
     maxLatitude: Double,
     minLongitude: Double,
     maxLongitude: Double,
-    accent: androidx.compose.ui.graphics.Color
+    accent: Color
 ) {
     val endColor = MaterialTheme.colorScheme.error
     val viewportKey = points.firstOrNull()?.tripId
@@ -304,10 +325,7 @@ private fun PlaybackCanvasV06(
                 animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
             ) { fraction, _ ->
                 zoom = startZoom + (1f - startZoom) * fraction
-                pan = Offset(
-                    x = startPan.x * (1f - fraction),
-                    y = startPan.y * (1f - fraction)
-                )
+                pan = Offset(startPan.x * (1f - fraction), startPan.y * (1f - fraction))
             }
         }
     }
@@ -315,15 +333,13 @@ private fun PlaybackCanvasV06(
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                "双指缩放 · 拖动查看 · 轨迹越亮/越粗表示可信速度越高",
+                "双指缩放 · 拖动查看 · 颜色表示可信 GPS 速度区段",
                 modifier = Modifier.weight(1f),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (viewportChanged) {
-                TextButton(onClick = ::animateBackToFullRoute) {
-                    Text("回到全程", style = MaterialTheme.typography.labelSmall)
-                }
+                TextButton(onClick = ::animateBackToFullRoute) { Text("回到全程", style = MaterialTheme.typography.labelSmall) }
             }
         }
 
@@ -343,7 +359,6 @@ private fun PlaybackCanvasV06(
                         )
                         val maxPanX = size.width.toFloat() * (newZoom - 1f) * 0.5f
                         val maxPanY = size.height.toFloat() * (newZoom - 1f) * 0.5f
-
                         zoom = newZoom
                         pan = Offset(
                             x = (anchoredPan.x + gesturePan.x).coerceIn(-maxPanX, maxPanX),
@@ -355,7 +370,7 @@ private fun PlaybackCanvasV06(
                     contentDescription = if (frame?.isLongGap == true) {
                         "可拖动缩放的行程轨迹回放；当前处于 GPS 缺口，车辆位置保持在最后真实定位点"
                     } else {
-                        "可拖动缩放的行程轨迹回放；轨迹亮度和粗细表示可信速度，移动标记沿真实定位时间推进"
+                        "可拖动缩放的行程轨迹回放；轨迹颜色表示可信 GPS 速度区段，移动标记沿真实定位时间推进"
                     }
                 }
         ) {
@@ -379,12 +394,13 @@ private fun PlaybackCanvasV06(
                 )
             }
 
-            fun segmentStyle(from: TripPointEntity, to: TripPointEntity): Pair<androidx.compose.ui.graphics.Color, Float> {
+            fun segmentStyle(from: TripPointEntity, to: TripPointEntity): Pair<Color, Float> {
                 val speedMps = trustedPlaybackSpeed(to) ?: trustedPlaybackSpeed(from)
-                val normalized = speedMps?.let { (it * 3.6 / 120.0).toFloat().coerceIn(0f, 1f) } ?: 0f
-                val alpha = if (speedMps == null) 0.32f else 0.45f + normalized * 0.5f
-                val stroke = (2.5f + normalized * 2.0f).dp.toPx()
-                return accent.copy(alpha = alpha) to stroke
+                val speedKph = speedMps?.times(3.6)
+                val color = trustedSpeedColorV06(speedKph)
+                val normalized = speedKph?.let { (it / 120.0).toFloat().coerceIn(0f, 1f) } ?: 0f
+                val stroke = (2.7f + normalized * 1.7f).dp.toPx()
+                return color to stroke
             }
 
             points.zipWithNext().forEach { (from, to) ->
@@ -394,7 +410,7 @@ private fun PlaybackCanvasV06(
                 val end = project(to.latitude, to.longitude)
                 val (segmentColor, segmentStroke) = segmentStyle(from, to)
                 drawLine(
-                    color = segmentColor.copy(alpha = segmentColor.alpha * .30f),
+                    color = segmentColor.copy(alpha = .25f),
                     start = start,
                     end = end,
                     strokeWidth = segmentStroke,
@@ -404,28 +420,14 @@ private fun PlaybackCanvasV06(
                 val fromElapsed = (from.capturedAtEpochMillis - startTime).coerceAtLeast(0L)
                 val toElapsed = (to.capturedAtEpochMillis - startTime).coerceAtLeast(fromElapsed)
                 when {
-                    elapsedMillis >= toElapsed -> drawLine(
-                        color = segmentColor,
-                        start = start,
-                        end = end,
-                        strokeWidth = segmentStroke,
-                        cap = StrokeCap.Round
-                    )
-
+                    elapsedMillis >= toElapsed -> drawLine(segmentColor, start, end, segmentStroke, StrokeCap.Round)
                     elapsedMillis > fromElapsed && toElapsed > fromElapsed -> {
-                        val fraction = ((elapsedMillis - fromElapsed).toDouble() / (toElapsed - fromElapsed).toDouble())
-                            .coerceIn(0.0, 1.0)
+                        val fraction = ((elapsedMillis - fromElapsed).toDouble() / (toElapsed - fromElapsed).toDouble()).coerceIn(0.0, 1.0)
                         val partial = Offset(
                             x = start.x + (end.x - start.x) * fraction.toFloat(),
                             y = start.y + (end.y - start.y) * fraction.toFloat()
                         )
-                        drawLine(
-                            color = segmentColor,
-                            start = start,
-                            end = partial,
-                            strokeWidth = segmentStroke,
-                            cap = StrokeCap.Round
-                        )
+                        drawLine(segmentColor, start, partial, segmentStroke, StrokeCap.Round)
                     }
                 }
             }
@@ -465,12 +467,21 @@ private fun PlaybackCanvasV06(
                     lineTo(currentOffset.x - vehicleSize * .68f, currentOffset.y + vehicleSize * .65f)
                     close()
                 }
-                rotate(degrees = direction, pivot = currentOffset) {
-                    drawPath(vehicle, accent)
-                }
+                rotate(degrees = direction, pivot = currentOffset) { drawPath(vehicle, accent) }
             }
         }
     }
+}
+
+private fun trustedSpeedColorV06(speedKph: Double?): Color = when {
+    speedKph == null || !speedKph.isFinite() -> SpeedUnknownV06
+    speedKph < 5.0 -> SpeedDeepRedV06
+    speedKph < 15.0 -> SpeedRedV06
+    speedKph < 30.0 -> SpeedAmberV06
+    speedKph < 50.0 -> SpeedYellowV06
+    speedKph < 70.0 -> SpeedGreenV06
+    speedKph < 90.0 -> SpeedBlueV06
+    else -> SpeedDeepBlueV06
 }
 
 private fun trustedPlaybackSpeed(point: TripPointEntity): Double? {
@@ -493,9 +504,6 @@ private fun formatPlaybackTime(valueMillis: Long): String {
     val hours = totalSeconds / 3_600L
     val minutes = (totalSeconds % 3_600L) / 60L
     val seconds = totalSeconds % 60L
-    return if (hours > 0L) {
-        String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
-    } else {
-        String.format(Locale.US, "%02d:%02d", minutes, seconds)
-    }
+    return if (hours > 0L) String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
+    else String.format(Locale.US, "%02d:%02d", minutes, seconds)
 }
