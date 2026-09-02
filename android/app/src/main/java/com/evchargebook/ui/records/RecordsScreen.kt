@@ -86,6 +86,7 @@ fun RecordsScreen(
     var pendingDiscard by remember { mutableStateOf<ChargingSessionEntity?>(null) }
     var completingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
     var backfillingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
+    var editingPendingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
 
     completingSession?.let { session ->
         CompleteChargingScreen(
@@ -104,6 +105,16 @@ fun RecordsScreen(
             onBack = { backfillingSession = null },
             onBackfill = chargingRepository::backfillChargingSession,
             onCompleted = { backfillingSession = null },
+        )
+        return
+    }
+
+    editingPendingSession?.let { session ->
+        PendingChargingDetailsScreen(
+            session = session,
+            onBack = { editingPendingSession = null },
+            onSave = chargingRepository::deferChargingCompletion,
+            onSaved = { editingPendingSession = null },
         )
         return
     }
@@ -159,6 +170,7 @@ fun RecordsScreen(
                 items(pendingSessions, key = { "pending-${it.id}" }) { session ->
                     PendingChargingCard(
                         session = session,
+                        onEditDetails = { editingPendingSession = session },
                         onBackfill = { backfillingSession = session },
                         onDiscard = { pendingDiscard = session },
                     )
@@ -354,6 +366,7 @@ private fun ActiveChargingCard(
 @Composable
 private fun PendingChargingCard(
     session: ChargingSessionEntity,
+    onEditDetails: () -> Unit,
     onBackfill: () -> Unit,
     onDiscard: () -> Unit,
 ) {
@@ -409,6 +422,7 @@ private fun PendingChargingCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onDiscard) { Text("删除") }
+                TextButton(onClick = onEditDetails) { Text("修改结束信息") }
                 Button(onClick = onBackfill) { Text("补充电表数据") }
             }
         }
