@@ -2,7 +2,6 @@ package com.evchargebook.ui.trip
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,12 +14,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Route
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -41,7 +44,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -67,10 +70,9 @@ private enum class TripDetailSectionV06(val label: String) {
 }
 
 /**
- * v0.6 completed/selected Trip detail.
+ * Completed/selected Trip detail.
  *
- * Overview, route and diagnostics stay separate reading surfaces. Route rendering is delegated to
- * the shared interactive viewport used by playback so pan/zoom/speed semantics cannot drift.
+ * Route and data surfaces intentionally stay isolated. This revision only compacts Overview.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,14 +157,14 @@ internal fun TripDetailScreenV06(
             when (selectedSection) {
                 TripDetailSectionV06.OVERVIEW -> {
                     item {
-                        CompletedTripSummaryCardV06(
+                        CompletedTripOverviewV08(
                             trip = trip,
                             vehicle = vehicle,
                             averageSpeedMps = displayAverageSpeed
                         )
                     }
                     item {
-                        CompletedTripEndpointCardV06(
+                        CompletedTripEndpointCardV08(
                             trip = trip,
                             startPoint = firstPoint,
                             endPoint = lastPoint,
@@ -279,8 +281,10 @@ private fun DetailUnavailableCardV06(title: String, detail: String) {
     }
 }
 
+private data class OverviewMetricV08(val label: String, val value: String)
+
 @Composable
-private fun CompletedTripSummaryCardV06(
+private fun CompletedTripOverviewV08(
     trip: TripSessionEntity,
     vehicle: VehicleEntity?,
     averageSpeedMps: Double?
@@ -292,12 +296,12 @@ private fun CompletedTripSummaryCardV06(
     ) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text(
-                        vehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${trip.vehicleId}",
+                        vehicle?.displayName ?: vehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${trip.vehicleId}",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -317,25 +321,34 @@ private fun CompletedTripSummaryCardV06(
                 }
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
-                verticalAlignment = Alignment.Bottom
-            ) {
-                SummaryPrimaryMetricV06("距离", formatV06Distance(trip.distanceMeters), Modifier.weight(1f))
-                SummaryPrimaryMetricV06("耗时", formatV06Duration(trip.elapsedSeconds), Modifier.weight(1f))
-            }
+            OverviewMetricGroupV08(
+                title = "行程摘要",
+                icon = Icons.Default.Route,
+                metrics = buildList {
+                    add(OverviewMetricV08("距离", formatV06Distance(trip.distanceMeters)))
+                    add(OverviewMetricV08("耗时", formatV06Duration(trip.elapsedSeconds)))
+                    add(OverviewMetricV08("平均速度", averageSpeedMps?.let(::formatV06Speed) ?: "--"))
+                    if (trip.status == TripStatus.COMPLETED) {
+                        add(OverviewMetricV08("估算能耗", formatV06Consumption(trip.averageConsumptionKwhPer100Km)))
+                    }
+                }
+            )
 
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .28f))
+            OverviewMetricGroupV08(
+                title = "车辆变化",
+                icon = Icons.Default.DirectionsCar,
+                metrics = listOf(
+                    OverviewMetricV08("SOC 变化", formatV06SocRange(trip.startSoc, trip.endSoc)),
+                    OverviewMetricV08("里程变化", formatV06MileageRange(trip.startMileageKm, trip.endMileageKm))
+                )
+            )
 
-            SummaryMetricGridV06(
-                listOf(
-                    SummaryMetricV06("平均速度", averageSpeedMps?.let(::formatV06Speed) ?: "--"),
-                    SummaryMetricV06("估算能耗", formatV06Consumption(trip.averageConsumptionKwhPer100Km)),
-                    SummaryMetricV06("SOC", formatV06SocRange(trip.startSoc, trip.endSoc)),
-                    SummaryMetricV06("总里程", formatV06MileageRange(trip.startMileageKm, trip.endMileageKm)),
-                    SummaryMetricV06("最高速度", trip.maxSpeedMps?.let(::formatV06Speed) ?: "--"),
-                    SummaryMetricV06("移动时间", trip.movingSeconds?.let(::formatV06Duration) ?: "--")
+            OverviewMetricGroupV08(
+                title = "行驶状态",
+                icon = Icons.Default.Speed,
+                metrics = listOf(
+                    OverviewMetricV08("最高速度", trip.maxSpeedMps?.let(::formatV06Speed) ?: "--"),
+                    OverviewMetricV08("移动时间", trip.movingSeconds?.let(::formatV06Duration) ?: "--")
                 )
             )
         }
@@ -343,7 +356,50 @@ private fun CompletedTripSummaryCardV06(
 }
 
 @Composable
-private fun CompletedTripEndpointCardV06(
+private fun OverviewMetricGroupV08(
+    title: String,
+    icon: ImageVector,
+    metrics: List<OverviewMetricV08>
+) {
+    val accent = EVDesignTokens.Energy.green
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .42f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .14f))
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 11.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Surface(shape = CircleShape, color = accent.copy(alpha = .10f)) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = accent,
+                        modifier = Modifier.padding(6.dp).size(15.dp)
+                    )
+                }
+                Text(title, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+            }
+            metrics.chunked(2).forEach { rowMetrics ->
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                    rowMetrics.forEach { metric ->
+                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(metric.value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                    if (rowMetrics.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompletedTripEndpointCardV08(
     trip: TripSessionEntity,
     startPoint: TripPointEntity?,
     endPoint: TripPointEntity?,
@@ -353,6 +409,14 @@ private fun CompletedTripEndpointCardV06(
 ) {
     val accent = EVDesignTokens.Energy.green
     val finalEndpoint = trip.status == TripStatus.COMPLETED
+    val displayPair = remember(startAddress, endAddress) {
+        if (!startAddress.isNullOrBlank() && !endAddress.isNullOrBlank()) {
+            compactTripEndpointDisplayV08(startAddress, endAddress)
+        } else {
+            TripEndpointDisplayV08(startAddress.orEmpty(), endAddress.orEmpty())
+        }
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -365,17 +429,12 @@ private fun CompletedTripEndpointCardV06(
             EndpointLineV06(
                 label = "起点",
                 point = startPoint,
-                address = startAddress,
+                address = displayPair.start.takeIf { it.isNotBlank() },
                 resolving = resolving,
                 recording = trip.status == TripStatus.RECORDING,
                 recordingText = "行程进行中，结束后解析地址",
                 icon = {
-                    Icon(
-                        Icons.Default.PlayArrow,
-                        contentDescription = null,
-                        tint = accent,
-                        modifier = Modifier.size(18.dp)
-                    )
+                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = accent, modifier = Modifier.size(18.dp))
                 }
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
@@ -383,33 +442,23 @@ private fun CompletedTripEndpointCardV06(
                 EndpointLineV06(
                     label = "终点",
                     point = endPoint,
-                    address = endAddress,
+                    address = displayPair.end.takeIf { it.isNotBlank() },
                     resolving = resolving,
                     recording = false,
                     icon = {
-                        Icon(
-                            Icons.Default.Flag,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(17.dp)
-                        )
+                        Icon(Icons.Default.Flag, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(17.dp))
                     }
                 )
             } else {
                 EndpointLineV06(
                     label = if (trip.status == TripStatus.RECORDING) "当前点" else "最后记录点",
                     point = endPoint,
-                    address = endAddress,
+                    address = displayPair.end.takeIf { it.isNotBlank() },
                     resolving = resolving,
                     recording = trip.status == TripStatus.RECORDING,
                     recordingText = "当前最新定位点",
                     icon = {
-                        Icon(
-                            Icons.Default.LocationOn,
-                            contentDescription = null,
-                            tint = accent,
-                            modifier = Modifier.size(17.dp)
-                        )
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = accent, modifier = Modifier.size(17.dp))
                     }
                 )
             }
@@ -458,40 +507,6 @@ private fun EndpointLineV06(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-    }
-}
-
-private data class SummaryMetricV06(val label: String, val value: String)
-
-@Composable
-private fun SummaryPrimaryMetricV06(label: String, value: String, modifier: Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun SummaryMetricGridV06(metrics: List<SummaryMetricV06>) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
-        val columns = if (compact) 2 else 3
-        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            metrics.chunked(columns).forEach { rowMetrics ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-                ) {
-                    rowMetrics.forEach { metric ->
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(metric.value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
-                }
             }
         }
     }
