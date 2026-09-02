@@ -22,6 +22,7 @@ data class TripPointEntity(
     val id: Long = 0,
     val tripId: Long,
     val capturedAtEpochMillis: Long,
+    val capturedAtElapsedRealtimeNanos: Long? = null,
     val latitude: Double,
     val longitude: Double,
     val altitudeMeters: Double? = null,
