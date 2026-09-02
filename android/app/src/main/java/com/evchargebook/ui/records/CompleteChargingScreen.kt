@@ -116,6 +116,8 @@ fun CompleteChargingScreen(
     val meterEnergy = billing.meterEnergyKwh
     val totalCost = billing.totalCost
     val unitPrice = billing.unitPrice
+    val meterIsConfirmed =
+        ChargeBillingField.METER_ENERGY in billing.calculationInput.authoritativeBillingFields
     val odometerValue = odometer.takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
     val invalidMeterText = billing.meterEnergyText.isNotBlank() && (meterEnergy == null || meterEnergy <= 0.0)
@@ -136,7 +138,10 @@ fun CompleteChargingScreen(
     }
 
     val hasFinalBilling =
-        meterEnergy != null && meterEnergy > 0.0 && totalCost != null && totalCost >= 0.0 && !blockingBillingIssue
+        meterIsConfirmed &&
+        meterEnergy != null && meterEnergy > 0.0 &&
+        totalCost != null && totalCost >= 0.0 &&
+        !blockingBillingIssue
 
     val canEnd = !submitting &&
         startSocValue != null && startSocValue in 0..100 &&
@@ -328,6 +333,11 @@ fun CompleteChargingScreen(
                     "已填写的电表/费用信息需要是有效数字；暂时不知道可以直接留空。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                )
+                meterEnergy != null && !meterIsConfirmed -> Text(
+                    "当前电量是联动计算结果，不会当作实测电表值入账；本次会先保存为待补录。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 !hasFinalBilling -> Text(
                     "电表数据还没出来也可以结束充电；本次会保存为待补录，不进入费用和电量统计。",
