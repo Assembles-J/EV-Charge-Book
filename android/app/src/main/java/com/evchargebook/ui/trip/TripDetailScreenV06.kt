@@ -1,5 +1,6 @@
 package com.evchargebook.ui.trip
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Flag
@@ -497,6 +499,7 @@ private fun SummaryMetricGridV06(metrics: List<SummaryMetricV06>) {
 
 @Composable
 private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEndpoint: Boolean) {
+    val accent = EVDesignTokens.Energy.green
     val geometry = remember(points) {
         TripRouteGeometryBuilder.build(points.map { it.toV06RoutePoint() })
     } ?: return
@@ -504,35 +507,68 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEnd
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .16f)),
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("轨迹", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                Text(
-                    if (geometry.gapCount > 0) "${geometry.gapCount} 个长缺口" else "${geometry.points.size} 个 GPS 点",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (geometry.gapCount > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Default.LocationOn,
+                    contentDescription = null,
+                    tint = accent,
+                    modifier = Modifier.size(22.dp),
                 )
+                Spacer(Modifier.width(9.dp))
+                Text(
+                    "轨迹",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                if (geometry.gapCount > 0) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.error.copy(alpha = .10f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = .28f)),
+                    ) {
+                        Text(
+                            "${geometry.gapCount} 个长缺口",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else {
+                    Text(
+                        "${geometry.points.size} 个 GPS 点",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
 
             TripRouteViewportV07(
                 points = points,
                 finalEndpoint = finalEndpoint,
-                height = 190.dp,
+                height = 250.dp,
             )
 
-            if (geometry.gapCount > 0) {
-                Text(
-                    "GPS 长缺口不会用实线补齐。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+            Text(
+                if (geometry.gapCount > 0) {
+                    "GPS 长缺口仅用灰色虚线提示未知区间，不会当作真实道路轨迹。"
+                } else {
+                    "轨迹颜色来自可信 GPS 时速；拖动或双指缩放不会修改行程数据。"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
