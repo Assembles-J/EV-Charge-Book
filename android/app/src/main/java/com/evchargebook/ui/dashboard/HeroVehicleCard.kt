@@ -79,7 +79,6 @@ fun HeroVehicleCard(
     artworkKey: String? = null,
     edgeToEdgeTop: Boolean = false
 ) {
-    val cockpit = LocalCockpitColors.current
     val context = LocalContext.current
     val catalogId = vehicle?.catalogVehicleId?.trim()?.takeIf { it.isNotEmpty() }
     val localArtworkKey by remember(catalogId, context.applicationContext) {
@@ -103,7 +102,7 @@ fun HeroVehicleCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = Color(0xFF06100C)
+        color = MaterialTheme.colorScheme.background
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
             Column(modifier = Modifier.fillMaxWidth()) {
@@ -119,11 +118,11 @@ fun HeroVehicleCard(
                             .background(
                                 Brush.verticalGradient(
                                     listOf(
-                                        Color(0x98020806),
-                                        Color(0x20020806),
+                                        EVDesignTokens.Media.scrimStrong,
+                                        EVDesignTokens.Media.scrimSoft,
                                         Color.Transparent,
-                                        Color(0x10020806),
-                                        Color(0x4806100C)
+                                        EVDesignTokens.Media.scrimLower,
+                                        EVDesignTokens.Media.scrimBottom
                                     )
                                 )
                             )
@@ -141,7 +140,7 @@ fun HeroVehicleCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
-                        color = cockpit.primaryText,
+                        color = EVDesignTokens.Media.primaryText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -156,8 +155,8 @@ fun HeroVehicleCard(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(Color(0x6607110F))
-                                    .border(1.dp, Color.White.copy(alpha = 0.14f), CircleShape)
+                                    .background(EVDesignTokens.Media.controlSurface)
+                                    .border(1.dp, EVDesignTokens.Media.controlOutline, CircleShape)
                                     .clickable(enabled = canSwitchVehicle) {
                                         vehicleMenuExpanded = true
                                     },
@@ -260,9 +259,9 @@ private fun VehicleStage(
         modifier = modifier.background(
             Brush.verticalGradient(
                 listOf(
-                    Color(0xFF07110D),
-                    Color(0xFF0A1712),
-                    Color(0xFF06100C)
+                    EVDesignTokens.Media.stageTop,
+                    EVDesignTokens.Media.stageMiddle,
+                    EVDesignTokens.Media.stageBottom
                 )
             )
         ),
@@ -302,6 +301,7 @@ private fun HeroDynamicStatePanel(
     latestTrip: TripSessionEntity?,
     modifier: Modifier = Modifier
 ) {
+    val cockpit = LocalCockpitColors.current
     val safeSoc = currentSoc?.coerceIn(0, 100)
     val targetProgress = safeSoc?.div(100f) ?: 0f
     val animatedProgress by animateFloatAsState(
@@ -324,16 +324,15 @@ private fun HeroDynamicStatePanel(
             .shadow(
                 elevation = 6.dp,
                 shape = panelShape,
-                ambientColor = Color.Black.copy(alpha = 0.20f),
-                spotColor = Color.Black.copy(alpha = 0.26f)
+                ambientColor = Color.Black.copy(alpha = 0.16f),
+                spotColor = Color.Black.copy(alpha = 0.22f)
             )
             .clip(panelShape)
             .background(
                 Brush.verticalGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.045f),
-                        Color(0x9013211C),
-                        Color(0xB0091411)
+                        cockpit.surfaceElevated,
+                        cockpit.surface
                     )
                 )
             )
@@ -341,9 +340,9 @@ private fun HeroDynamicStatePanel(
                 width = 1.dp,
                 brush = Brush.linearGradient(
                     listOf(
-                        Color.White.copy(alpha = 0.15f),
-                        Color.White.copy(alpha = 0.05f),
-                        EVDesignTokens.Energy.green.copy(alpha = 0.07f)
+                        cockpit.outline.copy(alpha = 0.90f),
+                        cockpit.outline.copy(alpha = 0.55f),
+                        cockpit.accent.copy(alpha = 0.10f)
                     )
                 ),
                 shape = panelShape
@@ -355,9 +354,9 @@ private fun HeroDynamicStatePanel(
                 .background(
                     Brush.horizontalGradient(
                         listOf(
-                            Color(0x181D6D49),
+                            cockpit.accent.copy(alpha = 0.06f),
                             Color.Transparent,
-                            Color(0x0C174634)
+                            cockpit.accent.copy(alpha = 0.03f)
                         )
                     )
                 )
@@ -408,7 +407,7 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
                     safeSoc.toString(),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = EVDesignTokens.Energy.green
+                    color = cockpit.accent
                 )
                 Text(
                     "%",
@@ -439,7 +438,7 @@ private fun HeroSocMetric(safeSoc: Int?, animatedProgress: Float, modifier: Modi
                     Modifier
                         .fillMaxWidth(animatedProgress)
                         .fillMaxSize()
-                        .background(EVDesignTokens.Energy.green)
+                        .background(cockpit.accent)
                 )
             }
         }
@@ -518,7 +517,7 @@ private fun MetricDivider() {
     Box(
         Modifier
             .size(width = 1.dp, height = 44.dp)
-            .background(LocalCockpitColors.current.secondaryText.copy(alpha = .20f))
+            .background(LocalCockpitColors.current.outline.copy(alpha = 0.70f))
     )
 }
 
