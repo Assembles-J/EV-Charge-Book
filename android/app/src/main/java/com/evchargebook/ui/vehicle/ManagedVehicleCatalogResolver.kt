@@ -33,8 +33,7 @@ internal object ManagedVehicleCatalogResolver {
     ): String? {
         vehicle ?: return null
 
-        val exactCatalogId = vehicle.catalogVehicleId?.trim()?.takeIf { it.isNotEmpty() }
-        if (exactCatalogId != null) {
+        if (!vehicle.catalogVehicleId.isNullOrBlank()) {
             return exactCatalogVehicle(vehicle, catalog)
                 ?.heroArtworkKey
                 ?.trim()
