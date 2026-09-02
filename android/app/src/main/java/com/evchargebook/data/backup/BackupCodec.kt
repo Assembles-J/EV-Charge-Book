@@ -23,7 +23,7 @@ data class BackupPayload(
 )
 
 object BackupCodec {
-    const val CURRENT_SCHEMA_VERSION = 9
+    const val CURRENT_SCHEMA_VERSION = 10
 
     fun encode(payload: BackupPayload): String = JSONObject().apply {
         put("schemaVersion", payload.schemaVersion)
@@ -89,6 +89,11 @@ object BackupCodec {
                     putNullable("locationAccuracyMeters", session.locationAccuracyMeters)
                     put("status", session.status)
                     putNullable("endedAtEpochMillis", session.endedAtEpochMillis)
+                    putNullable("endSoc", session.endSoc)
+                    putNullable("odometerKm", session.odometerKm)
+                    putNullable("pendingMeterEnergyKwh", session.pendingMeterEnergyKwh)
+                    putNullable("pendingTotalCost", session.pendingTotalCost)
+                    putNullable("pendingVehicleEnergyKwh", session.pendingVehicleEnergyKwh)
                     putNullable("completedRecordId", session.completedRecordId)
                     put("updatedAtEpochMillis", session.updatedAtEpochMillis)
                 })
@@ -231,6 +236,11 @@ object BackupCodec {
                         locationAccuracyMeters = item.optNullableDouble("locationAccuracyMeters"),
                         status = item.optString("status", ChargingSessionStatus.ACTIVE),
                         endedAtEpochMillis = item.optNullableLong("endedAtEpochMillis"),
+                        endSoc = item.optNullableInt("endSoc"),
+                        odometerKm = item.optNullableDouble("odometerKm"),
+                        pendingMeterEnergyKwh = item.optNullableDouble("pendingMeterEnergyKwh"),
+                        pendingTotalCost = item.optNullableDouble("pendingTotalCost"),
+                        pendingVehicleEnergyKwh = item.optNullableDouble("pendingVehicleEnergyKwh"),
                         completedRecordId = item.optNullableLong("completedRecordId"),
                         updatedAtEpochMillis = item.optLong("updatedAtEpochMillis", startedAt),
                     )
@@ -319,13 +329,24 @@ object BackupCodec {
         require(chargingSessions.all { it.status in ChargingSessionStatus.all }) { "备份中存在未知充电会话状态" }
         require(chargingSessions.all { it.startSoc == null || it.startSoc in 0..100 }) { "备份中存在无效充电开始 SOC" }
         require(chargingSessions.all { it.targetSoc == null || it.targetSoc in 0..100 }) { "备份中存在无效充电目标 SOC" }
+        require(chargingSessions.all { it.endSoc == null || it.endSoc in 0..100 }) { "备份中存在无效充电结束 SOC" }
         require(chargingSessions.all { it.unitPricePerKwh == null || it.unitPricePerKwh >= 0.0 }) { "备份中存在无效充电单价" }
+        require(chargingSessions.all { it.odometerKm == null || it.odometerKm >= 0.0 }) { "备份中存在无效充电里程" }
+        require(chargingSessions.all { it.pendingMeterEnergyKwh == null || it.pendingMeterEnergyKwh > 0.0 }) { "备份中存在无效待补录电表电量" }
+        require(chargingSessions.all { it.pendingTotalCost == null || it.pendingTotalCost >= 0.0 }) { "备份中存在无效待补录费用" }
+        require(chargingSessions.all { it.pendingVehicleEnergyKwh == null || it.pendingVehicleEnergyKwh >= 0.0 }) { "备份中存在无效待补录车辆侧电量" }
+        require(chargingSessions.all {
+            it.pendingVehicleEnergyKwh == null || it.pendingMeterEnergyKwh == null ||
+                it.pendingVehicleEnergyKwh <= it.pendingMeterEnergyKwh + 1e-6
+        }) { "备份中车辆侧电量高于电表电量" }
         require(chargingSessions.all { (it.latitude == null) == (it.longitude == null) }) { "备份中存在不完整的充电会话坐标" }
         require(chargingSessions.all { it.endedAtEpochMillis == null || it.endedAtEpochMillis >= it.startedAtEpochMillis }) { "备份中存在无效充电会话结束时间" }
         require(chargingSessions.all { it.completedRecordId == null || it.completedRecordId in recordIds }) { "备份中存在无法关联记录的已完成充电会话" }
         require(chargingSessions.all {
             when (it.status) {
                 ChargingSessionStatus.ACTIVE -> it.endedAtEpochMillis == null && it.completedRecordId == null
+                ChargingSessionStatus.PENDING_DETAILS ->
+                    it.endedAtEpochMillis != null && it.endSoc != null && it.completedRecordId == null
                 ChargingSessionStatus.COMPLETED -> it.endedAtEpochMillis != null && it.completedRecordId != null
                 ChargingSessionStatus.CANCELLED -> it.endedAtEpochMillis != null && it.completedRecordId == null
                 else -> false
