@@ -148,7 +148,7 @@ fun DashboardRecentTripCard(
                     verticalAlignment = Alignment.Top
                 ) {
                     TripRouteRail()
-                    Spacer(Modifier.width(10.dp))
+                    Spacer(Modifier.width(5.dp))
                     Column(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -286,18 +286,18 @@ private fun TripRouteRail() {
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "起点",
             tint = EVDesignTokens.Energy.green,
-            modifier = Modifier.size(16.dp)
+            modifier = Modifier.size(17.dp)
         )
         Box(
             Modifier
-                .size(width = 1.dp, height = 28.dp)
+                .size(width = 1.dp, height = 13.dp)
                 .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
         )
         Icon(
             imageVector = Icons.Default.Flag,
             contentDescription = "终点或当前位置",
             tint = MaterialTheme.colorScheme.error,
-            modifier = Modifier.size(15.dp)
+            modifier = Modifier.size(16.dp)
         )
     }
 }
