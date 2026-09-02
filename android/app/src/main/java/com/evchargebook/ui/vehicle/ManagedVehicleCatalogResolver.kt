@@ -13,6 +13,11 @@ import com.evchargebook.data.entity.VehicleEntity
  * or silently mutates catalog identity.
  */
 internal object ManagedVehicleCatalogResolver {
+    private data class LegacyCandidate(
+        val catalogVehicle: VehicleCatalogEntity,
+        val matchRank: Int,
+    )
+
     fun resolveCatalogVehicle(
         vehicle: VehicleEntity?,
         catalog: List<VehicleCatalogEntity>,
@@ -23,7 +28,8 @@ internal object ManagedVehicleCatalogResolver {
         if (!vehicle.catalogVehicleId.isNullOrBlank()) return null
 
         return legacyCandidates(vehicle, catalog)
-            .sortedWith(catalogPreference())
+            .sortedWith(legacyPreference())
+            .map { it.catalogVehicle }
             .firstOrNull()
     }
 
@@ -41,9 +47,9 @@ internal object ManagedVehicleCatalogResolver {
         }
 
         return legacyCandidates(vehicle, catalog)
-            .filter { it.heroArtworkKey?.isNotBlank() == true }
-            .sortedWith(catalogPreference())
-            .mapNotNull { it.heroArtworkKey?.trim()?.takeIf(String::isNotEmpty) }
+            .filter { it.catalogVehicle.heroArtworkKey?.isNotBlank() == true }
+            .sortedWith(legacyPreference())
+            .mapNotNull { it.catalogVehicle.heroArtworkKey?.trim()?.takeIf(String::isNotEmpty) }
             .firstOrNull()
     }
 
@@ -62,32 +68,35 @@ internal object ManagedVehicleCatalogResolver {
     private fun legacyCandidates(
         vehicle: VehicleEntity,
         catalog: List<VehicleCatalogEntity>,
-    ): Sequence<VehicleCatalogEntity> {
+    ): Sequence<LegacyCandidate> {
         val vehicleBrand = normalize(vehicle.brand)
         val vehicleModel = normalize(vehicle.model)
         if (vehicleBrand.isEmpty() || vehicleModel.isEmpty()) return emptySequence()
 
-        return catalog.asSequence().filter { item ->
-            normalize(item.brand) == vehicleBrand && modelMatches(vehicleModel, item)
+        return catalog.asSequence().mapNotNull { item ->
+            if (normalize(item.brand) != vehicleBrand) return@mapNotNull null
+            val matchRank = modelMatchRank(vehicleModel, item) ?: return@mapNotNull null
+            LegacyCandidate(item, matchRank)
         }
     }
 
-    private fun catalogPreference() =
-        compareByDescending<VehicleCatalogEntity> { it.isActive }
-            .thenByDescending { it.modelYear ?: Int.MIN_VALUE }
-            .thenByDescending { it.sourceUpdatedAtEpochMillis }
+    private fun legacyPreference() =
+        compareByDescending<LegacyCandidate> { it.matchRank }
+            .thenByDescending { it.catalogVehicle.isActive }
+            .thenByDescending { it.catalogVehicle.modelYear ?: Int.MIN_VALUE }
+            .thenByDescending { it.catalogVehicle.sourceUpdatedAtEpochMillis }
 
-    private fun modelMatches(vehicleModel: String, item: VehicleCatalogEntity): Boolean {
+    private fun modelMatchRank(vehicleModel: String, item: VehicleCatalogEntity): Int? {
         val series = normalize(item.series)
         val modelName = normalize(item.modelName)
         return when {
+            modelName.isNotEmpty() && vehicleModel == modelName -> 3
             modelName.isNotEmpty() && (
-                vehicleModel == modelName ||
-                    vehicleModel.contains(modelName) ||
+                vehicleModel.contains(modelName) ||
                     modelName.contains(vehicleModel)
-                ) -> true
-            series.isNotEmpty() && vehicleModel.contains(series) -> true
-            else -> false
+                ) -> 2
+            series.isNotEmpty() && vehicleModel.contains(series) -> 1
+            else -> null
         }
     }
 
