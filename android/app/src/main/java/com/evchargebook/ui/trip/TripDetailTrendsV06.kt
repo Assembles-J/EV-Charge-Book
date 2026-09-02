@@ -111,7 +111,7 @@ private fun RouteSnapshotBarV07(
         BoxWithConstraints(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
-            if (maxWidth < 360.dp) {
+            if (maxWidth < 400.dp) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     metrics.chunked(2).forEach { rowMetrics ->
                         Row(
