@@ -1,6 +1,5 @@
 package com.evchargebook.ui.trip
 
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -20,7 +19,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import com.evchargebook.trip.TripBackgroundExecutionDiagnostics
 import com.evchargebook.trip.TripBackgroundExecutionState
 import com.evchargebook.ui.theme.spacing
