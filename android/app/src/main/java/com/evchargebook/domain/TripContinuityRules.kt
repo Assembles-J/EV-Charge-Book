@@ -14,8 +14,9 @@ object TripContinuityRules {
 
     // Some Android/OEM builds batch otherwise valid foreground-location callbacks while the screen
     // is locked or the device enters a light idle state. Keep callback delivery tolerance wider
-    // than route continuity: the original capture timestamps still decide whether a segment can
-    // contribute distance/duration, and >= LONG_GAP_SECONDS remains a hard route break.
+    // than route continuity. TripCaptureTimeRules owns the interval authority: monotonic Android
+    // elapsed realtime when persisted, epoch fallback only for legacy points. >= LONG_GAP_SECONDS
+    // remains a hard route/distance boundary regardless of which clock supplied the interval.
     const val MAX_LOCATION_AGE_MILLIS = 10 * 60_000L
 
     fun isFreshLocation(ageMillis: Long): Boolean = ageMillis in 0..MAX_LOCATION_AGE_MILLIS
