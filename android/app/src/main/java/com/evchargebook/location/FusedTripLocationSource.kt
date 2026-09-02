@@ -5,6 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.os.Handler
 import android.os.Looper
+import com.evchargebook.domain.TripPlatformRecoveryPolicy
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -36,6 +37,9 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     @Volatile private var running = false
     private var callback: LocationCallback? = null
     private var primarySilenceWatchdog: Runnable? = null
+    private var platformSilenceWatchdog: Runnable? = null
+    private var platformRecoveryAttempts: Int = 0
+    private var platformMonitoredProvider: String? = null
     private var lastReportedAvailability: Boolean? = null
 
     @SuppressLint("MissingPermission")
@@ -46,6 +50,8 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         stop()
         running = true
         fallbackStarted.set(false)
+        platformRecoveryAttempts = 0
+        platformMonitoredProvider = null
         lastReportedAvailability = null
 
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS) {
@@ -119,7 +125,40 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
                 detail = "fallback_started reason=$reason",
             )
         )
-        platformFallback.start(callback, signalCallback)
+        registerPlatformFallback(callback, signalCallback)
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun registerPlatformFallback(
+        callback: (Location) -> Unit,
+        signalCallback: (TripLocationSourceSignal) -> Unit,
+    ) {
+        cancelPlatformSilenceWatchdog()
+        platformFallback.stop()
+        platformFallback.start(
+            callback = { location ->
+                if (!running || !fallbackStarted.get()) return@start
+                if (
+                    TripPlatformRecoveryPolicy.callbackRefreshesWatchdog(
+                        monitoredProvider = platformMonitoredProvider,
+                        callbackProvider = location.provider,
+                    )
+                ) {
+                    armPlatformSilenceWatchdog(callback, signalCallback)
+                }
+                callback(location)
+            },
+            signalCallback = signalCallback,
+        )
+        platformMonitoredProvider =
+            TripPlatformRecoveryPolicy.monitoredProvider(platformFallback.registeredProviders())
+        signalCallback(
+            TripLocationSourceSignal(
+                source = SOURCE_PLATFORM,
+                detail = "recovery_watchdog provider=${platformMonitoredProvider ?: "none"} completedAttempts=$platformRecoveryAttempts",
+            )
+        )
+        armPlatformSilenceWatchdog(callback, signalCallback)
     }
 
     private fun armPrimarySilenceWatchdog(
@@ -139,6 +178,41 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         }
         primarySilenceWatchdog = watchdog
         mainHandler.postDelayed(watchdog, PRIMARY_SILENCE_TIMEOUT_MS)
+    }
+
+    private fun armPlatformSilenceWatchdog(
+        callback: (Location) -> Unit,
+        signalCallback: (TripLocationSourceSignal) -> Unit,
+    ) {
+        cancelPlatformSilenceWatchdog()
+        if (!running || !fallbackStarted.get()) return
+        val monitoredProvider = platformMonitoredProvider ?: return
+        val delayMillis =
+            TripPlatformRecoveryPolicy.recoveryDelayMillis(platformRecoveryAttempts) ?: return
+        val watchdog = Runnable {
+            if (!running || !fallbackStarted.get()) return@Runnable
+            val attempt = platformRecoveryAttempts + 1
+            platformRecoveryAttempts = attempt
+            signalCallback(
+                TripLocationSourceSignal(
+                    source = SOURCE_PLATFORM,
+                    detail = "recovery_reregister attempt=$attempt provider=$monitoredProvider silenceMs=$delayMillis",
+                )
+            )
+            runCatching {
+                registerPlatformFallback(callback, signalCallback)
+            }.onFailure { error ->
+                signalCallback(
+                    TripLocationSourceSignal(
+                        source = SOURCE_PLATFORM,
+                        detail = "recovery_reregister_failed attempt=$attempt provider=$monitoredProvider error=${error::class.java.simpleName}",
+                    )
+                )
+                armPlatformSilenceWatchdog(callback, signalCallback)
+            }
+        }
+        platformSilenceWatchdog = watchdog
+        mainHandler.postDelayed(watchdog, delayMillis)
     }
 
     private fun reportAvailability(
@@ -161,13 +235,21 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         primarySilenceWatchdog = null
     }
 
+    private fun cancelPlatformSilenceWatchdog() {
+        platformSilenceWatchdog?.let(mainHandler::removeCallbacks)
+        platformSilenceWatchdog = null
+    }
+
     override fun stop() {
         running = false
         cancelPrimarySilenceWatchdog()
+        cancelPlatformSilenceWatchdog()
         callback?.let(client::removeLocationUpdates)
         callback = null
         platformFallback.stop()
         fallbackStarted.set(false)
+        platformRecoveryAttempts = 0
+        platformMonitoredProvider = null
         lastReportedAvailability = null
     }
 

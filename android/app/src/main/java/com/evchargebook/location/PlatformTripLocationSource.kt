@@ -18,6 +18,9 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private var listener: LocationListener? = null
 
+    @Volatile
+    private var registeredProviderNames: Set<String> = emptySet()
+
     @SuppressLint("MissingPermission")
     override fun start(
         callback: (Location) -> Unit,
@@ -33,7 +36,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
                 provider in providers && runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
             }
 
-        var successfulRegistrations = 0
+        val successfulProviders = linkedSetOf<String>()
         var lastFailure: Throwable? = null
         candidates.forEach { provider ->
             runCatching {
@@ -45,28 +48,33 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
                     Looper.getMainLooper()
                 )
             }.onSuccess {
-                successfulRegistrations += 1
+                successfulProviders += provider
             }.onFailure { error ->
                 lastFailure = error
             }
         }
 
-        if (successfulRegistrations == 0) {
+        if (successfulProviders.isEmpty()) {
             listener = null
+            registeredProviderNames = emptySet()
             throw IllegalStateException("No enabled platform GPS/network provider could be registered", lastFailure)
         }
 
+        registeredProviderNames = successfulProviders.toSet()
         signalCallback(
             TripLocationSourceSignal(
                 source = SOURCE_PLATFORM,
-                detail = "registered providers=${candidates.joinToString(",")}",
+                detail = "registered providers=${successfulProviders.joinToString(",")}",
             )
         )
     }
 
+    fun registeredProviders(): Set<String> = registeredProviderNames
+
     override fun stop() {
         listener?.let { current -> runCatching { locationManager.removeUpdates(current) } }
         listener = null
+        registeredProviderNames = emptySet()
     }
 
     private companion object {
