@@ -20,9 +20,8 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.CalendarMonth
@@ -44,6 +43,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,10 +54,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.data.repository.StartChargingSessionRequest
@@ -85,36 +85,59 @@ fun StartChargingScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val scope = rememberCoroutineScope()
+    val database = remember(context) { AppDatabase.getInstance(context.applicationContext) }
+    val recentRecords by database.chargingRecordDao().observeForVehicle(vehicle.id).collectAsState(initial = emptyList())
     val locationProvider = remember(context) { AndroidLocationProvider(context.applicationContext) }
     val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context.applicationContext) }
+
     val defaultStartedAt = remember { System.currentTimeMillis() }
     val initialStartedAt = existingSession?.startedAtEpochMillis ?: defaultStartedAt
     val initialLocation = existingSession?.location.orEmpty()
-    val initialStartSoc = existingSession?.startSoc?.toString().orEmpty()
+    val initialStartSoc = existingSession?.startSoc?.toString() ?: currentSoc?.toString().orEmpty()
     val initialTargetSoc = existingSession?.targetSoc?.toString().orEmpty()
     val initialType = existingSession?.chargerType.orEmpty()
     val initialPrice = existingSession?.unitPricePerKwh?.toEditableChargingNumber().orEmpty()
-    val initialRemark = existingSession?.remark.orEmpty()
 
     var startedAt by remember(existingSession?.id) { mutableLongStateOf(initialStartedAt) }
-    var startSoc by remember(existingSession?.id) { mutableStateOf(initialStartSoc) }
+    var startSoc by remember(existingSession?.id, currentSoc) { mutableStateOf(initialStartSoc) }
     var targetSoc by remember(existingSession?.id) { mutableStateOf(initialTargetSoc) }
     var chargerType by remember(existingSession?.id) { mutableStateOf(initialType) }
     var unitPrice by remember(existingSession?.id) { mutableStateOf(initialPrice) }
+    var priceTouched by remember(existingSession?.id) { mutableStateOf(existingSession != null) }
     var location by remember(existingSession?.id) { mutableStateOf(initialLocation) }
     var latitude by remember(existingSession?.id) { mutableStateOf(existingSession?.latitude) }
     var longitude by remember(existingSession?.id) { mutableStateOf(existingSession?.longitude) }
     var accuracyMeters by remember(existingSession?.id) { mutableStateOf(existingSession?.locationAccuracyMeters) }
-    var remark by remember(existingSession?.id) { mutableStateOf(initialRemark) }
     var locating by remember { mutableStateOf(false) }
     var locationMessage by remember { mutableStateOf<String?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val isEditing = existingSession != null
+    val recentPriceChoices = remember(recentRecords, chargerType) {
+        recentRecords
+            .asSequence()
+            .filter { it.energyKwh > 0.0 && it.cost >= 0.0 }
+            .filter { chargerType.isBlank() || it.chargerType == chargerType }
+            .map { it.pricePerKwh }
+            .filter { it >= 0.0 }
+            .distinctBy { (it * 1000).toLong() }
+            .take(4)
+            .toList()
+    }
+
+    LaunchedEffect(chargerType, recentRecords, priceTouched, isEditing) {
+        if (!isEditing && !priceTouched && chargerType.isNotBlank()) {
+            val remembered = recentRecords.firstOrNull {
+                it.chargerType == chargerType && it.energyKwh > 0.0 && it.cost >= 0.0
+            }?.pricePerKwh
+            if (remembered != null) unitPrice = remembered.toEditableChargingNumber()
+        }
+    }
+
     val isDirty = startedAt != initialStartedAt ||
         startSoc != initialStartSoc || targetSoc != initialTargetSoc || chargerType != initialType ||
-        unitPrice != initialPrice || location != initialLocation || remark != initialRemark ||
+        unitPrice != initialPrice || location != initialLocation ||
         latitude != existingSession?.latitude || longitude != existingSession?.longitude ||
         accuracyMeters != existingSession?.locationAccuracyMeters
 
@@ -145,7 +168,7 @@ fun StartChargingScreen(
                         location = resolved
                         locationMessage = "已使用当前位置"
                     } else {
-                        locationMessage = "已保存当前位置坐标；地址解析暂不可用"
+                        locationMessage = "已保存当前位置坐标"
                     }
                 }
                 .onFailure { locationMessage = it.message ?: "暂时无法获取当前位置" }
@@ -157,15 +180,16 @@ fun StartChargingScreen(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) requestCurrentLocation()
-        else locationMessage = "未授予精确定位权限，可继续手动填写地点"
+        else locationMessage = "未授予精确定位权限，可手动填写地点"
     }
 
     LaunchedEffect(existingSession?.id) {
         if (existingSession == null) {
-            if (
-                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            ) requestCurrentLocation()
-            else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                requestCurrentLocation()
+            } else {
+                locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            }
         }
     }
 
@@ -181,18 +205,11 @@ fun StartChargingScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text(
-                            if (isEditing) "编辑充电中" else "开始充电",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Text(
-                            if (isEditing) "ACTIVE CHARGE" else "START CHARGE",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text(
+                        if (isEditing) "编辑充电中" else "开始充电",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                    )
                 },
                 navigationIcon = {
                     IconButton(onClick = ::requestBack) { Icon(Icons.Default.ArrowBack, "返回") }
@@ -208,194 +225,177 @@ fun StartChargingScreen(
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
         ) {
             Spacer(Modifier.height(MaterialTheme.spacing.xs))
 
-            ChargingStartSection("车辆", "VEHICLE") {
-                Text(vehicle.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "${vehicle.brand} · ${vehicle.model}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            CompactFieldLabel("开始时间")
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                OutlinedButton(
+                    onClick = {
+                        val calendar = Calendar.getInstance().apply { timeInMillis = startedAt }
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, day ->
+                                calendar.set(Calendar.YEAR, year)
+                                calendar.set(Calendar.MONTH, month)
+                                calendar.set(Calendar.DAY_OF_MONTH, day)
+                                startedAt = calendar.timeInMillis
+                            },
+                            calendar.get(Calendar.YEAR),
+                            calendar.get(Calendar.MONTH),
+                            calendar.get(Calendar.DAY_OF_MONTH),
+                        ).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.sm),
+                ) {
+                    Icon(Icons.Default.CalendarMonth, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(dateText)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val calendar = Calendar.getInstance().apply { timeInMillis = startedAt }
+                        TimePickerDialog(
+                            context,
+                            { _, hour, minute ->
+                                calendar.set(Calendar.HOUR_OF_DAY, hour)
+                                calendar.set(Calendar.MINUTE, minute)
+                                calendar.set(Calendar.SECOND, 0)
+                                startedAt = calendar.timeInMillis
+                            },
+                            calendar.get(Calendar.HOUR_OF_DAY),
+                            calendar.get(Calendar.MINUTE),
+                            true,
+                        ).show()
+                    },
+                    modifier = Modifier.weight(1f),
+                    contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.sm),
+                ) {
+                    Icon(Icons.Default.Schedule, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text(timeText)
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
+                ChargingOptionalNumberField(
+                    value = startSoc,
+                    onChange = { startSoc = it.filter(Char::isDigit) },
+                    label = "开始 SOC",
+                    suffix = "%",
+                    modifier = Modifier.weight(1f),
+                    keyboardType = KeyboardType.Number,
                 )
-                currentSoc?.let {
-                    Text(
-                        "账本当前 SOC $it% · 仅供参考，不自动写入本次开始 SOC",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-
-            ChargingStartSection("开始时间", "START TIME") {
-                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    OutlinedButton(
-                        onClick = {
-                            val calendar = Calendar.getInstance().apply { timeInMillis = startedAt }
-                            DatePickerDialog(
-                                context,
-                                { _, year, month, day ->
-                                    calendar.set(Calendar.YEAR, year)
-                                    calendar.set(Calendar.MONTH, month)
-                                    calendar.set(Calendar.DAY_OF_MONTH, day)
-                                    startedAt = calendar.timeInMillis
-                                },
-                                calendar.get(Calendar.YEAR),
-                                calendar.get(Calendar.MONTH),
-                                calendar.get(Calendar.DAY_OF_MONTH),
-                            ).show()
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Default.CalendarMonth, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(dateText)
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            val calendar = Calendar.getInstance().apply { timeInMillis = startedAt }
-                            TimePickerDialog(
-                                context,
-                                { _, hour, minute ->
-                                    calendar.set(Calendar.HOUR_OF_DAY, hour)
-                                    calendar.set(Calendar.MINUTE, minute)
-                                    calendar.set(Calendar.SECOND, 0)
-                                    startedAt = calendar.timeInMillis
-                                },
-                                calendar.get(Calendar.HOUR_OF_DAY),
-                                calendar.get(Calendar.MINUTE),
-                                true,
-                            ).show()
-                        },
-                        modifier = Modifier.weight(1f),
-                    ) {
-                        Icon(Icons.Default.Schedule, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text(timeText)
-                    }
-                }
-            }
-
-            ChargingStartSection("SOC", "BATTERY FACTS") {
-                Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                    ChargingOptionalNumberField(
-                        value = startSoc,
-                        onChange = { startSoc = it.filter(Char::isDigit) },
-                        label = "开始 SOC",
-                        suffix = "%",
-                        modifier = Modifier.weight(1f),
-                        keyboardType = KeyboardType.Number,
-                    )
-                    ChargingOptionalNumberField(
-                        value = targetSoc,
-                        onChange = { targetSoc = it.filter(Char::isDigit) },
-                        label = "目标 SOC",
-                        suffix = "%",
-                        modifier = Modifier.weight(1f),
-                        keyboardType = KeyboardType.Number,
-                    )
-                }
-                Text(
-                    "没有可靠来源时可留空；这里不会显示伪造的实时 SOC。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                ChargingOptionalNumberField(
+                    value = targetSoc,
+                    onChange = { targetSoc = it.filter(Char::isDigit) },
+                    label = "目标 SOC",
+                    suffix = "%",
+                    modifier = Modifier.weight(1f),
+                    keyboardType = KeyboardType.Number,
                 )
             }
 
-            ChargingStartSection("充电环境", "CHARGER") {
+            CompactFieldLabel("充电方式")
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
+            ) {
+                ActiveChargingTypes.forEach { type ->
+                    FilterChip(
+                        selected = chargerType == type,
+                        onClick = {
+                            chargerType = type
+                            priceTouched = false
+                        },
+                        label = { Text(type) },
+                    )
+                }
+            }
+
+            ChargingOptionalNumberField(
+                value = unitPrice,
+                onChange = {
+                    unitPrice = it
+                    priceTouched = true
+                },
+                label = "电价",
+                suffix = "元/kWh",
+                modifier = Modifier.fillMaxWidth(),
+                keyboardType = KeyboardType.Decimal,
+            )
+            if (recentPriceChoices.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
                 ) {
-                    ActiveChargingTypes.forEach { type ->
+                    recentPriceChoices.forEach { price ->
+                        val text = price.toEditableChargingNumber()
                         FilterChip(
-                            selected = chargerType == type,
-                            onClick = { chargerType = if (chargerType == type) "" else type },
-                            label = { Text(type) },
+                            selected = unitPrice == text,
+                            onClick = {
+                                unitPrice = text
+                                priceTouched = true
+                            },
+                            label = { Text("¥$text") },
                         )
                     }
                 }
-                ChargingOptionalNumberField(
-                    value = unitPrice,
-                    onChange = { unitPrice = it },
-                    label = "当前电价",
-                    suffix = "元/kWh",
-                    modifier = Modifier.fillMaxWidth(),
-                    keyboardType = KeyboardType.Decimal,
-                )
-                Text(
-                    "电价是可复用的环境输入；最终费用与实际电量仍在结束补录时确认。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
 
-            ChargingStartSection("地点", "LOCATION") {
-                OutlinedTextField(
-                    value = location,
-                    onValueChange = { newValue ->
-                        if (newValue != location) clearCoordinateEvidence()
-                        location = newValue
-                    },
-                    label = { Text("充电地点") },
-                    placeholder = { Text("家 / 公司地库 / 充电站，可留空") },
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-                if (commonPlaces.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
-                    ) {
-                        commonPlaces.take(5).forEach { place ->
-                            FilterChip(
-                                selected = location == place && latitude == null,
-                                onClick = {
-                                    clearCoordinateEvidence()
-                                    location = place
-                                },
-                                label = { Text(place) },
-                            )
-                        }
+            OutlinedTextField(
+                value = location,
+                onValueChange = { newValue ->
+                    if (newValue != location) clearCoordinateEvidence()
+                    location = newValue
+                },
+                label = { Text("充电地点") },
+                placeholder = { Text("家 / 公司地库 / 充电站") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+            )
+            if (commonPlaces.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
+                ) {
+                    commonPlaces.take(4).forEach { place ->
+                        FilterChip(
+                            selected = location == place && latitude == null,
+                            onClick = {
+                                clearCoordinateEvidence()
+                                location = place
+                            },
+                            label = { Text(place) },
+                        )
                     }
                 }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs)) {
                 TextButton(
                     onClick = {
-                        if (
-                            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
-                        ) requestCurrentLocation()
-                        else locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
+                            requestCurrentLocation()
+                        } else {
+                            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                        }
                     },
                     enabled = !locating,
                     contentPadding = PaddingValues(0.dp),
                 ) {
                     Icon(Icons.Default.LocationOn, null)
-                    Text(if (locating) "正在获取位置…" else " 使用当前位置")
+                    Text(if (locating) " 正在定位…" else " 使用当前位置")
                 }
                 locationMessage?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (latitude != null && longitude != null) {
                     Text(
-                        accuracyMeters?.let { "已保存真实坐标 · 精度约 ${it.toInt()} m" } ?: "已保存真实坐标",
+                        it,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 12.dp),
                     )
                 }
-            }
-
-            ChargingStartSection("备注", "NOTE") {
-                OutlinedTextField(
-                    value = remark,
-                    onValueChange = { remark = it },
-                    label = { Text("备注") },
-                    placeholder = { Text("可选") },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 2,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
-                )
             }
 
             errorMessage?.let {
@@ -424,7 +424,7 @@ fun StartChargingScreen(
                             chargerType = chargerType.trim().takeIf { it.isNotEmpty() },
                             unitPricePerKwh = priceValue,
                             location = location.trim().takeIf { it.isNotEmpty() },
-                            remark = remark.trim().takeIf { it.isNotEmpty() },
+                            remark = existingSession?.remark,
                             latitude = latitude,
                             longitude = longitude,
                             locationAccuracyMeters = accuracyMeters,
@@ -440,7 +440,6 @@ fun StartChargingScreen(
                                     chargerType = request.chargerType,
                                     unitPricePerKwh = request.unitPricePerKwh,
                                     location = request.location,
-                                    remark = request.remark,
                                     latitude = request.latitude,
                                     longitude = request.longitude,
                                     locationAccuracyMeters = request.locationAccuracyMeters,
@@ -449,11 +448,11 @@ fun StartChargingScreen(
                         }
                     }
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
             ) {
-                Text(if (isEditing) "保存充电信息" else "开始充电")
+                Text(if (isEditing) "保存" else "开始充电", fontWeight = FontWeight.SemiBold)
             }
-            Spacer(Modifier.height(MaterialTheme.spacing.lg))
+            Spacer(Modifier.height(MaterialTheme.spacing.sm))
         }
     }
 
@@ -461,7 +460,7 @@ fun StartChargingScreen(
         AlertDialog(
             onDismissRequest = { showDiscardConfirm = false },
             title = { Text("放弃未保存修改？") },
-            text = { Text(if (isEditing) "当前对进行中充电的修改还没有保存。" else "当前填写的开始充电信息还没有保存。") },
+            text = { Text(if (isEditing) "当前修改还没有保存。" else "当前填写的开始充电信息还没有保存。") },
             confirmButton = {
                 TextButton(onClick = { showDiscardConfirm = false; onBack() }) {
                     Text("放弃", color = MaterialTheme.colorScheme.error)
@@ -473,16 +472,13 @@ fun StartChargingScreen(
 }
 
 @Composable
-private fun ChargingStartSection(
-    title: String,
-    eyebrow: String,
-    content: @Composable () -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(eyebrow, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
-        content()
-    }
+private fun CompactFieldLabel(text: String) {
+    Text(
+        text,
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.Medium,
+    )
 }
 
 @Composable
