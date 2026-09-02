@@ -20,6 +20,8 @@ val heroArtworkManifestUrl = System.getenv("HERO_ARTWORK_MANIFEST_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/hero-assets-v1.json"
 val vehicleCatalogUrl = System.getenv("VEHICLE_CATALOG_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json"
+val tripMapStyleUrl = System.getenv("TRIP_MAP_STYLE_URL")
+    ?: "https://tiles.openfreemap.org/styles/dark"
 
 android {
     namespace = "com.evchargebook"
@@ -34,6 +36,7 @@ android {
         buildConfigField("String", "UPDATE_MANIFEST_URL", "\"$updateManifestUrl\"")
         buildConfigField("String", "HERO_ARTWORK_MANIFEST_URL", "\"$heroArtworkManifestUrl\"")
         buildConfigField("String", "VEHICLE_CATALOG_URL", "\"$vehicleCatalogUrl\"")
+        buildConfigField("String", "TRIP_MAP_STYLE_URL", "\"$tripMapStyleUrl\"")
     }
 
     signingConfigs {
@@ -90,6 +93,7 @@ dependencies {
     implementation("com.google.android.gms:play-services-location:21.3.0")
     implementation("io.coil-kt.coil3:coil-compose:3.5.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.5.0")
+    implementation("org.maplibre.gl:android-sdk-opengl:13.4.1")
     ksp("androidx.room:room-compiler:2.8.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
