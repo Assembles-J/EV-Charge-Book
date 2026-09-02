@@ -1,7 +1,6 @@
 package com.evchargebook.ui.vehicle
 
 import android.app.Activity
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +21,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.evchargebook.ui.theme.spacing
@@ -47,11 +48,7 @@ fun CompanionPresencePocSection(
         val address = deviceAddress
         if (!address.isNullOrBlank()) {
             if (result.resultCode == Activity.RESULT_OK) {
-                val observationResult = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-                    controller.ensureObservation(address)
-                } else {
-                    Result.success(Unit)
-                }
+                val observationResult = controller.ensureObservation(address)
                 status = controller.status(address)
                 resultText = observationResult.fold(
                     onSuccess = { "系统关联完成；等待真实连接/断开事件进行验收。" },
@@ -66,7 +63,9 @@ fun CompanionPresencePocSection(
 
     OutlinedCard(modifier = Modifier.fillMaxWidth()) {
         Column(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(MaterialTheme.spacing.md),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
         ) {
             Column(
@@ -98,7 +97,10 @@ fun CompanionPresencePocSection(
             }
 
             if (status.support == CompanionPresenceSupport.SUPPORTED) {
-                Row(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     if (status.associated && !deviceAddress.isNullOrBlank()) {
                         OutlinedButton(
                             onClick = {
