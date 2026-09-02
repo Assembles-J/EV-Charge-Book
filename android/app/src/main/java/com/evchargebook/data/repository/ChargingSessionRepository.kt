@@ -8,6 +8,7 @@ import com.evchargebook.data.entity.ChargingSessionStatus
 import com.evchargebook.data.entity.VehicleStateEntity
 import com.evchargebook.data.entity.VehicleStateUpdateSource
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.domain.VehicleActivityConflictPolicy
 import kotlinx.coroutines.flow.Flow
 
 /** Inputs known when the user explicitly chooses `开始充电`. */
@@ -119,6 +120,10 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             require(chargingSessionDao.getActiveForVehicle(request.vehicleId) == null) {
                 "这辆车已有进行中的充电"
             }
+            VehicleActivityConflictPolicy.chargingStartBlockReason(
+                vehicleId = request.vehicleId,
+                activeTripVehicleId = tripDao.getActive()?.vehicleId,
+            )?.let { reason -> error(reason) }
 
             val now = System.currentTimeMillis()
             val session = ChargingSessionEntity(
