@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -21,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -130,8 +132,8 @@ private fun RouteSnapshotBarV07(
                     metrics.forEachIndexed { index, metric ->
                         RouteSnapshotMetricCellV07(metric, Modifier.weight(1f))
                         if (index < metrics.lastIndex) {
-                            HorizontalDivider(
-                                modifier = Modifier.width(1.dp).size(width = 1.dp, height = 42.dp),
+                            VerticalDivider(
+                                modifier = Modifier.height(42.dp),
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = .18f),
                             )
                         }
@@ -240,8 +242,8 @@ private fun SpeedTrendCardV07(samples: List<TripTrendSampleV06>) {
                     ) {
                         Row(Modifier.fillMaxWidth()) {
                             TrendHeroMetricV07("平均", average, Modifier.weight(1f))
-                            HorizontalDivider(
-                                modifier = Modifier.width(1.dp).size(width = 1.dp, height = 48.dp),
+                            VerticalDivider(
+                                modifier = Modifier.height(48.dp),
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = .16f),
                             )
                             TrendHeroMetricV07("最高", max, Modifier.weight(1f))
