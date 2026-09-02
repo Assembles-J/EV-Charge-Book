@@ -1,7 +1,6 @@
 package com.evchargebook.trip
 
 import android.Manifest
-import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -15,7 +14,6 @@ import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.IBinder
-import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import androidx.core.app.NotificationCompat
@@ -207,40 +205,65 @@ class TripTrackingService : Service() {
             locationSource?.stop()
             FusedTripLocationSource(applicationContext).also { source ->
                 locationSource = source
-                source.start callback@{ location ->
-                    val activeTripId = currentTripId ?: return@callback
-                    val callbackAt = System.currentTimeMillis()
-                    val previousCallbackAt = lastCallbackAtEpochMillis
-                    val previousProvider = lastCallbackProvider
-                    val provider = location.provider
-                    val callbackGapMs = previousCallbackAt?.let { (callbackAt - it).coerceAtLeast(0L) }
-                    lastCallbackAtEpochMillis = callbackAt
-                    lastCallbackProvider = provider
-                    serviceScope.launch {
-                        if (previousProvider == null || previousProvider != provider) {
-                            recordEvent(
-                                activeTripId,
-                                TripDiagnosticEventType.LOCATION_SOURCE,
-                                provider = provider,
-                                detail = if (previousProvider == null) {
-                                    "first_callback"
-                                } else {
-                                    "provider_changed previous=$previousProvider current=$provider callbackGapMs=${callbackGapMs ?: 0L}"
+                source.start(
+                    callback = callback@{ location ->
+                        val activeTripId = currentTripId ?: return@callback
+                        val callbackAt = System.currentTimeMillis()
+                        val previousCallbackAt = lastCallbackAtEpochMillis
+                        val previousProvider = lastCallbackProvider
+                        val provider = location.provider
+                        val callbackGapMs = previousCallbackAt?.let { (callbackAt - it).coerceAtLeast(0L) }
+                        lastCallbackAtEpochMillis = callbackAt
+                        lastCallbackProvider = provider
+                        serviceScope.launch {
+                            if (previousProvider == null || previousProvider != provider) {
+                                recordEvent(
+                                    activeTripId,
+                                    TripDiagnosticEventType.LOCATION_SOURCE,
+                                    provider = provider,
+                                    detail = if (previousProvider == null) {
+                                        "first_callback"
+                                    } else {
+                                        "provider_changed previous=$previousProvider current=$provider callbackGapMs=${callbackGapMs ?: 0L}"
+                                    }
+                                )
+                            }
+                            if (callbackGapMs != null && callbackGapMs >= CALLBACK_GAP_DIAGNOSTIC_MS) {
+                                recordEvent(
+                                    activeTripId,
+                                    TripDiagnosticEventType.LOCATION_CALLBACK_GAP,
+                                    provider = provider,
+                                    detail = "callbackGapMs=$callbackGapMs captureTime=${location.time}"
+                                )
+                                recordEvent(activeTripId, TripDiagnosticEventType.POWER_STATE, provider = provider, detail = powerStateDetail())
+                            }
+                            pointMutex.withLock { handleLocation(activeTripId, location) }
+                        }
+                    },
+                    signalCallback = signal@{ signal ->
+                        val activeTripId = currentTripId ?: return@signal
+                        serviceScope.launch {
+                            val type = if (signal.availability != null) {
+                                TripDiagnosticEventType.LOCATION_AVAILABILITY
+                            } else {
+                                TripDiagnosticEventType.LOCATION_SOURCE
+                            }
+                            val detail = buildString {
+                                signal.availability?.let { append("available=$it") }
+                                signal.detail?.takeIf { it.isNotBlank() }?.let { extra ->
+                                    if (isNotEmpty()) append(' ')
+                                    append(extra)
                                 }
-                            )
-                        }
-                        if (callbackGapMs != null && callbackGapMs >= CALLBACK_GAP_DIAGNOSTIC_MS) {
+                            }.ifBlank { null }
                             recordEvent(
                                 activeTripId,
-                                TripDiagnosticEventType.LOCATION_CALLBACK_GAP,
-                                provider = provider,
-                                detail = "callbackGapMs=$callbackGapMs captureTime=${location.time}"
+                                type,
+                                provider = signal.source,
+                                detail = detail,
                             )
-                            recordEvent(activeTripId, TripDiagnosticEventType.POWER_STATE, provider = provider, detail = powerStateDetail())
                         }
-                        pointMutex.withLock { handleLocation(activeTripId, location) }
-                    }
-                }
+                    },
+                )
             }
         }
         registration.exceptionOrNull()?.let { error ->
@@ -305,18 +328,8 @@ class TripTrackingService : Service() {
     private fun providerEnabled(provider: String): Boolean =
         runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
 
-    private fun powerStateDetail(): String {
-        val power = getSystemService(PowerManager::class.java)
-        val activity = getSystemService(ActivityManager::class.java)
-        val deviceIdle = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) power.isDeviceIdleMode else false
-        val ignoringBatteryOptimizations = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            runCatching { power.isIgnoringBatteryOptimizations(packageName) }.getOrDefault(false)
-        } else {
-            true
-        }
-        val backgroundRestricted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) activity.isBackgroundRestricted else false
-        return "powerSave=${power.isPowerSaveMode} deviceIdle=$deviceIdle interactive=${power.isInteractive} ignoringBatteryOptimizations=$ignoringBatteryOptimizations backgroundRestricted=$backgroundRestricted"
-    }
+    private fun powerStateDetail(): String =
+        TripBackgroundExecutionDiagnostics.read(this).diagnosticDetail()
 
     private suspend fun interruptForRepair(tripId: Long, reason: TripTrackingRepairReason) {
         if (!repairInProgress.compareAndSet(false, true)) return
@@ -658,7 +671,7 @@ class TripTrackingService : Service() {
         private const val REPAIR_NOTIFICATION_ID = 2202
         private const val HEALTH_REFRESH_INTERVAL_MS = 10_000L
         private const val CALLBACK_GAP_DIAGNOSTIC_MS = 5_000L
-        private const val MAX_DETAIL_LENGTH = 160
+        private const val MAX_DETAIL_LENGTH = 320
 
         fun start(context: Context, tripId: Long) {
             val intent = Intent(context, TripTrackingService::class.java).setAction(ACTION_START).putExtra(EXTRA_TRIP_ID, tripId)
