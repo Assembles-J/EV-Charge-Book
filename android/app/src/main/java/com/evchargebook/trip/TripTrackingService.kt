@@ -443,7 +443,11 @@ class TripTrackingService : Service() {
         ) rawSpeed else null
         val decision = TripSamplingRules.decide(statsDeltaSeconds, trustedSegmentDistance, aggregateSpeed, accuracy)
         if (!decision.accept) {
-            rejectLocation(tripId, location.provider, "sampling_rejected")
+            rejectLocation(
+                tripId,
+                location.provider,
+                "sampling_rejected:${decision.reason ?: "unknown"}"
+            )
             return
         }
 
