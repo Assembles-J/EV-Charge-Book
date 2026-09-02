@@ -3,10 +3,31 @@ package com.evchargebook.ui.theme
 import androidx.compose.ui.graphics.Color
 
 /**
+ * Theme-aware colors used only by the vehicle artwork stage.
+ *
+ * Unlike normal cards, Hero media needs its own palette so the photo/scrim/title treatment can
+ * remain legible while still having a real light and dark presentation.
+ */
+data class HeroMediaColors(
+    val stageTop: Color,
+    val stageMiddle: Color,
+    val stageBottom: Color,
+    val primaryText: Color,
+    val controlSurface: Color,
+    val controlOutline: Color,
+    val scrimStrong: Color,
+    val scrimSoft: Color,
+    val scrimLower: Color,
+    val scrimBottom: Color,
+    val darkSurface: Boolean,
+)
+
+/**
  * Product-level visual tokens for EV Charge Book.
  *
- * Theme-sensitive UI should consume MaterialTheme.colorScheme. These raw palette values
- * only define the app light/dark schemes and intentional media-only overlays in one place.
+ * Theme-sensitive normal UI should consume MaterialTheme.colorScheme. These raw palette values
+ * define the app light/dark schemes, product accents and the intentional Hero media treatment in
+ * one place so screens do not invent their own Color(0x...) values.
  */
 object EVDesignTokens {
     object Light {
@@ -34,21 +55,38 @@ object EVDesignTokens {
         val outlineVariant = Color(0xFF1B2521)
     }
 
-    /**
-     * Fixed dark media colors used only on top of vehicle artwork where contrast must stay
-     * predictable regardless of the surrounding app theme.
-     */
     object Media {
-        val stageTop = Color(0xFF07110D)
-        val stageMiddle = Color(0xFF0A1712)
-        val stageBottom = Color(0xFF06100C)
-        val primaryText = Color(0xFFF4F8F6)
-        val controlSurface = Color(0x6607110F)
-        val controlOutline = Color.White.copy(alpha = 0.14f)
-        val scrimStrong = Color(0x98020806)
-        val scrimSoft = Color(0x20020806)
-        val scrimLower = Color(0x10020806)
-        val scrimBottom = Color(0x4806100C)
+        val dark = HeroMediaColors(
+            stageTop = Color(0xFF07110D),
+            stageMiddle = Color(0xFF0A1712),
+            stageBottom = Color(0xFF06100C),
+            primaryText = Color(0xFFF4F8F6),
+            controlSurface = Color(0x6607110F),
+            controlOutline = Color.White.copy(alpha = 0.14f),
+            scrimStrong = Color(0x98020806),
+            scrimSoft = Color(0x20020806),
+            scrimLower = Color(0x10020806),
+            scrimBottom = Color(0x4806100C),
+            darkSurface = true,
+        )
+
+        val light = HeroMediaColors(
+            stageTop = Color(0xFFF2F6F4),
+            stageMiddle = Color(0xFFE8EFEB),
+            stageBottom = Color(0xFFF7F9F8),
+            primaryText = Light.primaryText,
+            controlSurface = Color.White.copy(alpha = 0.78f),
+            controlOutline = Color.Black.copy(alpha = 0.10f),
+            // A pale scrim guarantees dark title/status chrome remains readable even when the
+            // light-specific vehicle artwork has mixed brightness near the top edge.
+            scrimStrong = Color(0xB8F4F7F5),
+            scrimSoft = Color(0x42F4F7F5),
+            scrimLower = Color(0x18F4F7F5),
+            scrimBottom = Color(0x8AF4F7F5),
+            darkSurface = false,
+        )
+
+        fun forTheme(darkTheme: Boolean): HeroMediaColors = if (darkTheme) dark else light
     }
 
     object Energy {
