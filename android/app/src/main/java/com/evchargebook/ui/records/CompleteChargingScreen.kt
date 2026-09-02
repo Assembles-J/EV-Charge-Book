@@ -45,6 +45,8 @@ import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.repository.CompleteChargingSessionRequest
 import com.evchargebook.data.repository.DeferChargingCompletionRequest
 import com.evchargebook.domain.charge.ChargeBillingField
+import com.evchargebook.domain.charge.ChargeCalculationEngine
+import com.evchargebook.domain.charge.ChargeCalculationInput
 import com.evchargebook.domain.charge.ChargeCalculationIssue
 import com.evchargebook.ui.theme.spacing
 import kotlinx.coroutines.launch
@@ -124,6 +126,15 @@ fun CompleteChargingScreen(
     val blockingBillingIssue = billing.issues.any {
         it == ChargeCalculationIssue.NEGATIVE_VALUE || it == ChargeCalculationIssue.BILLING_CONFLICT
     }
+    val calculation = remember(billing.calculationInput, endedAt, session.startedAtEpochMillis) {
+        ChargeCalculationEngine.calculate(
+            billing.calculationInput.copy(
+                startTimeEpochMillis = session.startedAtEpochMillis,
+                endTimeEpochMillis = endedAt,
+            )
+        )
+    }
+    val invalidTiming = ChargeCalculationIssue.END_NOT_AFTER_START in calculation.issues
 
     val estimatedVehicleEnergy = if (
         batteryCapacityKwh != null && batteryCapacityKwh > 0.0 &&
@@ -143,7 +154,7 @@ fun CompleteChargingScreen(
     val canEnd = !submitting &&
         startSocValue != null && startSocValue in 0..100 &&
         endSocValue != null && endSocValue in 0..100 && endSocValue >= startSocValue &&
-        endedAt > session.startedAtEpochMillis &&
+        !invalidTiming &&
         !invalidMeterText && !invalidCostText && !invalidPriceText && !invalidOdometer &&
         !blockingBillingIssue
 
@@ -153,9 +164,7 @@ fun CompleteChargingScreen(
     val timeText = remember(endedAt) {
         SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(endedAt))
     }
-    val durationText = remember(endedAt, session.startedAtEpochMillis) {
-        formatCompletionDuration((endedAt - session.startedAtEpochMillis).coerceAtLeast(0L))
-    }
+    val durationText = calculation.durationMillis?.let(::formatCompletionDuration)
 
     fun chooseDate() {
         val calendar = Calendar.getInstance().apply { timeInMillis = endedAt }
@@ -236,7 +245,7 @@ fun CompleteChargingScreen(
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "开始 ${formatCompletionTime(session.startedAtEpochMillis)} · $durationText" +
+                        "开始 ${formatCompletionTime(session.startedAtEpochMillis)} · ${durationText ?: "时长待确认"}" +
                             (session.targetSoc?.let { " · 目标 $it%" } ?: ""),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -248,7 +257,7 @@ fun CompleteChargingScreen(
                 OutlinedButton(onClick = ::chooseDate, modifier = Modifier.weight(1f)) { Text(dateText) }
                 OutlinedButton(onClick = ::chooseTime, modifier = Modifier.weight(1f)) { Text(timeText) }
             }
-            if (endedAt <= session.startedAtEpochMillis) {
+            if (invalidTiming) {
                 Text("结束时间必须晚于开始时间", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
 
