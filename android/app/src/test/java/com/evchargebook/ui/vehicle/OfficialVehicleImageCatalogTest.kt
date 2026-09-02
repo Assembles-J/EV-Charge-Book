@@ -4,7 +4,6 @@ import com.evchargebook.data.entity.VehicleEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class OfficialVehicleImageCatalogTest {
@@ -22,29 +21,8 @@ class OfficialVehicleImageCatalogTest {
     }
 
     @Test
-    fun `bundled C16 falls back when managed hero key is missing`() {
-        val resolved = OfficialVehicleImageCatalog.resolve(
-            vehicle("leap-c16-2026-reev-67", "零跑", "C16 2026款")
-        )
-
-        assertNotNull(resolved)
-        assertEquals("leapmotor-c16-2026", resolved?.key)
-        assertTrue(resolved?.remoteFallbackUrl?.endsWith("/leapmotor_c16_2026.webp") == true)
-    }
-
-    @Test
-    fun `managed hero key stays authoritative for bundled vehicle`() {
-        val resolved = OfficialVehicleImageCatalog.resolve(
-            vehicle("leap-c16-2026-reev-67", "零跑", "C16 2026款"),
-            preferredArtworkKey = "leapmotor-c16-special"
-        )
-
-        assertEquals("leapmotor-c16-special", resolved?.key)
-        assertNull(resolved?.remoteFallbackUrl)
-    }
-
-    @Test
-    fun `unknown model never selects artwork from display name`() {
+    fun `model names never select artwork without catalog key`() {
+        assertNull(OfficialVehicleImageCatalog.resolve(vehicle("byd-seal-2025-650", "比亚迪", "海豹 2025款")))
         assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "Tesla", "Model 3")))
         assertNull(OfficialVehicleImageCatalog.resolve(vehicle(null, "任意品牌", "任意车型")))
     }
