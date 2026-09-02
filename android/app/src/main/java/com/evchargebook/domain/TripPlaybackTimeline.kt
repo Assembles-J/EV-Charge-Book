@@ -5,14 +5,15 @@ import kotlin.math.max
 /**
  * Renderer-independent playback sample built from persisted TripPoint timestamps.
  *
- * The playback layer may interpolate only inside a short real interval. A real
- * LONG_GAP remains a hard discontinuity and is never bridged as continuous movement.
+ * Epoch time remains a human-readable fact. elapsedRealtimeNanos is the preferred interval clock
+ * when available, so wall-clock corrections cannot make an otherwise valid drive unplayable.
  */
 data class TripPlaybackSample(
     val capturedAtEpochMillis: Long,
     val latitude: Double,
     val longitude: Double,
-    val bearingDegrees: Double? = null
+    val bearingDegrees: Double? = null,
+    val capturedAtElapsedRealtimeNanos: Long? = null,
 )
 
 data class TripPlaybackFrame(
@@ -31,74 +32,67 @@ data class TripPlaybackFrame(
 
 object TripPlaybackTimeline {
     val speedPresets: List<Float> = listOf(1f, 2f, 4f, 8f)
+    private val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
 
     fun durationMillis(samples: List<TripPlaybackSample>): Long {
-        if (!isChronological(samples) || samples.size < 2) return 0L
-        return max(0L, samples.last().capturedAtEpochMillis - samples.first().capturedAtEpochMillis)
+        val timeline = buildTimeline(samples) ?: return 0L
+        return timeline.offsets.lastOrNull() ?: 0L
     }
 
     fun frameAt(
         samples: List<TripPlaybackSample>,
         requestedElapsedMillis: Long
     ): TripPlaybackFrame? {
-        if (samples.isEmpty() || !isChronological(samples)) return null
-
-        val startTime = samples.first().capturedAtEpochMillis
-        val totalMillis = durationMillis(samples)
+        if (samples.isEmpty()) return null
+        val timeline = buildTimeline(samples) ?: return null
+        val totalMillis = timeline.offsets.lastOrNull() ?: 0L
         val elapsedMillis = requestedElapsedMillis.coerceIn(0L, totalMillis)
-        val targetTime = startTime + elapsedMillis
 
         if (samples.size == 1 || elapsedMillis == 0L) {
             return frameAtSample(samples, 0, elapsedMillis, totalMillis)
         }
-
         if (elapsedMillis >= totalMillis) {
             return frameAtSample(samples, samples.lastIndex, totalMillis, totalMillis)
         }
 
         for (index in 0 until samples.lastIndex) {
-            val current = samples[index]
-            val next = samples[index + 1]
-
-            if (targetTime == next.capturedAtEpochMillis) {
+            val segmentStart = timeline.offsets[index]
+            val segmentEnd = timeline.offsets[index + 1]
+            if (elapsedMillis == segmentEnd) {
                 return frameAtSample(samples, index + 1, elapsedMillis, totalMillis)
             }
-            if (targetTime > next.capturedAtEpochMillis) continue
+            if (elapsedMillis > segmentEnd) continue
 
-            val deltaMillis = next.capturedAtEpochMillis - current.capturedAtEpochMillis
-            if (deltaMillis <= 0L) {
-                return frameAtSample(samples, index, elapsedMillis, totalMillis)
-            }
-
-            val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
-            if (deltaMillis >= longGapMillis) {
+            val segment = timeline.segments[index]
+            if (segment.breaksContinuity) {
                 return TripPlaybackFrame(
                     elapsedMillis = elapsedMillis,
                     totalMillis = totalMillis,
                     currentSampleIndex = index,
                     nextSampleIndex = index + 1,
-                    latitude = current.latitude,
-                    longitude = current.longitude,
-                    bearingDegrees = current.bearingDegrees,
+                    latitude = samples[index].latitude,
+                    longitude = samples[index].longitude,
+                    bearingDegrees = samples[index].bearingDegrees,
                     segmentFraction = 0.0,
                     isLongGap = true,
-                    longGapStartElapsedMillis = current.capturedAtEpochMillis - startTime,
-                    longGapEndElapsedMillis = next.capturedAtEpochMillis - startTime
+                    longGapStartElapsedMillis = segmentStart,
+                    longGapEndElapsedMillis = segmentEnd,
                 )
             }
 
-            val fraction = ((targetTime - current.capturedAtEpochMillis).toDouble() / deltaMillis.toDouble())
+            val deltaMillis = (segmentEnd - segmentStart).coerceAtLeast(1L)
+            val fraction = ((elapsedMillis - segmentStart).toDouble() / deltaMillis.toDouble())
                 .coerceIn(0.0, 1.0)
             return TripPlaybackFrame(
                 elapsedMillis = elapsedMillis,
                 totalMillis = totalMillis,
                 currentSampleIndex = index,
                 nextSampleIndex = index + 1,
-                latitude = lerp(current.latitude, next.latitude, fraction),
-                longitude = lerp(current.longitude, next.longitude, fraction),
-                bearingDegrees = interpolateBearing(current.bearingDegrees, next.bearingDegrees, fraction),
+                latitude = lerp(samples[index].latitude, samples[index + 1].latitude, fraction),
+                longitude = lerp(samples[index].longitude, samples[index + 1].longitude, fraction),
+                bearingDegrees = interpolateBearing(samples[index].bearingDegrees, samples[index + 1].bearingDegrees, fraction),
                 segmentFraction = fraction,
-                isLongGap = false
+                isLongGap = false,
             )
         }
 
@@ -119,9 +113,49 @@ object TripPlaybackTimeline {
     }
 
     fun isChronological(samples: List<TripPlaybackSample>): Boolean =
-        samples.zipWithNext().all { (current, next) ->
-            next.capturedAtEpochMillis >= current.capturedAtEpochMillis
+        buildTimeline(samples) != null
+
+    private data class PlaybackSegment(
+        val durationMillis: Long,
+        val breaksContinuity: Boolean,
+    )
+
+    private data class PlaybackTimeline(
+        val offsets: List<Long>,
+        val segments: List<PlaybackSegment>,
+    )
+
+    private fun buildTimeline(samples: List<TripPlaybackSample>): PlaybackTimeline? {
+        if (samples.isEmpty()) return PlaybackTimeline(emptyList(), emptyList())
+        if (samples.size == 1) return PlaybackTimeline(listOf(0L), emptyList())
+
+        val offsets = mutableListOf(0L)
+        val segments = mutableListOf<PlaybackSegment>()
+        var offset = 0L
+
+        samples.zipWithNext().forEach { (current, next) ->
+            val timing = TripCaptureTimeRules.between(
+                previousEpochMillis = current.capturedAtEpochMillis,
+                previousElapsedRealtimeNanos = current.capturedAtElapsedRealtimeNanos,
+                currentEpochMillis = next.capturedAtEpochMillis,
+                currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
+            )
+            if (!timing.accepted) return null
+
+            val duration = when {
+                timing.requiresRebase -> max(
+                    longGapMillis,
+                    (next.capturedAtEpochMillis - current.capturedAtEpochMillis).coerceAtLeast(0L),
+                )
+                else -> timing.deltaMillis ?: 0L
+            }
+            val breaks = timing.breaksContinuity(longGapMillis)
+            offset += duration
+            segments += PlaybackSegment(durationMillis = duration, breaksContinuity = breaks)
+            offsets += offset
         }
+        return PlaybackTimeline(offsets = offsets, segments = segments)
+    }
 
     private fun frameAtSample(
         samples: List<TripPlaybackSample>,
