@@ -54,6 +54,50 @@ class TripSpeedTrustRulesTest {
     }
 
     @Test
+    fun `trip32 contradictory zero speed falls back to distance motion`() {
+        assertFalse(
+            TripSpeedTrustRules.eligibleForAggregate(
+                reportedSpeedMps = 0.0,
+                deltaSeconds = 72,
+                trustedDistanceMeters = 1_523.5,
+                continuityAllowsSpeed = true
+            )
+        )
+        assertTrue(
+            TripSamplingRules.decide(
+                deltaSeconds = 72,
+                segmentDistanceMeters = 1_523.5,
+                reportedSpeedMps = null,
+                horizontalAccuracyMeters = 100.0
+            ).moving
+        )
+    }
+
+    @Test
+    fun `coarse displacement inside conservative accuracy envelope still trusts zero speed`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForAggregate(
+                reportedSpeedMps = 0.0,
+                deltaSeconds = 60,
+                trustedDistanceMeters = 350.0,
+                continuityAllowsSpeed = true
+            )
+        )
+    }
+
+    @Test
+    fun `small stationary drift still trusts zero speed`() {
+        assertTrue(
+            TripSpeedTrustRules.eligibleForAggregate(
+                reportedSpeedMps = 0.0,
+                deltaSeconds = 2,
+                trustedDistanceMeters = 6.5,
+                continuityAllowsSpeed = true
+            )
+        )
+    }
+
+    @Test
     fun `network speed spike cannot update max speed even when distance corroborates it`() {
         assertFalse(
             TripSpeedTrustRules.eligibleForMaxSpeed(
