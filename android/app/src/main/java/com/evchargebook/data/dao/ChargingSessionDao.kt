@@ -16,8 +16,23 @@ interface ChargingSessionDao {
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'ACTIVE' ORDER BY startedAtEpochMillis DESC LIMIT 1")
     suspend fun getActiveForVehicle(vehicleId: Long): ChargingSessionEntity?
 
+    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC")
+    fun observePendingForVehicle(vehicleId: Long): Flow<List<ChargingSessionEntity>>
+
+    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC")
+    suspend fun getPendingForVehicle(vehicleId: Long): List<ChargingSessionEntity>
+
+    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' AND endSoc IS NOT NULL ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC LIMIT 1")
+    suspend fun getLatestPendingWithEndSocForVehicle(vehicleId: Long): ChargingSessionEntity?
+
+    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' AND odometerKm IS NOT NULL ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC LIMIT 1")
+    suspend fun getLatestPendingWithOdometerForVehicle(vehicleId: Long): ChargingSessionEntity?
+
     @Query("SELECT * FROM charging_sessions WHERE status = 'ACTIVE' ORDER BY startedAtEpochMillis DESC LIMIT 1")
     suspend fun getAnyActive(): ChargingSessionEntity?
+
+    @Query("SELECT * FROM charging_sessions WHERE status IN ('ACTIVE', 'PENDING_DETAILS') ORDER BY updatedAtEpochMillis DESC LIMIT 1")
+    suspend fun getAnyUnfinished(): ChargingSessionEntity?
 
     @Query("SELECT * FROM charging_sessions WHERE id = :sessionId LIMIT 1")
     suspend fun get(sessionId: String): ChargingSessionEntity?

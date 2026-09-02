@@ -12,7 +12,7 @@ import org.junit.Test
 
 class ChargingBackupV9Test {
     @Test
-    fun `v9 round trip preserves active charging session and completion facts`() {
+    fun `current round trip preserves active charging session and completion facts`() {
         val vehicle = VehicleEntity(
             id = 1L,
             brand = "Test",
@@ -65,11 +65,60 @@ class ChargingBackupV9Test {
             )
         )
 
-        assertEquals(9, decoded.schemaVersion)
+        assertEquals(10, decoded.schemaVersion)
         assertEquals(1, decoded.chargingSessions.size)
         assertEquals(active, decoded.chargingSessions.single())
         assertEquals(4_600_000L, decoded.chargingRecords.single().endedAtEpochMillis)
         assertEquals(36.5, decoded.chargingRecords.single().vehicleEnergyKwh!!, 0.000001)
+    }
+
+    @Test
+    fun `v10 round trip preserves pending completion facts without fake billing values`() {
+        val vehicle = VehicleEntity(
+            id = 1L,
+            brand = "Test",
+            model = "EV",
+            batteryCapacityKwh = 80.0,
+            rangeKm = 600,
+            syncId = "vehicle-1",
+            createdAtEpochMillis = 100L,
+            updatedAtEpochMillis = 100L,
+        )
+        val pending = ChargingSessionEntity(
+            id = "session-pending",
+            vehicleId = 1L,
+            startedAtEpochMillis = 10_000L,
+            startSoc = 25,
+            targetSoc = 80,
+            chargerType = "家充",
+            unitPricePerKwh = 0.61,
+            location = "家",
+            status = ChargingSessionStatus.PENDING_DETAILS,
+            endedAtEpochMillis = 20_000L,
+            endSoc = 82,
+            odometerKm = 12_345.6,
+            pendingMeterEnergyKwh = null,
+            pendingTotalCost = null,
+            pendingVehicleEnergyKwh = null,
+            updatedAtEpochMillis = 20_000L,
+        )
+
+        val decoded = BackupCodec.decode(
+            BackupCodec.encode(
+                BackupPayload(
+                    schemaVersion = BackupCodec.CURRENT_SCHEMA_VERSION,
+                    exportedAt = 21_000L,
+                    appVersion = "test",
+                    vehicles = listOf(vehicle),
+                    chargingRecords = emptyList(),
+                    chargingSessions = listOf(pending),
+                )
+            )
+        )
+
+        assertEquals(pending, decoded.chargingSessions.single())
+        assertNull(decoded.chargingSessions.single().pendingMeterEnergyKwh)
+        assertNull(decoded.chargingSessions.single().pendingTotalCost)
     }
 
     @Test
