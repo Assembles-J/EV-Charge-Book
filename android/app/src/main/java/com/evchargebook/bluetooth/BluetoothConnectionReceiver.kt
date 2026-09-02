@@ -8,7 +8,10 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
-import com.evchargebook.autotrip.AutoTripPromptCoordinator
+import com.evchargebook.vehicle.presence.VehiclePresenceDispatcher
+import com.evchargebook.vehicle.presence.VehiclePresenceEvent
+import com.evchargebook.vehicle.presence.VehiclePresenceSource
+import com.evchargebook.vehicle.presence.VehiclePresenceState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -23,17 +26,21 @@ class BluetoothConnectionReceiver : BroadcastReceiver() {
         ) return
 
         val device = intent.getParcelableExtra<BluetoothDevice>(BluetoothDevice.EXTRA_DEVICE) ?: return
+        val state = when (intent.action) {
+            BluetoothDevice.ACTION_ACL_CONNECTED -> VehiclePresenceState.CONNECTED
+            BluetoothDevice.ACTION_ACL_DISCONNECTED -> VehiclePresenceState.DISCONNECTED
+            else -> return
+        }
+        val event = VehiclePresenceEvent(
+            state = state,
+            source = VehiclePresenceSource.CLASSIC_ACL,
+            deviceAddress = device.address,
+            deviceName = device.name,
+        )
         val pending = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val coordinator = AutoTripPromptCoordinator(context.applicationContext)
-                when (intent.action) {
-                    BluetoothDevice.ACTION_ACL_CONNECTED ->
-                        coordinator.onBluetoothConnected(device.address, device.name)
-
-                    BluetoothDevice.ACTION_ACL_DISCONNECTED ->
-                        coordinator.onBluetoothDisconnected(device.address)
-                }
+                VehiclePresenceDispatcher.forAutoTrip(context).dispatch(event)
             } finally {
                 pending.finish()
             }

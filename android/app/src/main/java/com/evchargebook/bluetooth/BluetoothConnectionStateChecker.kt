@@ -8,7 +8,11 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.evchargebook.autotrip.AutoTripCandidateResult
-import com.evchargebook.autotrip.AutoTripPromptCoordinator
+import com.evchargebook.vehicle.presence.VehiclePresenceDispatchResult
+import com.evchargebook.vehicle.presence.VehiclePresenceDispatcher
+import com.evchargebook.vehicle.presence.VehiclePresenceEvent
+import com.evchargebook.vehicle.presence.VehiclePresenceSource
+import com.evchargebook.vehicle.presence.VehiclePresenceState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -65,11 +69,18 @@ object BluetoothConnectionStateChecker {
         onResult: (Boolean) -> Unit,
     ) {
         CoroutineScope(Dispatchers.IO).launch {
-            val result = runCatching {
-                AutoTripPromptCoordinator(context.applicationContext)
-                    .onBluetoothConnected(deviceAddress, deviceName = null)
+            val dispatchResult = runCatching {
+                VehiclePresenceDispatcher.forAutoTrip(context).dispatch(
+                    VehiclePresenceEvent(
+                        state = VehiclePresenceState.CONNECTED,
+                        source = VehiclePresenceSource.FOREGROUND_CONNECTION_CHECK,
+                        deviceAddress = deviceAddress,
+                    )
+                )
             }.getOrNull()
-            val shouldShowForegroundPrompt = result is AutoTripCandidateResult.Created && result.notificationVisible
+            val candidate = (dispatchResult as? VehiclePresenceDispatchResult.Candidate)?.result
+            val shouldShowForegroundPrompt =
+                candidate is AutoTripCandidateResult.Created && candidate.notificationVisible
             ContextCompat.getMainExecutor(context).execute {
                 onResult(shouldShowForegroundPrompt)
             }
