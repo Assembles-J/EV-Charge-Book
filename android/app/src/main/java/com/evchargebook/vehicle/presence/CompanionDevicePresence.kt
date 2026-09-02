@@ -1,19 +1,15 @@
 package com.evchargebook.vehicle.presence
 
-import android.companion.AssociationInfo
 import android.companion.AssociationRequest
 import android.companion.BluetoothDeviceFilter
 import android.companion.CompanionDeviceManager
 import android.companion.CompanionDeviceService
-import android.companion.DevicePresenceEvent
-import android.companion.ObservingDevicePresenceRequest
 import android.content.Context
 import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import androidx.core.content.ContextCompat
 import com.evchargebook.bluetooth.VehicleBluetoothBindingPreferences
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -47,9 +43,13 @@ object CompanionPresencePolicy {
 /**
  * Optional #299 A2 adapter for Android Companion Device presence.
  *
- * The request is deliberately scoped to the already-selected classic-Bluetooth MAC. For classic
- * Bluetooth Android reports connection/disconnection presence, not vehicle telemetry. ACL remains
- * registered as the fallback path and both sources converge on VehiclePresenceDispatcher.
+ * This PoC deliberately uses the address-based Companion Device APIs that exist across Android
+ * 12-16. They are deprecated on newer Android releases, but retaining them for this experiment
+ * avoids loading API 33/36-only callback types on Android 12 while we collect OEM evidence.
+ *
+ * The association is scoped to the already-selected classic-Bluetooth MAC. For classic Bluetooth
+ * Android reports connection/disconnection presence, not vehicle telemetry. ACL remains registered
+ * as the fallback path and both sources converge on VehiclePresenceDispatcher.
  */
 class CompanionDevicePresenceController(
     private val context: Context,
@@ -108,26 +108,10 @@ class CompanionDevicePresenceController(
             override fun onDeviceFound(chooserLauncher: IntentSender) {
                 onPendingUserApproval(chooserLauncher)
             }
-
-            override fun onAssociationPending(intentSender: IntentSender) {
-                onPendingUserApproval(intentSender)
-            }
-
-            override fun onAssociationCreated(associationInfo: AssociationInfo) {
-                val createdAddress = associationInfo.deviceMacAddress?.toString()
-                    ?: normalizedAddress
-                ensureObservation(createdAddress)
-                    .onSuccess { onAssociated() }
-                    .onFailure { onFailure(it.message ?: "系统关联已创建，但连接观察启用失败") }
-            }
         }
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            companionManager.associate(request, ContextCompat.getMainExecutor(context), callback)
-        } else {
-            @Suppress("DEPRECATION")
-            companionManager.associate(request, callback, Handler(Looper.getMainLooper()))
-        }
+        @Suppress("DEPRECATION")
+        companionManager.associate(request, callback, Handler(Looper.getMainLooper()))
     }
 
     fun ensureObservation(deviceAddress: String): Result<Unit> {
@@ -142,17 +126,10 @@ class CompanionDevicePresenceController(
         }
 
         return runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-                val association = findAssociation(normalizedAddress)
-                    ?: error("Associated device record unavailable")
-                val request = ObservingDevicePresenceRequest.Builder()
-                    .setAssociationId(association.id)
-                    .build()
-                companionManager.startObservingDevicePresence(request)
-            } else {
-                @Suppress("DEPRECATION")
-                companionManager.startObservingDevicePresence(normalizedAddress)
-            }
+            // Kept intentionally for the A2 matrix: this API spans Android 12-16 and delivers
+            // classic-Bluetooth connect/disconnect through the String callbacks below.
+            @Suppress("DEPRECATION")
+            companionManager.startObservingDevicePresence(normalizedAddress)
         }
     }
 
@@ -165,28 +142,12 @@ class CompanionDevicePresenceController(
         val normalizedAddress = normalize(deviceAddress)
 
         return runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                val association = findAssociation(normalizedAddress) ?: return@runCatching
-                runCatching {
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
-                        val request = ObservingDevicePresenceRequest.Builder()
-                            .setAssociationId(association.id)
-                            .build()
-                        companionManager.stopObservingDevicePresence(request)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        companionManager.stopObservingDevicePresence(normalizedAddress)
-                    }
-                }
-                companionManager.disassociate(association.id)
-            } else {
-                runCatching {
-                    @Suppress("DEPRECATION")
-                    companionManager.stopObservingDevicePresence(normalizedAddress)
-                }
+            runCatching {
                 @Suppress("DEPRECATION")
-                companionManager.disassociate(normalizedAddress)
+                companionManager.stopObservingDevicePresence(normalizedAddress)
             }
+            @Suppress("DEPRECATION")
+            companionManager.disassociate(normalizedAddress)
         }
     }
 
@@ -199,27 +160,11 @@ class CompanionDevicePresenceController(
         )
 
     private fun isAssociated(deviceAddress: String): Boolean {
-        val normalizedAddress = normalize(deviceAddress)
         val companionManager = manager ?: return false
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            companionManager.myAssociations.any { association ->
-                association.deviceMacAddress?.toString()
-                    ?.equals(normalizedAddress, ignoreCase = true) == true
-            }
-        } else {
-            @Suppress("DEPRECATION")
-            companionManager.associations.any { address ->
-                address.equals(normalizedAddress, ignoreCase = true)
-            }
-        }
-    }
-
-    private fun findAssociation(deviceAddress: String): AssociationInfo? {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return null
         val normalizedAddress = normalize(deviceAddress)
-        return manager?.myAssociations?.firstOrNull { association ->
-            association.deviceMacAddress?.toString()
-                ?.equals(normalizedAddress, ignoreCase = true) == true
+        @Suppress("DEPRECATION")
+        return companionManager.associations.any { address ->
+            address.equals(normalizedAddress, ignoreCase = true)
         }
     }
 
@@ -229,6 +174,9 @@ class CompanionDevicePresenceController(
 
 /**
  * System-bound presence callback. It never creates or ends Trips directly.
+ *
+ * Android 13+ keeps compatibility by forwarding non-self-managed AssociationInfo callbacks to
+ * these legacy String callbacks. The PoC therefore keeps one callback surface across API 31-36.
  */
 class CompanionVehiclePresenceService : CompanionDeviceService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -241,37 +189,6 @@ class CompanionVehiclePresenceService : CompanionDeviceService() {
     @Suppress("DEPRECATION")
     override fun onDeviceDisappeared(address: String) {
         dispatch(address, CompanionPresencePolicy.classicCallbackState(appeared = false))
-    }
-
-    override fun onDeviceAppeared(associationInfo: AssociationInfo) {
-        dispatch(
-            associationInfo.deviceMacAddress?.toString(),
-            CompanionPresencePolicy.classicCallbackState(appeared = true),
-        )
-    }
-
-    override fun onDeviceDisappeared(associationInfo: AssociationInfo) {
-        dispatch(
-            associationInfo.deviceMacAddress?.toString(),
-            CompanionPresencePolicy.classicCallbackState(appeared = false),
-        )
-    }
-
-    override fun onDevicePresenceEvent(event: DevicePresenceEvent) {
-        val state = when (event.event) {
-            DevicePresenceEvent.EVENT_BT_CONNECTED -> VehiclePresenceState.CONNECTED
-            DevicePresenceEvent.EVENT_BT_DISCONNECTED -> VehiclePresenceState.DISCONNECTED
-            DevicePresenceEvent.EVENT_BLE_APPEARED -> VehiclePresenceState.PRESENT
-            else -> return
-        }
-        val associationId = event.associationId
-        if (associationId == DevicePresenceEvent.NO_ASSOCIATION) return
-        val address = getSystemService(CompanionDeviceManager::class.java)
-            ?.myAssociations
-            ?.firstOrNull { it.id == associationId }
-            ?.deviceMacAddress
-            ?.toString()
-        dispatch(address, state)
     }
 
     override fun onDestroy() {
