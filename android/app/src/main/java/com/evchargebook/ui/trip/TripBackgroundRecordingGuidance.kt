@@ -1,5 +1,9 @@
 package com.evchargebook.ui.trip
 
+import android.Manifest
+import android.content.Context
+import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
@@ -19,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.core.content.ContextCompat
 import com.evchargebook.trip.TripBackgroundExecutionDiagnostics
 import com.evchargebook.trip.TripBackgroundExecutionState
 import com.evchargebook.ui.theme.spacing
@@ -27,22 +32,68 @@ import com.evchargebook.ui.theme.spacing
 internal fun TripBackgroundRecordingGuidance() {
     val context = LocalContext.current
     val preferences = remember(context) {
-        context.getSharedPreferences(PREFERENCES_NAME, 0)
+        context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     }
-    var acknowledged by remember {
-        mutableStateOf(preferences.getBoolean(KEY_ACKNOWLEDGED, false))
+    val acknowledgementKey = remember { acknowledgementKey() }
+    var acknowledged by remember(acknowledgementKey) {
+        mutableStateOf(preferences.getBoolean(acknowledgementKey, false))
     }
     var state by remember {
         mutableStateOf(TripBackgroundExecutionDiagnostics.read(context))
+    }
+    var permissionState by remember {
+        mutableStateOf(readLocationPermissionState(context))
     }
     val settingsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         state = TripBackgroundExecutionDiagnostics.read(context)
+        permissionState = readLocationPermissionState(context)
     }
 
-    if (acknowledged || !state.needsUserAttention) return
+    val showBackgroundGuidance = state.backgroundRestricted ||
+        (!acknowledged && !state.ignoringBatteryOptimizations)
+    val showPreciseLocationGuidance = permissionState.coarseGranted && !permissionState.fineGranted
 
+    if (!showBackgroundGuidance && !showPreciseLocationGuidance) return
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+    ) {
+        if (showBackgroundGuidance) {
+            BackgroundExecutionGuidanceCard(
+                state = state,
+                onOpenSettings = {
+                    settingsLauncher.launch(
+                        TripBackgroundExecutionDiagnostics.appDetailsIntent(context)
+                    )
+                },
+                onAcknowledged = {
+                    preferences.edit().putBoolean(acknowledgementKey, true).apply()
+                    acknowledged = true
+                },
+            )
+        }
+
+        if (showPreciseLocationGuidance) {
+            PreciseLocationGuidanceCard(
+                onOpenSettings = {
+                    settingsLauncher.launch(
+                        TripBackgroundExecutionDiagnostics.appDetailsIntent(context)
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun BackgroundExecutionGuidanceCard(
+    state: TripBackgroundExecutionState,
+    onOpenSettings: () -> Unit,
+    onAcknowledged: () -> Unit,
+) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
@@ -73,27 +124,68 @@ internal fun TripBackgroundRecordingGuidance() {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                TextButton(
-                    onClick = {
-                        settingsLauncher.launch(
-                            TripBackgroundExecutionDiagnostics.appDetailsIntent(context)
-                        )
-                    },
-                ) {
+                TextButton(onClick = onOpenSettings) {
                     Text("去设置")
                 }
-                TextButton(
-                    onClick = {
-                        preferences.edit().putBoolean(KEY_ACKNOWLEDGED, true).apply()
-                        acknowledged = true
-                    },
-                ) {
+                TextButton(onClick = onAcknowledged) {
                     Text("已完成")
                 }
             }
         }
     }
 }
+
+@Composable
+private fun PreciseLocationGuidanceCard(
+    onOpenSettings: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
+        ) {
+            Text(
+                "建议开启精确定位",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "当前只允许近似位置。行程仍可开始，但汽车轨迹可能出现明显偏移或缺失；建议在定位权限中开启“使用精确位置”。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+            ) {
+                TextButton(onClick = onOpenSettings) {
+                    Text("定位设置")
+                }
+            }
+        }
+    }
+}
+
+private data class LocationPermissionState(
+    val fineGranted: Boolean,
+    val coarseGranted: Boolean,
+)
+
+private fun readLocationPermissionState(context: Context): LocationPermissionState =
+    LocationPermissionState(
+        fineGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED,
+        coarseGranted = ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+        ) == PackageManager.PERMISSION_GRANTED,
+    )
 
 private fun backgroundGuidanceText(state: TripBackgroundExecutionState): String = when {
     state.backgroundRestricted ->
@@ -104,5 +196,8 @@ private fun backgroundGuidanceText(state: TripBackgroundExecutionState): String 
         "为减少锁屏或切换 App 后的轨迹缺口，建议允许 EV Charge Book 持续后台运行。"
 }
 
+private fun acknowledgementKey(): String =
+    "$KEY_ACKNOWLEDGED_PREFIX:${Build.MANUFACTURER.lowercase()}:${Build.BRAND.lowercase()}:api${Build.VERSION.SDK_INT}"
+
 private const val PREFERENCES_NAME = "trip_background_recording_guidance"
-private const val KEY_ACKNOWLEDGED = "acknowledged"
+private const val KEY_ACKNOWLEDGED_PREFIX = "acknowledged"
