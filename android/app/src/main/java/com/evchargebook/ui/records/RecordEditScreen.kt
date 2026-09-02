@@ -32,6 +32,8 @@ import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.domain.charge.ChargeBillingField
+import com.evchargebook.domain.charge.ChargeCalculationIssue
 import com.evchargebook.domain.charge.ChargeEnergyCalculator
 import com.evchargebook.ui.theme.spacing
 import com.evchargebook.ui.theme.warningColor
@@ -61,13 +63,22 @@ fun RecordEditScreen(
     val context = LocalContext.current
     val focusManager = LocalFocusManager.current
     val calendar = remember { Calendar.getInstance().apply { timeInMillis = record.chargeTimeEpochMillis } }
+    val initialBilling = remember(record.id, record.updatedAtEpochMillis) {
+        ChargeBillingEditor.create(
+            totalCostText = record.cost.toEditableEditNumber(),
+            unitPriceText = record.pricePerKwh.toEditableEditNumber(),
+            meterEnergyText = record.energyKwh.toEditableEditNumber(),
+            authoritativeBillingFields = setOf(
+                ChargeBillingField.TOTAL_COST,
+                ChargeBillingField.METER_ENERGY
+            )
+        )
+    }
+
     var chargeTime by remember { mutableLongStateOf(record.chargeTimeEpochMillis) }
     var location by remember { mutableStateOf(record.location.orEmpty()) }
     var remark by remember { mutableStateOf(record.remark.orEmpty()) }
-    var energy by remember { mutableStateOf(record.energyKwh.toEditableEditNumber()) }
-    var pricePerKwh by remember { mutableStateOf(record.pricePerKwh.toEditableEditNumber()) }
-    var cost by remember { mutableStateOf(record.cost.toEditableEditNumber()) }
-    var costEditedManually by remember { mutableStateOf(false) }
+    var billing by remember(record.id, record.updatedAtEpochMillis) { mutableStateOf(initialBilling) }
     var startSoc by remember { mutableStateOf(record.startSoc.toString()) }
     var endSoc by remember { mutableStateOf(record.endSoc.toString()) }
     var odometer by remember { mutableStateOf(record.odometerKm?.toEditableEditNumber().orEmpty()) }
@@ -75,20 +86,14 @@ fun RecordEditScreen(
     var error by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
-    fun updateCalculatedCost(newEnergy: String = energy, newPrice: String = pricePerKwh) {
-        if (!costEditedManually) {
-            val amount = newEnergy.toDoubleOrNull()
-            val price = newPrice.toDoubleOrNull()
-            if (amount != null && amount > 0.0 && price != null && price >= 0.0) {
-                cost = (amount * price).toEditableEditNumber()
-            }
-        }
-    }
+    val energy = billing.meterEnergyText
+    val pricePerKwh = billing.unitPriceText
+    val cost = billing.totalCostText
 
     val isDirty = chargeTime != record.chargeTimeEpochMillis ||
         location != record.location.orEmpty() || remark != record.remark.orEmpty() ||
-        energy != record.energyKwh.toEditableEditNumber() || cost != record.cost.toEditableEditNumber() ||
-        pricePerKwh != record.pricePerKwh.toEditableEditNumber() ||
+        energy != initialBilling.meterEnergyText || cost != initialBilling.totalCostText ||
+        pricePerKwh != initialBilling.unitPriceText ||
         startSoc != record.startSoc.toString() || endSoc != record.endSoc.toString() ||
         odometer != record.odometerKm?.toEditableEditNumber().orEmpty() || chargerType != (record.chargerType ?: "公共慢充")
 
@@ -104,7 +109,7 @@ fun RecordEditScreen(
         ChargingRecordRules.previousOdometerKm(records, record.vehicleId, chargeTime, record.id)
     }
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometer.toDoubleOrNull())
-    val energyValue = energy.toDoubleOrNull()
+    val energyValue = billing.meterEnergyKwh
     val estimate = ChargeEnergyCalculator.estimate(
         batteryCapacityKwh = batteryCapacityKwh,
         startSoc = startSoc.toIntOrNull(),
@@ -115,7 +120,7 @@ fun RecordEditScreen(
         startSoc = startSoc.toIntOrNull(),
         endSoc = endSoc.toIntOrNull(),
         energyKwh = energyValue,
-        cost = cost.toDoubleOrNull(),
+        cost = billing.totalCost,
         batteryCapacityKwh = batteryCapacityKwh
     )
 
@@ -156,10 +161,7 @@ fun RecordEditScreen(
                 }
                 NumberField(
                     energy,
-                    {
-                        energy = it
-                        updateCalculatedCost(newEnergy = it)
-                    },
+                    { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.METER_ENERGY, it) },
                     "桩端 / 电表电量",
                     "kWh",
                     Modifier.fillMaxWidth(),
@@ -178,10 +180,7 @@ fun RecordEditScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     NumberField(
                         pricePerKwh,
-                        {
-                            pricePerKwh = it
-                            updateCalculatedCost(newPrice = it)
-                        },
+                        { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.UNIT_PRICE, it) },
                         "电价",
                         "元/kWh",
                         Modifier.weight(1f),
@@ -189,20 +188,19 @@ fun RecordEditScreen(
                     )
                     NumberField(
                         cost,
-                        {
-                            cost = it
-                            costEditedManually = true
-                        },
+                        { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.TOTAL_COST, it) },
                         "总费用",
                         "元",
                         Modifier.weight(1f),
                         KeyboardType.Decimal
                     )
                 }
-                if (costEditedManually) {
-                    TextButton(onClick = { costEditedManually = false; updateCalculatedCost() }, contentPadding = PaddingValues(0.dp)) {
-                        Text("恢复按电价自动计算")
-                    }
+                if (ChargeCalculationIssue.BILLING_CONFLICT in billing.issues) {
+                    Text(
+                        "费用、单价与用电量暂不一致，请确认其中一项。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.warningColor
+                    )
                 }
             }
 
@@ -250,9 +248,9 @@ fun RecordEditScreen(
                     focusManager.clearFocus()
                     val start = startSoc.toIntOrNull()
                     val end = endSoc.toIntOrNull()
-                    val chargedEnergy = energy.toDoubleOrNull()
-                    val price = pricePerKwh.toDoubleOrNull()
-                    val costValue = cost.toDoubleOrNull()
+                    val chargedEnergy = billing.meterEnergyKwh
+                    val price = billing.unitPrice
+                    val costValue = billing.totalCost
                     val odometerKm = odometer.toDoubleOrNull()
                     error = when {
                         start == null || start !in 0..100 -> "起始 SOC 需要是 0 到 100"
@@ -261,6 +259,7 @@ fun RecordEditScreen(
                         chargedEnergy == null || chargedEnergy <= 0 -> "桩端 / 电表电量必须大于 0"
                         price == null || price < 0 -> "电价需要是大于等于 0 的数字"
                         costValue == null || costValue < 0 -> "费用不能小于 0"
+                        ChargeCalculationIssue.BILLING_CONFLICT in billing.issues -> "费用、单价与用电量不一致，请先确认后再保存"
                         odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
                         else -> null
                     }
