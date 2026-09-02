@@ -115,11 +115,12 @@ fun CompleteChargingScreen(
     val endSocValue = endSoc.toIntOrNull()
     val meterEnergy = billing.meterEnergyKwh
     val totalCost = billing.totalCost
+    val unitPrice = billing.unitPrice
     val odometerValue = odometer.takeIf { it.isNotBlank() }?.toDoubleOrNull()
 
     val invalidMeterText = billing.meterEnergyText.isNotBlank() && (meterEnergy == null || meterEnergy <= 0.0)
     val invalidCostText = billing.totalCostText.isNotBlank() && (totalCost == null || totalCost < 0.0)
-    val invalidPriceText = billing.unitPriceText.isNotBlank() && (billing.unitPrice == null || billing.unitPrice < 0.0)
+    val invalidPriceText = billing.unitPriceText.isNotBlank() && (unitPrice == null || unitPrice < 0.0)
     val invalidOdometer = odometer.isNotBlank() && (odometerValue == null || odometerValue < 0.0)
     val blockingBillingIssue = billing.issues.any {
         it == ChargeCalculationIssue.NEGATIVE_VALUE || it == ChargeCalculationIssue.BILLING_CONFLICT
