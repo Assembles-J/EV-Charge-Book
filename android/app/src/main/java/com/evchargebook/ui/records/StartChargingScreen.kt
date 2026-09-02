@@ -87,6 +87,7 @@ fun StartChargingScreen(
     val scope = rememberCoroutineScope()
     val database = remember(context) { AppDatabase.getInstance(context.applicationContext) }
     val recentRecords by database.chargingRecordDao().observeForVehicle(vehicle.id).collectAsState(initial = emptyList())
+    val pricedSessions by database.chargingSessionDao().observePricedForVehicle(vehicle.id).collectAsState(initial = emptyList())
     val locationProvider = remember(context) { AndroidLocationProvider(context.applicationContext) }
     val addressResolver = remember(context) { AndroidGeocoderAddressResolver(context.applicationContext) }
 
@@ -114,24 +115,53 @@ fun StartChargingScreen(
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
     val isEditing = existingSession != null
-    val recentPriceChoices = remember(recentRecords, chargerType) {
-        recentRecords
-            .asSequence()
-            .filter { it.energyKwh > 0.0 && it.cost >= 0.0 }
-            .filter { chargerType.isBlank() || it.chargerType == chargerType }
-            .map { it.pricePerKwh }
-            .filter { it >= 0.0 }
-            .distinctBy { (it * 1000).toLong() }
-            .take(4)
-            .toList()
+    val priceMemories = remember(pricedSessions, recentRecords) {
+        buildList {
+            pricedSessions.forEach { session ->
+                val price = session.unitPricePerKwh ?: return@forEach
+                add(
+                    ChargingPriceMemory(
+                        pricePerKwh = price,
+                        chargerType = session.chargerType,
+                        location = session.location,
+                        timestampEpochMillis = session.endedAtEpochMillis ?: session.startedAtEpochMillis,
+                        isStoredTariff = true,
+                    )
+                )
+            }
+            recentRecords.forEach { record ->
+                if (record.energyKwh > 0.0 && record.cost >= 0.0) {
+                    add(
+                        ChargingPriceMemory(
+                            pricePerKwh = record.pricePerKwh,
+                            chargerType = record.chargerType,
+                            location = record.location,
+                            timestampEpochMillis = record.endedAtEpochMillis ?: record.chargeTimeEpochMillis,
+                            isStoredTariff = false,
+                        )
+                    )
+                }
+            }
+        }
+    }
+    val recentPriceChoices = remember(priceMemories, chargerType, location) {
+        ChargingPriceSuggestionPolicy.suggestionPrices(
+            chargerType = chargerType,
+            location = location,
+            memories = priceMemories,
+        )
+    }
+    val autoFillPrice = remember(priceMemories, chargerType, location) {
+        ChargingPriceSuggestionPolicy.autoFillPrice(
+            chargerType = chargerType,
+            location = location,
+            memories = priceMemories,
+        )
     }
 
-    LaunchedEffect(chargerType, recentRecords, priceTouched, isEditing) {
-        if (!isEditing && !priceTouched && chargerType.isNotBlank()) {
-            val remembered = recentRecords.firstOrNull {
-                it.chargerType == chargerType && it.energyKwh > 0.0 && it.cost >= 0.0
-            }?.pricePerKwh
-            if (remembered != null) unitPrice = remembered.toEditableChargingNumber()
+    LaunchedEffect(autoFillPrice, priceTouched, isEditing) {
+        if (!isEditing && !priceTouched) {
+            unitPrice = autoFillPrice?.toEditableChargingNumber().orEmpty()
         }
     }
 
@@ -306,10 +336,7 @@ fun StartChargingScreen(
                 ActiveChargingTypes.forEach { type ->
                     FilterChip(
                         selected = chargerType == type,
-                        onClick = {
-                            chargerType = type
-                            priceTouched = false
-                        },
+                        onClick = { chargerType = type },
                         label = { Text(type) },
                     )
                 }
@@ -474,7 +501,7 @@ fun StartChargingScreen(
 @Composable
 private fun CompactFieldLabel(text: String) {
     Text(
-        text,
+        text = text,
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         fontWeight = FontWeight.Medium,
