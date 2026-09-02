@@ -70,7 +70,7 @@ class TripDiagnosticExporterTest {
         assertTrue(csv.contains("# env.model=Device X"))
         assertTrue(csv.contains("# env.sdkInt=36"))
         assertTrue(csv.contains("LOCATION_CALLBACK_GAP"))
-        assertTrue(csv.contains("8500,6500,"))
+        assertTrue(csv.contains("8500,,6500,\"EPOCH_FALLBACK\""))
         assertTrue(csv.contains("\"gps\""))
     }
 
@@ -98,7 +98,35 @@ class TripDiagnosticExporterTest {
         val csv = TripDiagnosticExporter.toCsv(42L, points, emptyList())
 
         assertTrue(csv.contains("[longGaps]"))
-        assertTrue(csv.contains("1000,121000,120000,"))
+        assertTrue(csv.contains("1000,121000,120000,\"EPOCH_FALLBACK\""))
         assertTrue(csv.contains(",true\n"))
+    }
+
+    @Test
+    fun `export labels monotonic timing even when epoch time rolls backwards`() {
+        val points = listOf(
+            TripPointEntity(
+                id = 1L,
+                tripId = 42L,
+                capturedAtEpochMillis = 20_000L,
+                capturedAtElapsedRealtimeNanos = 5_000_000_000L,
+                latitude = 31.0,
+                longitude = 121.0,
+                provider = "gps",
+            ),
+            TripPointEntity(
+                id = 2L,
+                tripId = 42L,
+                capturedAtEpochMillis = 10_000L,
+                capturedAtElapsedRealtimeNanos = 9_000_000_000L,
+                latitude = 31.001,
+                longitude = 121.001,
+                provider = "gps",
+            ),
+        )
+
+        val csv = TripDiagnosticExporter.toCsv(42L, points, emptyList())
+
+        assertTrue(csv.contains("10000,9000000000,4000,\"ELAPSED_REALTIME\""))
     }
 }

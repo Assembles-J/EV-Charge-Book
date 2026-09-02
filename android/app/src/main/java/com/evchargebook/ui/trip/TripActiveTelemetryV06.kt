@@ -88,18 +88,29 @@ internal fun TripActiveTelemetryV06(
                 latitude = point.latitude,
                 longitude = point.longitude,
                 capturedAtEpochMillis = point.capturedAtEpochMillis,
-                speedMps = trustedSpeed(point)
+                speedMps = trustedSpeed(point),
+                capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
             )
         })
     }
     val speedSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedSpeed(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it * 3.6) }
+            trustedSpeed(point)?.let {
+                TripTrendSampleV06(
+                    timestamp = point.capturedAtEpochMillis,
+                    value = it * 3.6,
+                    capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
+                )
+            }
         }
     }
     val altitudeSamples = remember(points) {
         TripElevationAnalytics.filteredSeries(points).map { sample ->
-            TripTrendSampleV06(sample.capturedAtEpochMillis, sample.altitudeMeters)
+            TripTrendSampleV06(
+                timestamp = sample.capturedAtEpochMillis,
+                value = sample.altitudeMeters,
+                capturedAtElapsedRealtimeNanos = sample.capturedAtElapsedRealtimeNanos,
+            )
         }
     }
 

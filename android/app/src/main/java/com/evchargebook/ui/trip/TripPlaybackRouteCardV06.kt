@@ -52,6 +52,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
+import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.TripPlaybackFrame
 import com.evchargebook.domain.TripPlaybackSample
@@ -95,7 +96,8 @@ internal fun TripPlaybackRouteCardV06(
                 capturedAtEpochMillis = it.capturedAtEpochMillis,
                 latitude = it.latitude,
                 longitude = it.longitude,
-                bearingDegrees = it.bearingDegrees
+                bearingDegrees = it.bearingDegrees,
+                capturedAtElapsedRealtimeNanos = it.capturedAtElapsedRealtimeNanos,
             )
         }
     }
@@ -106,7 +108,8 @@ internal fun TripPlaybackRouteCardV06(
                     latitude = it.latitude,
                     longitude = it.longitude,
                     capturedAtEpochMillis = it.capturedAtEpochMillis,
-                    speedMps = trustedPlaybackSpeed(it)
+                    speedMps = trustedPlaybackSpeed(it),
+                    capturedAtElapsedRealtimeNanos = it.capturedAtElapsedRealtimeNanos,
                 )
             }
         )
@@ -195,7 +198,6 @@ internal fun TripPlaybackRouteCardV06(
                     PlaybackCanvasV06(
                         points = playbackPoints,
                         frame = frame,
-                        elapsedMillis = elapsedMillis,
                         minLatitude = routeGeometry.minLatitude,
                         maxLatitude = routeGeometry.maxLatitude,
                         minLongitude = routeGeometry.minLongitude,
@@ -301,7 +303,6 @@ private fun SpeedLegendItemV06(label: String, color: Color) {
 private fun PlaybackCanvasV06(
     points: List<TripPointEntity>,
     frame: TripPlaybackFrame?,
-    elapsedMillis: Long,
     minLatitude: Double,
     maxLatitude: Double,
     minLongitude: Double,
@@ -380,7 +381,6 @@ private fun PlaybackCanvasV06(
             val height = (size.height - pad * 2).coerceAtLeast(1f)
             val latSpan = (maxLatitude - minLatitude).takeIf { it > 0.0 } ?: 1.0
             val lonSpan = (maxLongitude - minLongitude).takeIf { it > 0.0 } ?: 1.0
-            val startTime = points.first().capturedAtEpochMillis
             val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
             val center = Offset(size.width / 2f, size.height / 2f)
 
@@ -403,9 +403,15 @@ private fun PlaybackCanvasV06(
                 return color to stroke
             }
 
-            points.zipWithNext().forEach { (from, to) ->
-                val delta = to.capturedAtEpochMillis - from.capturedAtEpochMillis
-                if (delta <= 0L || delta >= longGapMillis) return@forEach
+            points.zipWithNext().forEachIndexed { index, (from, to) ->
+                val timing = TripCaptureTimeRules.between(
+                    previousEpochMillis = from.capturedAtEpochMillis,
+                    previousElapsedRealtimeNanos = from.capturedAtElapsedRealtimeNanos,
+                    currentEpochMillis = to.capturedAtEpochMillis,
+                    currentElapsedRealtimeNanos = to.capturedAtElapsedRealtimeNanos,
+                )
+                if (!timing.accepted || timing.breaksContinuity(longGapMillis)) return@forEachIndexed
+
                 val start = project(from.latitude, from.longitude)
                 val end = project(to.latitude, to.longitude)
                 val (segmentColor, segmentStroke) = segmentStyle(from, to)
@@ -417,15 +423,18 @@ private fun PlaybackCanvasV06(
                     cap = StrokeCap.Round
                 )
 
-                val fromElapsed = (from.capturedAtEpochMillis - startTime).coerceAtLeast(0L)
-                val toElapsed = (to.capturedAtEpochMillis - startTime).coerceAtLeast(fromElapsed)
+                val currentFrame = frame
                 when {
-                    elapsedMillis >= toElapsed -> drawLine(segmentColor, start, end, segmentStroke, StrokeCap.Round)
-                    elapsedMillis > fromElapsed && toElapsed > fromElapsed -> {
-                        val fraction = ((elapsedMillis - fromElapsed).toDouble() / (toElapsed - fromElapsed).toDouble()).coerceIn(0.0, 1.0)
+                    currentFrame == null -> Unit
+                    index < currentFrame.currentSampleIndex ->
+                        drawLine(segmentColor, start, end, segmentStroke, StrokeCap.Round)
+                    index == currentFrame.currentSampleIndex &&
+                        currentFrame.nextSampleIndex == index + 1 &&
+                        !currentFrame.isLongGap -> {
+                        val fraction = currentFrame.segmentFraction.toFloat().coerceIn(0f, 1f)
                         val partial = Offset(
-                            x = start.x + (end.x - start.x) * fraction.toFloat(),
-                            y = start.y + (end.y - start.y) * fraction.toFloat()
+                            x = start.x + (end.x - start.x) * fraction,
+                            y = start.y + (end.y - start.y) * fraction
                         )
                         drawLine(segmentColor, start, partial, segmentStroke, StrokeCap.Round)
                     }

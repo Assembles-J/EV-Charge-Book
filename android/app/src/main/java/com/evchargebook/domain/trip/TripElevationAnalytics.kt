@@ -1,6 +1,7 @@
 package com.evchargebook.domain.trip
 
 import com.evchargebook.data.entity.TripPointEntity
+import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
 import kotlin.math.abs
 
@@ -26,6 +27,7 @@ data class TripElevationSummary(
 
 data class TripElevationSample(
     val capturedAtEpochMillis: Long,
+    val capturedAtElapsedRealtimeNanos: Long?,
     val altitudeMeters: Double,
     val verticalAccuracyMeters: Double?
 )
@@ -35,11 +37,13 @@ object TripElevationAnalytics {
     const val MIN_SIGNIFICANT_ALTITUDE_CHANGE_METERS = 4.0
     private const val MEDIAN_WINDOW_RADIUS = 2
     private const val MIN_SAMPLES_FOR_MEDIAN_FILTER = 7
+    private val LONG_GAP_MILLIS = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
 
     fun filteredSeries(points: List<TripPointEntity>): List<TripElevationSample> {
+        // DAO order is insertion/capture order. Do not re-sort by wall-clock time: a user or network
+        // time correction may legitimately move epoch time backwards within one monotonic Trip.
         val trusted = points
             .asSequence()
-            .sortedBy { it.capturedAtEpochMillis }
             .mapNotNull { point ->
                 val altitude = point.altitudeMeters?.takeIf { it.isFinite() } ?: return@mapNotNull null
                 val verticalAccuracy = point.verticalAccuracyMeters
@@ -50,6 +54,7 @@ object TripElevationAnalytics {
                 }
                 TripElevationSample(
                     capturedAtEpochMillis = point.capturedAtEpochMillis,
+                    capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
                     altitudeMeters = altitude,
                     verticalAccuracyMeters = verticalAccuracy
                 )
@@ -74,9 +79,7 @@ object TripElevationAnalytics {
         var altitudeAnchor = samples.first()
 
         samples.drop(1).forEach { current ->
-            val deltaSeconds = ((current.capturedAtEpochMillis - previous.capturedAtEpochMillis) / 1000)
-                .coerceAtLeast(0L)
-            if (deltaSeconds >= TripContinuityRules.LONG_GAP_SECONDS) {
+            if (breaksContinuity(previous, current)) {
                 skippedLongGapCount += 1
                 altitudeAnchor = current
                 previous = current
@@ -114,15 +117,23 @@ object TripElevationAnalytics {
         var current = mutableListOf(samples.first())
         result += current
         samples.zipWithNext().forEach { (previous, next) ->
-            val deltaSeconds = ((next.capturedAtEpochMillis - previous.capturedAtEpochMillis) / 1000)
-                .coerceAtLeast(0L)
-            if (deltaSeconds >= TripContinuityRules.LONG_GAP_SECONDS) {
+            if (breaksContinuity(previous, next)) {
                 current = mutableListOf()
                 result += current
             }
             current += next
         }
         return result.filter { it.isNotEmpty() }
+    }
+
+    private fun breaksContinuity(previous: TripElevationSample, current: TripElevationSample): Boolean {
+        val timing = TripCaptureTimeRules.between(
+            previousEpochMillis = previous.capturedAtEpochMillis,
+            previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
+            currentEpochMillis = current.capturedAtEpochMillis,
+            currentElapsedRealtimeNanos = current.capturedAtElapsedRealtimeNanos,
+        )
+        return !timing.accepted || timing.breaksContinuity(LONG_GAP_MILLIS)
     }
 
     private fun medianFilter(segment: List<TripElevationSample>): List<TripElevationSample> =

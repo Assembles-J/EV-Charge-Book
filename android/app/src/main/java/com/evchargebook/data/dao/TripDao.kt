@@ -33,14 +33,17 @@ interface TripDao {
     @Query("SELECT * FROM trip_sessions ORDER BY startedAtEpochMillis")
     suspend fun getAllSessions(): List<TripSessionEntity>
 
-    @Query("SELECT * FROM trip_points ORDER BY tripId, capturedAtEpochMillis")
+    @Query("SELECT * FROM trip_points ORDER BY tripId, id")
     suspend fun getAllPoints(): List<TripPointEntity>
 
-    @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY capturedAtEpochMillis")
+    @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY id")
     fun observePoints(tripId: Long): Flow<List<TripPointEntity>>
 
-    @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY capturedAtEpochMillis")
+    @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY id")
     suspend fun getPoints(tripId: Long): List<TripPointEntity>
+
+    @Query("SELECT * FROM trip_points WHERE tripId = :tripId ORDER BY id DESC LIMIT 1")
+    suspend fun getLatestPoint(tripId: Long): TripPointEntity?
 
     @Query("SELECT * FROM trip_diagnostic_events WHERE tripId = :tripId ORDER BY occurredAtEpochMillis, id")
     fun observeDiagnosticEvents(tripId: Long): Flow<List<TripDiagnosticEventEntity>>
