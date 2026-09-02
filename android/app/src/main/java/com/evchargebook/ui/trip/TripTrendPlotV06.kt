@@ -27,6 +27,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.ui.theme.EVDesignTokens
 import java.time.Instant
 import java.time.ZoneId
@@ -37,15 +38,64 @@ import kotlin.math.max
 
 internal data class TripTrendSampleV06(
     val timestamp: Long,
-    val value: Double
+    val value: Double,
+    val capturedAtElapsedRealtimeNanos: Long? = null,
 )
+
+internal data class TripTrendTimelineSampleV06(
+    val epochMillis: Long,
+    val timelineMillis: Long,
+    val value: Double,
+    val breakBefore: Boolean,
+)
+
+internal fun buildTripTrendTimelineV06(
+    samples: List<TripTrendSampleV06>,
+    longGapMs: Long,
+): List<TripTrendTimelineSampleV06> {
+    if (samples.isEmpty()) return emptyList()
+    val result = mutableListOf(
+        TripTrendTimelineSampleV06(
+            epochMillis = samples.first().timestamp,
+            timelineMillis = 0L,
+            value = samples.first().value,
+            breakBefore = false,
+        )
+    )
+    var timelineMillis = 0L
+    samples.zipWithNext().forEach { (previous, current) ->
+        val timing = TripCaptureTimeRules.between(
+            previousEpochMillis = previous.timestamp,
+            previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
+            currentEpochMillis = current.timestamp,
+            currentElapsedRealtimeNanos = current.capturedAtElapsedRealtimeNanos,
+        )
+        val breakBefore = !timing.accepted || timing.breaksContinuity(longGapMs)
+        val intervalMillis = when {
+            !timing.accepted -> longGapMs
+            timing.requiresRebase -> max(
+                longGapMs,
+                (current.timestamp - previous.timestamp).coerceAtLeast(0L),
+            )
+            else -> timing.deltaMillis ?: 0L
+        }
+        timelineMillis += intervalMillis
+        result += TripTrendTimelineSampleV06(
+            epochMillis = current.timestamp,
+            timelineMillis = timelineMillis,
+            value = current.value,
+            breakBefore = breakBefore,
+        )
+    }
+    return result
+}
 
 /**
  * Interactive Compose-native trend plot used by active and completed Trip surfaces.
  *
  * The chart renders persisted samples only, never smooths across missing data and never bridges
- * long GPS gaps. Two-finger pan / pinch zoom only change the viewport; tap or long-press drag
- * resolves continuously to the nearest real sample.
+ * long GPS gaps. X-axis intervals prefer persisted elapsedRealtimeNanos so wall-clock corrections
+ * do not distort or reverse a healthy Trip. Epoch time is retained only for the human clock label.
  */
 @Composable
 internal fun TripTrendPlotV06(
@@ -56,39 +106,46 @@ internal fun TripTrendPlotV06(
 ) {
     if (samples.size < 2) return
 
+    val timelineSamples = remember(samples, longGapMs) { buildTripTrendTimelineV06(samples, longGapMs) }
+    if (timelineSamples.size < 2) return
+
     val accent = EVDesignTokens.Energy.green
     val gridColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f)
-    val minTime = samples.first().timestamp
-    val maxTime = samples.last().timestamp
+    val minTime = timelineSamples.first().timelineMillis
+    val maxTime = timelineSamples.last().timelineMillis
     val timeRangeMs = max(1L, maxTime - minTime)
     val viewportKey = samples.first().timestamp
 
     var zoom by remember(viewportKey) { mutableFloatStateOf(1f) }
     var viewportStartFraction by remember(viewportKey) { mutableFloatStateOf(0f) }
-    var selectedTimestamp by remember(viewportKey) { mutableStateOf<Long?>(null) }
+    var selectedTimelineMillis by remember(viewportKey) { mutableStateOf<Long?>(null) }
 
     val visibleFraction = (1f / zoom).coerceIn(0.125f, 1f)
     val maxViewportStart = (1f - visibleFraction).coerceAtLeast(0f)
     val clampedStartFraction = viewportStartFraction.coerceIn(0f, maxViewportStart)
     val visibleStartTime = minTime + (timeRangeMs * clampedStartFraction).toLong()
     val visibleEndTime = minTime + (timeRangeMs * (clampedStartFraction + visibleFraction)).toLong()
-    val visibleValueSamples = samples.filter { it.timestamp in visibleStartTime..visibleEndTime }.ifEmpty { samples }
+    val visibleValueSamples = timelineSamples
+        .filter { it.timelineMillis in visibleStartTime..visibleEndTime }
+        .ifEmpty { timelineSamples }
 
     val minValue = visibleValueSamples.minOf { it.value }
     val maxValue = visibleValueSamples.maxOf { it.value }
     val valueRange = max(1.0, maxValue - minValue)
     val midValue = minValue + valueRange / 2.0
-    val selectedSample = selectedTimestamp?.let { timestamp -> samples.minByOrNull { abs(it.timestamp - timestamp) } }
+    val selectedSample = selectedTimelineMillis?.let { selected ->
+        timelineSamples.minByOrNull { abs(it.timelineMillis - selected) }
+    }
     val viewportChanged = zoom > 1.001f || clampedStartFraction > 0.001f
 
-    val currentSamples by rememberUpdatedState(samples)
+    val currentSamples by rememberUpdatedState(timelineSamples)
     val currentVisibleFraction by rememberUpdatedState(visibleFraction)
     val currentStartFraction by rememberUpdatedState(clampedStartFraction)
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(
-                text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, minTime, unit) }
+                text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, unit) }
                     ?: "长按左右拖动读点 · 双指缩放/平移",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -144,10 +201,12 @@ internal fun TripTrendPlotV06(
                             val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
                             val localFraction = (x / canvasWidth).coerceIn(0f, 1f)
                             val globalFraction = currentStartFraction + localFraction * currentVisibleFraction
-                            val currentMinTime = sampleList.first().timestamp
-                            val currentRangeMs = max(1L, sampleList.last().timestamp - currentMinTime)
-                            val targetTimestamp = currentMinTime + (currentRangeMs * globalFraction).toLong()
-                            selectedTimestamp = sampleList.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
+                            val currentMinTime = sampleList.first().timelineMillis
+                            val currentRangeMs = max(1L, sampleList.last().timelineMillis - currentMinTime)
+                            val targetTimeline = currentMinTime + (currentRangeMs * globalFraction).toLong()
+                            selectedTimelineMillis = sampleList
+                                .minByOrNull { abs(it.timelineMillis - targetTimeline) }
+                                ?.timelineMillis
                         }
 
                         detectTapGestures { tap -> selectNearestAt(tap.x) }
@@ -159,10 +218,12 @@ internal fun TripTrendPlotV06(
                             val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
                             val localFraction = (x / canvasWidth).coerceIn(0f, 1f)
                             val globalFraction = currentStartFraction + localFraction * currentVisibleFraction
-                            val currentMinTime = sampleList.first().timestamp
-                            val currentRangeMs = max(1L, sampleList.last().timestamp - currentMinTime)
-                            val targetTimestamp = currentMinTime + (currentRangeMs * globalFraction).toLong()
-                            selectedTimestamp = sampleList.minByOrNull { abs(it.timestamp - targetTimestamp) }?.timestamp
+                            val currentMinTime = sampleList.first().timelineMillis
+                            val currentRangeMs = max(1L, sampleList.last().timelineMillis - currentMinTime)
+                            val targetTimeline = currentMinTime + (currentRangeMs * globalFraction).toLong()
+                            selectedTimelineMillis = sampleList
+                                .minByOrNull { abs(it.timelineMillis - targetTimeline) }
+                                ?.timelineMillis
                         }
 
                         detectDragGesturesAfterLongPress(
@@ -188,15 +249,15 @@ internal fun TripTrendPlotV06(
                     )
                 }
 
-                fun point(sample: TripTrendSampleV06): Offset {
-                    val x = ((sample.timestamp - visibleStartTime).toDouble() / visibleDurationMs.toDouble()).toFloat() * size.width
+                fun point(sample: TripTrendTimelineSampleV06): Offset {
+                    val x = ((sample.timelineMillis - visibleStartTime).toDouble() / visibleDurationMs.toDouble()).toFloat() * size.width
                     val normalized = ((sample.value - minValue) / valueRange).toFloat().coerceIn(0f, 1f)
                     return Offset(x, padY + (1f - normalized) * usableHeight)
                 }
 
-                samples.zipWithNext().forEach { (from, to) ->
-                    if (to.timestamp - from.timestamp <= longGapMs &&
-                        to.timestamp >= visibleStartTime && from.timestamp <= visibleEndTime
+                timelineSamples.zipWithNext().forEach { (from, to) ->
+                    if (!to.breakBefore &&
+                        to.timelineMillis >= visibleStartTime && from.timelineMillis <= visibleEndTime
                     ) {
                         drawLine(
                             color = accent.copy(alpha = 0.82f),
@@ -208,7 +269,7 @@ internal fun TripTrendPlotV06(
                     }
                 }
 
-                selectedSample?.takeIf { it.timestamp in visibleStartTime..visibleEndTime }?.let { sample ->
+                selectedSample?.takeIf { it.timelineMillis in visibleStartTime..visibleEndTime }?.let { sample ->
                     val selected = point(sample)
                     val crosshairColor = gridColor.copy(alpha = 0.85f)
                     drawLine(
@@ -263,11 +324,11 @@ private fun AxisTime(value: String, align: TextAlign) {
     )
 }
 
-private fun formatSelectedTrendSample(sample: TripTrendSampleV06, tripStart: Long, unit: String): String {
-    val elapsed = formatTripTrendElapsed(sample.timestamp - tripStart)
+private fun formatSelectedTrendSample(sample: TripTrendTimelineSampleV06, unit: String): String {
+    val elapsed = formatTripTrendElapsed(sample.timelineMillis)
     val clock = DateTimeFormatter.ofPattern("HH:mm:ss")
         .withZone(ZoneId.systemDefault())
-        .format(Instant.ofEpochMilli(sample.timestamp))
+        .format(Instant.ofEpochMilli(sample.epochMillis))
     val value = when (unit) {
         "km/h" -> String.format(Locale.US, "%.1f km/h", sample.value)
         "m" -> String.format(Locale.US, "%.1f m", sample.value)
