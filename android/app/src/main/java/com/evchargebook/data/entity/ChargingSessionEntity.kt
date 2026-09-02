@@ -7,10 +7,11 @@ import java.util.UUID
 
 object ChargingSessionStatus {
     const val ACTIVE = "ACTIVE"
+    const val PENDING_DETAILS = "PENDING_DETAILS"
     const val COMPLETED = "COMPLETED"
     const val CANCELLED = "CANCELLED"
 
-    val all: Set<String> = setOf(ACTIVE, COMPLETED, CANCELLED)
+    val all: Set<String> = setOf(ACTIVE, PENDING_DETAILS, COMPLETED, CANCELLED)
 }
 
 /**
@@ -18,6 +19,9 @@ object ChargingSessionStatus {
  *
  * This is deliberately separate from [ChargingRecordEntity]: a charging record is a completed
  * historical fact, while a session may survive process death with completion facts still unknown.
+ *
+ * `PENDING_DETAILS` means physical charging has ended and the end facts are durable, but billing /
+ * meter facts are not complete enough to create a final historical charging record yet.
  */
 @Entity(
     tableName = "charging_sessions",
@@ -43,6 +47,15 @@ data class ChargingSessionEntity(
     val locationAccuracyMeters: Double? = null,
     val status: String = ChargingSessionStatus.ACTIVE,
     val endedAtEpochMillis: Long? = null,
+    /** Actual end SOC captured when physical charging ends. */
+    val endSoc: Int? = null,
+    /** Optional odometer captured when physical charging ends. */
+    val odometerKm: Double? = null,
+    /** Optional partial billing facts retained while waiting for final meter data. */
+    val pendingMeterEnergyKwh: Double? = null,
+    val pendingTotalCost: Double? = null,
+    /** Explicit measured vehicle-side energy only; never store the SOC-based estimate here. */
+    val pendingVehicleEnergyKwh: Double? = null,
     val completedRecordId: Long? = null,
     val updatedAtEpochMillis: Long = System.currentTimeMillis(),
 )
