@@ -6,6 +6,14 @@ object TripSpeedTrustRules {
     private const val MAX_TRUSTED_HORIZONTAL_ACCURACY_METERS = 25.0
     private const val MAX_TRUSTED_SPEED_ACCURACY_MPS = 3.0
     private const val EXTREME_SPEED_REQUIRES_ACCURACY_MPS = 25.0
+    private const val STATIONARY_CONTRADICTION_IMPLIED_SPEED_MPS = 5.0
+
+    // A coarse accepted fix may legally have 100m horizontal accuracy. For a pair of such fixes,
+    // require displacement to exceed twice their combined accepted uncertainty before a reported
+    // near-zero speed is discarded. This keeps network jitter fail-closed while still catching the
+    // Trip 32 case (about 1.52km over 72s with a 100m network fix reporting speed=0).
+    private val stationaryContradictionMinDistanceMeters =
+        TripSamplingRules.MAX_HORIZONTAL_ACCURACY_METERS * 4.0
 
     fun eligibleForAggregate(
         reportedSpeedMps: Double?,
@@ -14,7 +22,14 @@ object TripSpeedTrustRules {
         continuityAllowsSpeed: Boolean
     ): Boolean {
         if (!continuityAllowsSpeed || reportedSpeedMps == null || !reportedSpeedMps.isFinite() || reportedSpeedMps < 0.0) return false
-        if (reportedSpeedMps < TripSamplingRules.MOVING_SPEED_MPS) return true
+        if (reportedSpeedMps < TripSamplingRules.MOVING_SPEED_MPS) {
+            if (deltaSeconds <= 0) return true
+            val impliedSpeed = trustedDistanceMeters / deltaSeconds
+            val stronglyContradictsStationary =
+                trustedDistanceMeters >= stationaryContradictionMinDistanceMeters &&
+                    impliedSpeed >= STATIONARY_CONTRADICTION_IMPLIED_SPEED_MPS
+            return !stronglyContradictsStationary
+        }
         if (deltaSeconds <= 0) return false
 
         val expectedDistance = reportedSpeedMps * deltaSeconds
