@@ -11,8 +11,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.dashboard.HeroVehicleCard
 import com.evchargebook.ui.theme.LocalAppThemeController
@@ -37,6 +39,15 @@ fun VehicleScreen(
 ) {
     var archiveCandidate by remember { mutableStateOf<VehicleEntity?>(null) }
     val themeController = LocalAppThemeController.current
+    val context = LocalContext.current
+    val catalogVehicles by remember(context.applicationContext) {
+        AppDatabase.getInstance(context.applicationContext)
+            .vehicleCatalogDao()
+            .observeAll()
+    }.collectAsState(initial = emptyList())
+    val heroArtworkKey = remember(vehicle, catalogVehicles) {
+        ManagedVehicleCatalogResolver.resolveHeroArtworkKey(vehicle, catalogVehicles)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -59,7 +70,14 @@ fun VehicleScreen(
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
         ) {
             if (vehicle != null) {
-                item { HeroVehicleCard(vehicle, currentSoc, currentMileageKm) }
+                item {
+                    HeroVehicleCard(
+                        vehicle = vehicle,
+                        currentSoc = currentSoc,
+                        currentMileageKm = currentMileageKm,
+                        artworkKey = heroArtworkKey,
+                    )
+                }
                 item { VehicleSpecificationCard(vehicle) }
                 item {
                     OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
