@@ -58,6 +58,8 @@ import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.theme.EVDesignTokens
+import com.evchargebook.ui.theme.HeroMediaColors
+import com.evchargebook.ui.theme.LocalAppThemeController
 import com.evchargebook.ui.theme.LocalCockpitColors
 import com.evchargebook.ui.vehicle.HeroArtworkManifestRepository
 import com.evchargebook.ui.vehicle.ManagedBrandLogo
@@ -80,6 +82,8 @@ fun HeroVehicleCard(
     edgeToEdgeTop: Boolean = false
 ) {
     val context = LocalContext.current
+    val appTheme = LocalAppThemeController.current
+    val media = EVDesignTokens.Media.forTheme(appTheme.darkTheme)
     val catalogId = vehicle?.catalogVehicleId?.trim()?.takeIf { it.isNotEmpty() }
     val localArtworkKey by remember(catalogId, context.applicationContext) {
         catalogId?.let {
@@ -111,18 +115,24 @@ fun HeroVehicleCard(
                         .fillMaxWidth()
                         .aspectRatio(1.24f)
                 ) {
-                    VehicleStage(vehicle, effectiveArtworkKey, Modifier.fillMaxSize())
+                    VehicleStage(
+                        vehicle = vehicle,
+                        artworkKey = effectiveArtworkKey,
+                        preferLightArtwork = !appTheme.darkTheme,
+                        media = media,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                     Box(
                         Modifier
                             .fillMaxSize()
                             .background(
                                 Brush.verticalGradient(
                                     listOf(
-                                        EVDesignTokens.Media.scrimStrong,
-                                        EVDesignTokens.Media.scrimSoft,
+                                        media.scrimStrong,
+                                        media.scrimSoft,
                                         Color.Transparent,
-                                        EVDesignTokens.Media.scrimLower,
-                                        EVDesignTokens.Media.scrimBottom
+                                        media.scrimLower,
+                                        media.scrimBottom
                                     )
                                 )
                             )
@@ -140,7 +150,7 @@ fun HeroVehicleCard(
                         style = MaterialTheme.typography.titleMedium,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
-                        color = EVDesignTokens.Media.primaryText,
+                        color = media.primaryText,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -155,8 +165,8 @@ fun HeroVehicleCard(
                                 modifier = Modifier
                                     .size(42.dp)
                                     .clip(CircleShape)
-                                    .background(EVDesignTokens.Media.controlSurface)
-                                    .border(1.dp, EVDesignTokens.Media.controlOutline, CircleShape)
+                                    .background(media.controlSurface)
+                                    .border(1.dp, media.controlOutline, CircleShape)
                                     .clickable(enabled = canSwitchVehicle) {
                                         vehicleMenuExpanded = true
                                     },
@@ -165,7 +175,7 @@ fun HeroVehicleCard(
                                 ManagedBrandLogo(
                                     catalogVehicleId = vehicle.catalogVehicleId,
                                     modifier = Modifier.size(22.dp),
-                                    darkSurface = true,
+                                    darkSurface = media.darkSurface,
                                 )
                             }
 
@@ -232,25 +242,44 @@ fun HeroVehicleCard(
 private fun VehicleStage(
     vehicle: VehicleEntity?,
     artworkKey: String? = null,
+    preferLightArtwork: Boolean,
+    media: HeroMediaColors,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
     val artwork = OfficialVehicleImageCatalog.resolve(vehicle, artworkKey)
-    var remoteArtwork by remember(artwork?.key) {
+    var remoteArtwork by remember(artwork?.key, preferLightArtwork) {
         mutableStateOf<HeroArtworkManifestRepository.RemoteArtwork?>(null)
     }
 
-    LaunchedEffect(artwork?.key) {
-        remoteArtwork = artwork?.let { HeroArtworkManifestRepository.resolve(context, it.key) }
+    LaunchedEffect(artwork?.key, preferLightArtwork) {
+        remoteArtwork = artwork?.let {
+            HeroArtworkManifestRepository.resolve(
+                context = context,
+                artworkKey = it.key,
+                preferLight = preferLightArtwork,
+            )
+        }
     }
 
     val imageUrl = remoteArtwork?.url ?: artwork?.remoteFallbackUrl
     val cacheVersion = remoteArtwork?.version ?: 0
 
-    remember(vehicle?.catalogVehicleId, vehicle?.brand, vehicle?.model, artworkKey, artwork?.key, imageUrl) {
+    remember(
+        vehicle?.catalogVehicleId,
+        vehicle?.brand,
+        vehicle?.model,
+        artworkKey,
+        artwork?.key,
+        preferLightArtwork,
+        remoteArtwork?.resolvedKey,
+        imageUrl,
+    ) {
         Log.d(
             VEHICLE_ARTWORK_TAG,
-            "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} artwork=${artwork?.key} remote=${imageUrl != null}"
+            "vehicle=${vehicle?.brand}/${vehicle?.model} catalog=${vehicle?.catalogVehicleId} " +
+                "artwork=${artwork?.key} resolved=${remoteArtwork?.resolvedKey} " +
+                "theme=${if (preferLightArtwork) "light" else "dark"} remote=${imageUrl != null}"
         )
         true
     }
@@ -259,9 +288,9 @@ private fun VehicleStage(
         modifier = modifier.background(
             Brush.verticalGradient(
                 listOf(
-                    EVDesignTokens.Media.stageTop,
-                    EVDesignTokens.Media.stageMiddle,
-                    EVDesignTokens.Media.stageBottom
+                    media.stageTop,
+                    media.stageMiddle,
+                    media.stageBottom
                 )
             )
         ),
@@ -270,7 +299,7 @@ private fun VehicleStage(
         Icon(
             imageVector = Icons.Default.DirectionsCar,
             contentDescription = null,
-            tint = EVDesignTokens.Energy.green.copy(alpha = 0.42f),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.42f),
             modifier = Modifier.size(72.dp)
         )
 
