@@ -15,6 +15,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.database.AppDatabase
+import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
 import com.evchargebook.ui.dashboard.HeroVehicleCard
 import com.evchargebook.ui.theme.LocalAppThemeController
@@ -48,6 +49,9 @@ fun VehicleScreen(
     val heroArtworkKey = remember(vehicle, catalogVehicles) {
         ManagedVehicleCatalogResolver.resolveHeroArtworkKey(vehicle, catalogVehicles)
     }
+    val managedCatalogVehicle = remember(vehicle, catalogVehicles) {
+        ManagedVehicleCatalogResolver.resolveCatalogVehicle(vehicle, catalogVehicles)
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -78,7 +82,7 @@ fun VehicleScreen(
                         artworkKey = heroArtworkKey,
                     )
                 }
-                item { VehicleSpecificationCard(vehicle) }
+                item { VehicleSpecificationCard(vehicle, managedCatalogVehicle) }
                 item {
                     OutlinedButton(onClick = onEdit, modifier = Modifier.fillMaxWidth()) {
                         Icon(Icons.Default.Edit, null)
@@ -121,11 +125,32 @@ fun VehicleScreen(
 }
 
 @Composable
-private fun VehicleSpecificationCard(vehicle: VehicleEntity) {
+private fun VehicleSpecificationCard(
+    vehicle: VehicleEntity,
+    managedCatalogVehicle: VehicleCatalogEntity?,
+) {
+    val displayBrand = managedCatalogVehicle?.brand ?: vehicle.brand
+    val displayModel = managedCatalogVehicle?.modelName ?: vehicle.model
+    val sourceDescription = if (managedCatalogVehicle != null) {
+        "$displayBrand $displayModel · 当前标准车型资料来自车型库"
+    } else {
+        "$displayBrand $displayModel · 未匹配当前车型库，显示车辆历史快照"
+    }
+    val batteryText = if (managedCatalogVehicle != null) {
+        managedCatalogVehicle.batteryCapacityKwh?.let { "${one(it)} kWh" } ?: "--"
+    } else {
+        "${one(vehicle.batteryCapacityKwh)} kWh"
+    }
+    val rangeText = if (managedCatalogVehicle != null) {
+        managedCatalogVehicle.rangeKm?.let { "$it km" } ?: "--"
+    } else {
+        "${vehicle.rangeKm} km"
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
         SettingsSectionTitle("车辆规格", "VEHICLE SPECS · READ ONLY")
         Text(
-            "${vehicle.brand} ${vehicle.model} · 标准车型资料由车型库维护",
+            sourceDescription,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -138,8 +163,8 @@ private fun VehicleSpecificationCard(vehicle: VehicleEntity) {
                 modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
                 horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg)
             ) {
-                VehicleSpecValue("电池容量", "${one(vehicle.batteryCapacityKwh)} kWh", Modifier.weight(1f))
-                VehicleSpecValue("标称续航", "${vehicle.rangeKm} km", Modifier.weight(1f))
+                VehicleSpecValue("电池容量", batteryText, Modifier.weight(1f))
+                VehicleSpecValue("标称续航", rangeText, Modifier.weight(1f))
             }
         }
     }
