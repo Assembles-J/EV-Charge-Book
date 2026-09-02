@@ -422,7 +422,7 @@ fun CompleteChargingScreen(
                                         endSoc = endSocValue!!,
                                         endedAtEpochMillis = endedAt,
                                         odometerKm = odometerValue,
-                                        meterEnergyKwh = meterEnergy?.takeIf { it > 0.0 },
+                                        meterEnergyKwh = meterEnergy?.takeIf { meterIsConfirmed && it > 0.0 },
                                         totalCost = totalCost?.takeIf { it >= 0.0 },
                                         vehicleEnergyKwh = null,
                                         location = location.trim().takeIf { it.isNotEmpty() },
