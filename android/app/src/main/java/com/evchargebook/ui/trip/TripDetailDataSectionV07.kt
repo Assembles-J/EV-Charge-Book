@@ -27,11 +27,9 @@ import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.Terrain
 import androidx.compose.material.icons.filled.TrendingDown
 import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -255,7 +253,6 @@ internal fun CompletedTripDiagnosticsV07(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun TripPlaybackInlineActionV07(points: List<TripPointEntity>) {
     var showPlayback by remember(points.firstOrNull()?.tripId) { mutableStateOf(false) }
@@ -263,26 +260,16 @@ private fun TripPlaybackInlineActionV07(points: List<TripPointEntity>) {
     TripDataActionRowV07(
         icon = Icons.Default.PlayCircle,
         title = "轨迹回放",
-        subtitle = "按时间回看这段行程轨迹",
+        subtitle = "全屏按时间回看，拖动/缩放不会触发页面收缩",
         enabled = points.size >= 2,
         onClick = { showPlayback = true },
     )
 
     if (showPlayback) {
-        ModalBottomSheet(onDismissRequest = { showPlayback = false }) {
-            Column(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Text(
-                    "按可信 GPS 速度分段着色；灰色代表速度不可可信，真实长缺口保持断开。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                TripPlaybackRouteCardV06(points = points)
-                Spacer(Modifier.size(16.dp))
-            }
-        }
+        TripPlaybackFullScreenV07(
+            points = points,
+            onDismiss = { showPlayback = false },
+        )
     }
 }
 
