@@ -1,8 +1,8 @@
 # EV Charge Book Current Status Authority
 
-Updated: 2026-08-31
+Updated: 2026-09-02
 Status: Operational status authority
-Baseline: `main@e5149a6474a17c7a5ce0a987f04fc3ab38a143b0`
+Baseline: `main@86f5e69152480546e69ed2b90cb9e62afcc63dd3`
 
 ## Purpose
 
@@ -56,46 +56,52 @@ Current product/data authority:
 
 - #251 parent workflow and truth rules;
 - `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md`;
-- #252 coupled calculation / derived metrics;
-- #260 Add/Edit linked billing adoption;
-- #253 optional active charging session / preset lifecycle;
+- #252 coupled calculation / truthful derived metrics;
+- #260 Add/Edit billing editor physical acceptance;
+- #253 active / pending / completion lifecycle physical acceptance;
+- #289 compact Start/Finish + delayed-meter physical feedback acceptance;
 - #254 current-location behavior / future map-point picker.
 
-#### PR #258 — pure calculation contract
+Current `main` implementation is no longer the old #258/#261/#267 Draft stack. Merged authority now includes:
 
-Current parent state at this snapshot:
+- #268 — centralized calculation/provenance engine;
+- #261 — shared Add/Edit `ChargeBillingEditor` adoption;
+- #271 — durable charging-session persistence + exactly-once completion foundation;
+- #276 — separate `开始充电` / `充电记录维护`, Start screen and persisted active card;
+- #277 — completion UI;
+- #297 — truthful `PENDING_DETAILS` delayed-meter lifecycle, backfill and explicit pending delete;
+- #302 — `修改结束信息` for pending end time/SOC/location/odometer;
+- #305 — pending state and complete/defer/update-pending/backfill/discard commands routed through `MainViewModel`; Records/Completion UI no longer constructs database/repository/Room access.
 
-- Draft;
-- current head `b506b749a6cea7041b4825b80b83ed9455b4196e`;
-- comparison to baseline `main@e5149a6` is **ahead 10 / behind 0**;
-- effective diff remains only `ChargeCalculationEngine.kt` + focused test;
-- prior head Android Build #626 was Green;
-- synchronized-head Android Build #637 is running at the time of this snapshot.
+Key current truth rules:
 
-Durable merge gate: the current synchronized head needs successful current-head Android CI and unchanged intended diff before Ready/Merge. Historical #626 Green does not authorize the new head.
+- no fake live SOC/BMS/charger-power telemetry;
+- target SOC is intent, not actual end SOC;
+- unknown meter/cost remains null, never fake zero;
+- only user-confirmed meter/charger kWh may finalize a completed record;
+- a kWh value derived only from cost/price linkage is not a physical meter fact;
+- pending physical charge-end facts may update VehicleState but pending does not enter completed charging statistics;
+- completion/backfill remains exactly-once under repository/session transaction authority;
+- manual completed-record maintenance remains independent of active-session lifecycle;
+- SOC-delta × battery capacity is display-only vehicle-energy estimate, not measured/BMS truth.
 
-#### PR #261 — stacked Add/Edit billing adoption
+Architecture follow-up #285 is completed/closed after #305. Do not reopen it to duplicate transaction logic.
 
-Current child state:
+Remaining Charging v0.7 gates are primarily physical acceptance / explicit scope decisions:
 
-- Draft;
-- child head `c805ba3150576b57dc2cd74631edc09e0a8b8c44`;
-- base branch name is still the #258 calculation branch;
-- the child was built against the older #258 parent head;
-- Android Build #630 was Green for that older stack relationship;
-- after #258 synchronized to current `main`, comparison to the **new parent branch** is now diverged/behind;
-- intended child diff remains editor state/tests plus `AddRecordScreen.kt` and `RecordEditScreen.kt` adoption.
+- real historical/current Android database-open migration pass;
+- ACTIVE process-kill/relaunch and active-edit persistence;
+- complete exactly once / retry no duplicate;
+- PENDING_DETAILS process-kill/relaunch + next-day backfill exactly once;
+- pending end-fact revision + VehicleState truth;
+- cancel/delete produce no historical record;
+- active/pending backup and restore guards;
+- current vehicle/time/location defaults;
+- Dark/Light, 320–360dp, large font, keyboard/decimal/back-navigation acceptance;
+- preset decision: implement reusable environment-only presets or explicitly defer them from v0.7;
+- completed-detail / derived-metric presentation decision if still required by final v0.7 UX.
 
-Required order:
-
-1. finish current-head validation/review for #258;
-2. resolve/merge #258 first;
-3. normalize #261 onto the surviving `main` base using the normal code-maintenance workflow;
-4. re-read #261 effective diff;
-5. obtain current-head Android CI for the normalized child;
-6. only then decide Ready/Merge for #261.
-
-Do not delete the #258 branch while #261 still depends on it.
+#253/#289 remain Open because CI Green is not physical lifecycle acceptance. #252/#260 remain Open for their editor/derived-metric physical gates.
 
 ### Vehicle maturity / catalog / resource onboarding — #244 and #20
 
@@ -225,10 +231,17 @@ Completed in the 2026-08-31 audit:
 - README/LICENSE/templates/branch-stack rules merged by #263;
 - #75 rewritten to exact current branch-protection/CI target;
 - #265 created for stale-branch cleanup/merge-time deletion;
-- #258/#261/#260/#251 descriptions synchronized to actual stacked behavior;
 - PR #264 resource workbench / Hero theme-variant baseline incorporated into current authority.
 
-Remaining documentation debt after this authority-sync PR:
+Charging authority normalized 2026-09-02:
+
+- #268/#261/#271/#276/#277/#297/#302/#305 recorded as merged runtime authority;
+- #285 closed as completed architecture cleanup;
+- #251/#253/#289 normalized through status comments to distinguish merged implementation from physical acceptance;
+- old #258/#261 stacked-candidate prose removed from this fast-status file;
+- `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md` updated to current lifecycle truth.
+
+Remaining documentation debt:
 
 - reconcile older Trip/UI acceptance Issues that still call historical SHAs “latest main”;
 - narrow old #70 local-Hero/model-whitelist wording to physical visual closeout;
