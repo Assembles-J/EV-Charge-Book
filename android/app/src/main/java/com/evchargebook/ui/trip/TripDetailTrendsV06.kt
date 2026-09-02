@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
+import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.domain.TripSpeedTrustRules
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
@@ -39,7 +40,10 @@ import java.util.Locale
 private const val DETAIL_TREND_LONG_GAP_MS = 120_000L
 
 @Composable
-internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
+internal fun CompletedTripTrendsV06(
+    trip: TripSessionEntity,
+    points: List<TripPointEntity>,
+) {
     val speedSamples = remember(points) {
         points.mapNotNull { point ->
             trustedDetailSpeedV06(point)?.let {
@@ -51,34 +55,34 @@ internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
             }
         }
     }
-    val routeTimeline = remember(points) {
-        buildTripTrendTimelineV06(
-            samples = points.map { point ->
-                TripTrendSampleV06(
-                    timestamp = point.capturedAtEpochMillis,
-                    value = 0.0,
-                    capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
-                )
-            },
-            longGapMs = DETAIL_TREND_LONG_GAP_MS,
-        )
+    val fallbackAverageMps = if (trip.elapsedSeconds > 0L && trip.distanceMeters.isFinite() && trip.distanceMeters >= 0.0) {
+        trip.distanceMeters / trip.elapsedSeconds
+    } else {
+        null
     }
-
-    val averageSpeed = speedSamples.takeIf { it.isNotEmpty() }?.map { it.value }?.average()
-    val maxSpeed = speedSamples.maxOfOrNull { it.value }
-    val durationMillis = routeTimeline.lastOrNull()?.timelineMillis ?: 0L
+    val averageSpeedKph = (trip.averageSpeedMps ?: fallbackAverageMps)
+        ?.takeIf { it.isFinite() && it >= 0.0 }
+        ?.times(3.6)
+    val maxSpeedKph = trip.maxSpeedMps
+        ?.takeIf { it.isFinite() && it >= 0.0 }
+        ?.times(3.6)
+        ?: speedSamples.maxOfOrNull { it.value }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm),
     ) {
         RouteSnapshotBarV07(
-            gpsPointCount = points.size,
-            durationMillis = durationMillis,
-            averageSpeedKph = averageSpeed,
-            maxSpeedKph = maxSpeed,
+            distanceMeters = trip.distanceMeters,
+            elapsedSeconds = trip.elapsedSeconds,
+            averageSpeedKph = averageSpeedKph,
+            maxSpeedKph = maxSpeedKph,
         )
-        SpeedTrendCardV07(speedSamples)
+        SpeedTrendCardV07(
+            samples = speedSamples,
+            averageSpeedKph = averageSpeedKph,
+            maxSpeedKph = maxSpeedKph,
+        )
     }
 }
 
@@ -90,16 +94,16 @@ private data class RouteSnapshotMetricV07(
 
 @Composable
 private fun RouteSnapshotBarV07(
-    gpsPointCount: Int,
-    durationMillis: Long,
+    distanceMeters: Double,
+    elapsedSeconds: Long,
     averageSpeedKph: Double?,
     maxSpeedKph: Double?,
 ) {
     val metrics = listOf(
-        RouteSnapshotMetricV07(Icons.Default.LocationOn, "GPS 点", gpsPointCount.toString()),
-        RouteSnapshotMetricV07(Icons.Default.Schedule, "记录时长", formatTrendDurationV07(durationMillis)),
-        RouteSnapshotMetricV07(Icons.Default.Speed, "样本均速", formatSpeedMetricV07(averageSpeedKph)),
-        RouteSnapshotMetricV07(Icons.Default.ShowChart, "最高可信", formatSpeedMetricV07(maxSpeedKph)),
+        RouteSnapshotMetricV07(Icons.Default.LocationOn, "轨迹里程", formatRouteDistanceV07(distanceMeters)),
+        RouteSnapshotMetricV07(Icons.Default.Schedule, "行驶时长", formatTrendDurationV07(elapsedSeconds)),
+        RouteSnapshotMetricV07(Icons.Default.Speed, "平均速度", formatSpeedMetricV07(averageSpeedKph)),
+        RouteSnapshotMetricV07(Icons.Default.ShowChart, "最高速度", formatSpeedMetricV07(maxSpeedKph)),
     )
 
     Surface(
@@ -184,10 +188,12 @@ private fun RouteSnapshotMetricCellV07(
 }
 
 @Composable
-private fun SpeedTrendCardV07(samples: List<TripTrendSampleV06>) {
+private fun SpeedTrendCardV07(
+    samples: List<TripTrendSampleV06>,
+    averageSpeedKph: Double?,
+    maxSpeedKph: Double?,
+) {
     val accent = EVDesignTokens.Energy.green
-    val average = samples.takeIf { it.isNotEmpty() }?.map { it.value }?.average()
-    val max = samples.maxOfOrNull { it.value }
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -241,12 +247,12 @@ private fun SpeedTrendCardV07(samples: List<TripTrendSampleV06>) {
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Row(Modifier.fillMaxWidth()) {
-                            TrendHeroMetricV07("平均", average, Modifier.weight(1f))
+                            TrendHeroMetricV07("平均", averageSpeedKph, Modifier.weight(1f))
                             VerticalDivider(
                                 modifier = Modifier.height(48.dp),
                                 color = MaterialTheme.colorScheme.outline.copy(alpha = .16f),
                             )
-                            TrendHeroMetricV07("最高", max, Modifier.weight(1f))
+                            TrendHeroMetricV07("最高", maxSpeedKph, Modifier.weight(1f))
                         }
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .13f))
                         TripTrendPlotV06(
@@ -311,14 +317,22 @@ private fun trustedDetailSpeedV06(point: TripPointEntity): Double? {
     }
 }
 
-private fun formatSpeedMetricV07(value: Double?): String =
-    value?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.0f km/h", it) } ?: "--"
+private fun formatRouteDistanceV07(meters: Double): String = when {
+    !meters.isFinite() || meters < 0.0 -> "--"
+    meters >= 1000.0 -> String.format(Locale.US, "%.1f km", meters / 1000.0)
+    else -> String.format(Locale.US, "%.0f m", meters)
+}
 
-private fun formatTrendDurationV07(durationMillis: Long): String {
-    val totalSeconds = (durationMillis / 1_000L).coerceAtLeast(0L)
-    val hours = totalSeconds / 3_600L
-    val minutes = (totalSeconds % 3_600L) / 60L
-    val seconds = totalSeconds % 60L
+private fun formatSpeedMetricV07(valueKph: Double?): String =
+    valueKph?.takeIf { it.isFinite() && it >= 0.0 }
+        ?.let { String.format(Locale.US, "%.0f km/h", it) }
+        ?: "--"
+
+private fun formatTrendDurationV07(totalSeconds: Long): String {
+    val secondsSafe = totalSeconds.coerceAtLeast(0L)
+    val hours = secondsSafe / 3_600L
+    val minutes = (secondsSafe % 3_600L) / 60L
+    val seconds = secondsSafe % 60L
     return if (hours > 0L) {
         String.format(Locale.US, "%d:%02d:%02d", hours, minutes, seconds)
     } else {
