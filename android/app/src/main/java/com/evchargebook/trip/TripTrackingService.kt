@@ -66,12 +66,14 @@ class TripTrackingService : Service() {
     private var healthMonitorJob: Job? = null
 
     @Volatile private var trackingStartedAtEpochMillis: Long = 0L
+    @Volatile private var trackingStartedAtElapsedRealtimeMillis: Long = 0L
     @Volatile private var tripStartedAtEpochMillis: Long = 0L
     @Volatile private var currentDistanceMeters: Double = 0.0
     @Volatile private var lastCallbackAtEpochMillis: Long? = null
     @Volatile private var lastCallbackAtElapsedRealtimeMillis: Long? = null
     @Volatile private var lastCallbackProvider: String? = null
     @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
+    @Volatile private var lastAcceptedPointAtElapsedRealtimeMillis: Long? = null
     @Volatile private var lastAcceptedProvider: String? = null
     @Volatile private var rejectedPointCount: Int = 0
     @Volatile private var lastHealthStatus: TripGpsHealthStatus? = null
@@ -127,12 +129,14 @@ class TripTrackingService : Service() {
         repairInProgress.set(false)
         getSystemService(NotificationManager::class.java).cancel(REPAIR_NOTIFICATION_ID)
         trackingStartedAtEpochMillis = System.currentTimeMillis()
+        trackingStartedAtElapsedRealtimeMillis = SystemClock.elapsedRealtime()
         tripStartedAtEpochMillis = 0L
         currentDistanceMeters = 0.0
         lastCallbackAtEpochMillis = null
         lastCallbackAtElapsedRealtimeMillis = null
         lastCallbackProvider = null
         lastAcceptedPointAtEpochMillis = null
+        lastAcceptedPointAtElapsedRealtimeMillis = null
         lastAcceptedProvider = null
         rejectedPointCount = 0
         lastHealthStatus = null
@@ -172,6 +176,10 @@ class TripTrackingService : Service() {
             lastPoint = tripDao.getLatestPoint(tripId)
             lastPoint?.let {
                 lastAcceptedPointAtEpochMillis = it.capturedAtEpochMillis
+                val nowElapsed = SystemClock.elapsedRealtime()
+                lastAcceptedPointAtElapsedRealtimeMillis = it.capturedAtElapsedRealtimeNanos
+                    ?.div(1_000_000L)
+                    ?.takeIf { pointElapsed -> pointElapsed <= nowElapsed }
                 lastAcceptedProvider = it.provider
             }
             updateNotification()
@@ -461,6 +469,7 @@ class TripTrackingService : Service() {
         val pointId = tripDao.insertPoint(point)
         lastPoint = point.copy(id = pointId)
         lastAcceptedPointAtEpochMillis = System.currentTimeMillis()
+        lastAcceptedPointAtElapsedRealtimeMillis = SystemClock.elapsedRealtime()
         lastAcceptedProvider = location.provider
 
         val wallClockElapsed = ((capturedAtEpoch - session.startedAtEpochMillis) / 1000).coerceAtLeast(0)
@@ -563,12 +572,15 @@ class TripTrackingService : Service() {
         return TripContinuityRules.isFreshLocation(ageNanos / 1_000_000L)
     }
 
-    private fun currentHealthSnapshot(): TripGpsHealthSnapshot = TripGpsHealth.evaluate(
-        nowEpochMillis = System.currentTimeMillis(),
-        trackingStartedAtEpochMillis = trackingStartedAtEpochMillis.takeIf { it > 0L } ?: System.currentTimeMillis(),
-        lastCallbackAtEpochMillis = lastCallbackAtEpochMillis,
-        lastAcceptedPointAtEpochMillis = lastAcceptedPointAtEpochMillis
-    )
+    private fun currentHealthSnapshot(): TripGpsHealthSnapshot {
+        val nowElapsed = SystemClock.elapsedRealtime()
+        return TripGpsHealth.evaluateMonotonic(
+            nowElapsedRealtimeMillis = nowElapsed,
+            trackingStartedAtElapsedRealtimeMillis = trackingStartedAtElapsedRealtimeMillis.takeIf { it > 0L } ?: nowElapsed,
+            lastCallbackAtElapsedRealtimeMillis = lastCallbackAtElapsedRealtimeMillis,
+            lastAcceptedPointAtElapsedRealtimeMillis = lastAcceptedPointAtElapsedRealtimeMillis,
+        )
+    }
 
     private fun updateNotification() {
         if (currentTripId == null) return
