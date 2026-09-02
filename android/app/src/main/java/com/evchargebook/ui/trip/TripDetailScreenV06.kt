@@ -154,7 +154,7 @@ internal fun TripDetailScreenV06(
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
+            contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.xs),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             when (selectedSection) {
@@ -204,7 +204,7 @@ internal fun TripDetailScreenV06(
                 TripDetailSectionV06.DATA -> {
                     if (hasAltitude) {
                         item {
-                            CompletedTripAltitudeCardV06(
+                            CompletedTripAltitudeCardV07(
                                 trip = trip,
                                 points = points
                             )
@@ -218,7 +218,8 @@ internal fun TripDetailScreenV06(
                         }
                     }
                     item {
-                        CompletedTripDiagnosticsV06(
+                        CompletedTripDiagnosticsV07(
+                            trip = trip,
                             points = points,
                             gapCount = geometry?.gapCount ?: 0,
                             expanded = diagnosticsExpanded,
