@@ -17,6 +17,7 @@ enum class VehicleStateUpdateSource {
     UNKNOWN,
     MIGRATION,
     CHARGE_RECORD,
+    CHARGE_PENDING,
     TRIP_END,
     MANUAL_UPDATE,
     IMPORT
