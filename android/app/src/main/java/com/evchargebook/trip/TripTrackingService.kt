@@ -25,6 +25,7 @@ import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripDiagnosticEventType
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.TripDiagnosticSamplingRules
 import com.evchargebook.domain.TripGpsHealth
@@ -68,6 +69,7 @@ class TripTrackingService : Service() {
     @Volatile private var tripStartedAtEpochMillis: Long = 0L
     @Volatile private var currentDistanceMeters: Double = 0.0
     @Volatile private var lastCallbackAtEpochMillis: Long? = null
+    @Volatile private var lastCallbackAtElapsedRealtimeMillis: Long? = null
     @Volatile private var lastCallbackProvider: String? = null
     @Volatile private var lastAcceptedPointAtEpochMillis: Long? = null
     @Volatile private var lastAcceptedProvider: String? = null
@@ -128,6 +130,7 @@ class TripTrackingService : Service() {
         tripStartedAtEpochMillis = 0L
         currentDistanceMeters = 0.0
         lastCallbackAtEpochMillis = null
+        lastCallbackAtElapsedRealtimeMillis = null
         lastCallbackProvider = null
         lastAcceptedPointAtEpochMillis = null
         lastAcceptedProvider = null
@@ -166,7 +169,7 @@ class TripTrackingService : Service() {
                 detail = if (redelivered) "START_REDELIVER_INTENT redelivery" else "foreground tracking started"
             )
             recordEvent(tripId, TripDiagnosticEventType.POWER_STATE, detail = powerStateDetail())
-            lastPoint = tripDao.getPoints(tripId).lastOrNull()
+            lastPoint = tripDao.getLatestPoint(tripId)
             lastPoint?.let {
                 lastAcceptedPointAtEpochMillis = it.capturedAtEpochMillis
                 lastAcceptedProvider = it.provider
@@ -208,12 +211,14 @@ class TripTrackingService : Service() {
                 source.start(
                     callback = callback@{ location ->
                         val activeTripId = currentTripId ?: return@callback
-                        val callbackAt = System.currentTimeMillis()
-                        val previousCallbackAt = lastCallbackAtEpochMillis
+                        val callbackAtEpoch = System.currentTimeMillis()
+                        val callbackAtElapsed = SystemClock.elapsedRealtime()
+                        val previousCallbackElapsed = lastCallbackAtElapsedRealtimeMillis
                         val previousProvider = lastCallbackProvider
                         val provider = location.provider
-                        val callbackGapMs = previousCallbackAt?.let { (callbackAt - it).coerceAtLeast(0L) }
-                        lastCallbackAtEpochMillis = callbackAt
+                        val callbackGapMs = previousCallbackElapsed?.let { (callbackAtElapsed - it).coerceAtLeast(0L) }
+                        lastCallbackAtEpochMillis = callbackAtEpoch
+                        lastCallbackAtElapsedRealtimeMillis = callbackAtElapsed
                         lastCallbackProvider = provider
                         serviceScope.launch {
                             if (previousProvider == null || previousProvider != provider) {
@@ -233,7 +238,7 @@ class TripTrackingService : Service() {
                                     activeTripId,
                                     TripDiagnosticEventType.LOCATION_CALLBACK_GAP,
                                     provider = provider,
-                                    detail = "callbackGapMs=$callbackGapMs captureTime=${location.time}"
+                                    detail = "callbackGapMs=$callbackGapMs captureEpochMillis=${location.time} captureElapsedRealtimeNanos=${location.elapsedRealtimeNanos}"
                                 )
                                 recordEvent(activeTripId, TripDiagnosticEventType.POWER_STATE, provider = provider, detail = powerStateDetail())
                             }
@@ -356,14 +361,35 @@ class TripTrackingService : Service() {
         val session = tripDao.getSession(tripId) ?: return
         if (session.status != TripStatus.RECORDING) return
 
-        val capturedAt = location.time.takeIf { it > 0 } ?: System.currentTimeMillis()
+        val capturedAtEpoch = location.time.takeIf { it > 0L } ?: System.currentTimeMillis()
+        val capturedAtElapsed = location.elapsedRealtimeNanos.takeIf { it > 0L }
         val previous = lastPoint
-        if (previous != null && capturedAt <= previous.capturedAtEpochMillis) {
-            rejectLocation(tripId, location.provider, "non_monotonic_time")
+        val captureDelta = previous?.let {
+            TripCaptureTimeRules.between(
+                previousEpochMillis = it.capturedAtEpochMillis,
+                previousElapsedRealtimeNanos = it.capturedAtElapsedRealtimeNanos,
+                currentEpochMillis = capturedAtEpoch,
+                currentElapsedRealtimeNanos = capturedAtElapsed,
+            )
+        }
+        if (captureDelta != null && !captureDelta.accepted) {
+            rejectLocation(tripId, location.provider, captureDelta.rejectReason ?: "capture_time_rejected")
             return
         }
+        if (captureDelta?.requiresRebase == true) {
+            recordEvent(
+                tripId,
+                TripDiagnosticEventType.CAPTURE_TIME_REBASE,
+                provider = location.provider,
+                detail = "previousEpochMillis=${previous?.capturedAtEpochMillis} previousElapsedRealtimeNanos=${previous?.capturedAtElapsedRealtimeNanos} currentEpochMillis=$capturedAtEpoch currentElapsedRealtimeNanos=$capturedAtElapsed"
+            )
+        }
 
-        val rawDeltaSeconds = previous?.let { ((capturedAt - it.capturedAtEpochMillis) / 1000).coerceAtLeast(0) }
+        val rawDeltaSeconds = when {
+            previous == null -> null
+            captureDelta?.requiresRebase == true -> TripContinuityRules.LONG_GAP_SECONDS
+            else -> captureDelta?.deltaSecondsOrNull()
+        }
         val continuity = TripContinuityRules.decide(
             deltaSeconds = rawDeltaSeconds,
             previousProvider = previous?.provider,
@@ -420,7 +446,8 @@ class TripTrackingService : Service() {
 
         val point = TripPointEntity(
             tripId = tripId,
-            capturedAtEpochMillis = capturedAt,
+            capturedAtEpochMillis = capturedAtEpoch,
+            capturedAtElapsedRealtimeNanos = capturedAtElapsed,
             latitude = location.latitude,
             longitude = location.longitude,
             altitudeMeters = altitude,
@@ -436,7 +463,8 @@ class TripTrackingService : Service() {
         lastAcceptedPointAtEpochMillis = System.currentTimeMillis()
         lastAcceptedProvider = location.provider
 
-        val elapsed = ((capturedAt - session.startedAtEpochMillis) / 1000).coerceAtLeast(0)
+        val wallClockElapsed = ((capturedAtEpoch - session.startedAtEpochMillis) / 1000).coerceAtLeast(0)
+        val elapsed = maxOf(session.elapsedSeconds, wallClockElapsed)
         tripDao.updateSession(
             session.copy(
                 distanceMeters = newDistance,
@@ -500,7 +528,7 @@ class TripTrackingService : Service() {
         tripDao.updateSession(
             session.copy(
                 endedAtEpochMillis = endedAt,
-                elapsedSeconds = TripRules.elapsedSeconds(session.startedAtEpochMillis, endedAt),
+                elapsedSeconds = maxOf(session.elapsedSeconds, TripRules.elapsedSeconds(session.startedAtEpochMillis, endedAt)),
                 status = TripStatus.COMPLETED
             )
         )
