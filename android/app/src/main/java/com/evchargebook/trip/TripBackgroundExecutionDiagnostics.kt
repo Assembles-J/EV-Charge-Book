@@ -4,7 +4,6 @@ import android.app.ActivityManager
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
-import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
 import android.os.PowerManager
@@ -40,7 +39,6 @@ object TripBackgroundExecutionDiagnostics {
         val appContext = context.applicationContext
         val power = appContext.getSystemService(PowerManager::class.java)
         val activity = appContext.getSystemService(ActivityManager::class.java)
-        val location = appContext.getSystemService(LocationManager::class.java)
         val usage = appContext.getSystemService(UsageStatsManager::class.java)
         val processInfo = ActivityManager.RunningAppProcessInfo()
         ActivityManager.getMyMemoryState(processInfo)
@@ -64,8 +62,8 @@ object TripBackgroundExecutionDiagnostics {
             } else {
                 null
             },
-            locationPowerSaveMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                runCatching { location.locationPowerSaveMode }.getOrNull()
+            locationPowerSaveMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                runCatching { power.locationPowerSaveMode }.getOrNull()
             } else {
                 null
             },
