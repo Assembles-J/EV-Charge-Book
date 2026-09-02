@@ -19,7 +19,10 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private var listener: LocationListener? = null
 
     @SuppressLint("MissingPermission")
-    override fun start(callback: (Location) -> Unit) {
+    override fun start(
+        callback: (Location) -> Unit,
+        signalCallback: (TripLocationSourceSignal) -> Unit,
+    ) {
         stop()
         val newListener = LocationListener(callback)
         listener = newListener
@@ -52,6 +55,13 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
             listener = null
             throw IllegalStateException("No enabled platform GPS/network provider could be registered", lastFailure)
         }
+
+        signalCallback(
+            TripLocationSourceSignal(
+                source = SOURCE_PLATFORM,
+                detail = "registered providers=${candidates.joinToString(",")}",
+            )
+        )
     }
 
     override fun stop() {
@@ -60,6 +70,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
     }
 
     private companion object {
+        const val SOURCE_PLATFORM = "platform"
         const val SAMPLE_INTERVAL_MS = 1_000L
     }
 }
