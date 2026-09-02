@@ -39,6 +39,8 @@ import androidx.core.content.ContextCompat
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.ChargingAnomalyRules
 import com.evchargebook.domain.ChargingRecordRules
+import com.evchargebook.domain.charge.ChargeBillingField
+import com.evchargebook.domain.charge.ChargeCalculationIssue
 import com.evchargebook.domain.charge.ChargeDefaultResolver
 import com.evchargebook.domain.charge.ChargeEnergyCalculator
 import com.evchargebook.location.AndroidGeocoderAddressResolver
@@ -89,6 +91,14 @@ fun AddRecordScreen(
     val calendar = remember { Calendar.getInstance() }
     val initialChargeTime = remember { calendar.timeInMillis }
     val initialOdometer = remember(currentMileageKm) { currentMileageKm?.toEditableNumber().orEmpty() }
+    val initialBilling = remember(defaults) {
+        ChargeBillingEditor.create(
+            totalCostText = "",
+            unitPriceText = (defaults.pricePerKwh ?: defaultPriceForType(defaults.chargerType)).toEditableNumber(),
+            meterEnergyText = "",
+            authoritativeBillingFields = setOf(ChargeBillingField.UNIT_PRICE)
+        )
+    }
 
     var chargeTime by remember { mutableLongStateOf(initialChargeTime) }
     var location by remember(defaults) { mutableStateOf(defaults.location.orEmpty()) }
@@ -97,34 +107,22 @@ fun AddRecordScreen(
     var remark by remember { mutableStateOf("") }
     var startSoc by remember(defaults) { mutableStateOf(defaults.startSoc?.toString().orEmpty()) }
     var endSoc by remember(defaults) { mutableStateOf(defaults.endSoc.toString()) }
-    var energy by remember { mutableStateOf("") }
     var chargerType by remember(defaults) { mutableStateOf(defaults.chargerType) }
-    var pricePerKwh by remember(defaults) {
-        mutableStateOf((defaults.pricePerKwh ?: defaultPriceForType(defaults.chargerType)).toEditableNumber())
-    }
-    var cost by remember { mutableStateOf("") }
-    var costEditedManually by remember { mutableStateOf(false) }
+    var billing by remember(defaults) { mutableStateOf(initialBilling) }
     var odometer by remember(initialOdometer) { mutableStateOf(initialOdometer) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var addressMessage by remember { mutableStateOf<String?>(null) }
     var showDiscardConfirm by remember { mutableStateOf(false) }
 
-    fun updateCalculatedCost(newEnergy: String = energy, newPrice: String = pricePerKwh) {
-        if (!costEditedManually) {
-            val amount = newEnergy.toDoubleOrNull()
-            val price = newPrice.toDoubleOrNull()
-            cost = if (amount != null && amount > 0.0 && price != null && price >= 0.0) {
-                (amount * price).toEditableNumber()
-            } else {
-                ""
-            }
-        }
-    }
+    val energy = billing.meterEnergyText
+    val pricePerKwh = billing.unitPriceText
+    val cost = billing.totalCostText
 
     val isDirty = chargeTime != initialChargeTime || remark.isNotBlank() || energy.isNotBlank() ||
         odometer != initialOdometer || startSoc != defaults.startSoc?.toString().orEmpty() ||
         endSoc != defaults.endSoc.toString() || chargerType != defaults.chargerType ||
-        location != defaults.location.orEmpty() || locationFix != null || costEditedManually
+        location != defaults.location.orEmpty() || locationFix != null ||
+        pricePerKwh != initialBilling.unitPriceText || cost.isNotBlank()
 
     fun requestBack() {
         if (isDirty) showDiscardConfirm = true else onBack()
@@ -170,7 +168,7 @@ fun AddRecordScreen(
     val previousOdometer = remember(records, vehicleId, chargeTime) { ChargingRecordRules.previousOdometerKm(records, vehicleId, chargeTime) }
     val odometerValue = odometer.toDoubleOrNull()
     val odometerWarning = ChargingRecordRules.odometerWarning(previousOdometer, odometerValue)
-    val energyValue = energy.toDoubleOrNull()
+    val energyValue = billing.meterEnergyKwh
     val startSocValue = startSoc.toIntOrNull()
     val endSocValue = endSoc.toIntOrNull()
     val estimate = ChargeEnergyCalculator.estimate(batteryCapacityKwh, startSocValue, endSocValue, energyValue)
@@ -178,7 +176,7 @@ fun AddRecordScreen(
         startSoc = startSocValue,
         endSoc = endSocValue,
         energyKwh = energyValue,
-        cost = cost.toDoubleOrNull(),
+        cost = billing.totalCost,
         batteryCapacityKwh = batteryCapacityKwh
     )
     val recentPresets = remember(vehicleRecords) {
@@ -215,8 +213,11 @@ fun AddRecordScreen(
                 ChargerTypeSelector(chargerType) { selected ->
                     chargerType = selected
                     val remembered = ChargeDefaultResolver.priceForType(vehicleRecords, selected) ?: defaultPriceForType(selected)
-                    pricePerKwh = remembered.toEditableNumber()
-                    updateCalculatedCost(newPrice = pricePerKwh)
+                    billing = ChargeBillingEditor.edit(
+                        billing,
+                        ChargeBillingField.UNIT_PRICE,
+                        remembered.toEditableNumber()
+                    )
                 }
                 if (recentPresets.isNotEmpty()) {
                     Text("最近使用", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -226,9 +227,15 @@ fun AddRecordScreen(
                                 onClick = {
                                     chargerType = record.chargerType ?: ChargeDefaultResolver.FALLBACK_CHARGER_TYPE
                                     endSoc = record.endSoc.toString()
-                                    pricePerKwh = record.pricePerKwh.toEditableNumber()
-                                    record.location?.let { location = it }
-                                    updateCalculatedCost(newPrice = pricePerKwh)
+                                    billing = ChargeBillingEditor.edit(
+                                        billing,
+                                        ChargeBillingField.UNIT_PRICE,
+                                        record.pricePerKwh.toEditableNumber()
+                                    )
+                                    record.location?.let {
+                                        location = it
+                                        locationFix = null
+                                    }
                                 },
                                 label = { Text("${record.chargerType ?: "充电"} · ¥${formatTwo(record.pricePerKwh)}") }
                             )
@@ -244,10 +251,7 @@ fun AddRecordScreen(
                 }
                 AddNumberField(
                     energy,
-                    {
-                        energy = it
-                        updateCalculatedCost(newEnergy = it)
-                    },
+                    { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.METER_ENERGY, it) },
                     "桩端 / 电表电量",
                     "kWh",
                     Modifier.fillMaxWidth(),
@@ -266,14 +270,11 @@ fun AddRecordScreen(
                 }
             }
 
-            FormSection("电价与费用", "COST", "电价优先复用同类型最近记录；总费用默认自动计算，也允许修改。") {
+            FormSection("电价与费用", "COST", "按实际账单填写，费用、单价与用电量会保持联动。") {
                 Row(horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
                     AddNumberField(
                         pricePerKwh,
-                        {
-                            pricePerKwh = it
-                            updateCalculatedCost(newPrice = it)
-                        },
+                        { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.UNIT_PRICE, it) },
                         "电价",
                         "元/kWh",
                         Modifier.weight(1f),
@@ -281,20 +282,19 @@ fun AddRecordScreen(
                     )
                     AddNumberField(
                         cost,
-                        {
-                            cost = it
-                            costEditedManually = true
-                        },
+                        { billing = ChargeBillingEditor.edit(billing, ChargeBillingField.TOTAL_COST, it) },
                         "总费用",
                         "元",
                         Modifier.weight(1f),
                         KeyboardType.Decimal
                     )
                 }
-                if (costEditedManually) {
-                    TextButton(onClick = { costEditedManually = false; updateCalculatedCost() }, contentPadding = PaddingValues(0.dp)) {
-                        Text("恢复按电价自动计算")
-                    }
+                if (ChargeCalculationIssue.BILLING_CONFLICT in billing.issues) {
+                    Text(
+                        "费用、单价与用电量暂不一致，请确认其中一项。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.warningColor
+                    )
                 }
             }
 
@@ -364,16 +364,18 @@ fun AddRecordScreen(
                     focusManager.clearFocus()
                     val start = startSoc.toIntOrNull()
                     val end = endSoc.toIntOrNull()
-                    val chargedEnergy = energy.toDoubleOrNull()
-                    val costValue = cost.toDoubleOrNull()
+                    val chargedEnergy = billing.meterEnergyKwh
+                    val price = billing.unitPrice
+                    val costValue = billing.totalCost
                     val odometerKm = odometer.toDoubleOrNull()
                     errorMessage = when {
                         start == null || start !in 0..100 -> "请输入 0~100 的起始 SOC"
                         end == null || end !in 0..100 -> "请输入 0~100 的结束 SOC"
                         end < start -> "结束 SOC 不能低于起始 SOC"
                         chargedEnergy == null || chargedEnergy <= 0 -> "桩端 / 电表电量必须大于 0"
-                        pricePerKwh.toDoubleOrNull() == null || pricePerKwh.toDouble() < 0 -> "请输入有效电价"
+                        price == null || price < 0 -> "请输入有效电价"
                         costValue == null || costValue < 0 -> "费用不能小于 0"
+                        ChargeCalculationIssue.BILLING_CONFLICT in billing.issues -> "费用、单价与用电量不一致，请先确认后再保存"
                         odometer.isNotBlank() && (odometerKm == null || odometerKm < 0) -> "里程需要是大于等于 0 的数字"
                         else -> null
                     }
