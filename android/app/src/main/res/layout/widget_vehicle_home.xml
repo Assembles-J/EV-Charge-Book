@@ -5,23 +5,59 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_vehicle_background"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="14dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:fontFamily="sans-serif-medium"
+        android:text="EV CHARGE BOOK"
+        android:textColor="#68F59A"
+        android:textSize="10sp" />
 
     <TextView
         android:id="@+id/widget_vehicle_name"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:ellipsize="end"
         android:fontFamily="sans-serif-medium"
         android:maxLines="1"
         android:text="EV Charge Book"
-        android:textColor="#F4F6F6"
-        android:textSize="15sp" />
+        android:textColor="#F5F7F6"
+        android:textSize="19sp" />
+
+    <TextView
+        android:id="@+id/widget_status_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:background="@drawable/widget_status_background"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:paddingLeft="10dp"
+        android:paddingTop="5dp"
+        android:paddingRight="10dp"
+        android:paddingBottom="5dp"
+        android:text="● 车辆已就绪"
+        android:textColor="#52F58B"
+        android:textSize="11sp" />
+
+    <TextView
+        android:id="@+id/widget_status_detail"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="未开启蓝牙行程检测"
+        android:textColor="#8E9A95"
+        android:textSize="10sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginTop="6dp"
+        android:layout_marginTop="7dp"
         android:layout_weight="1"
         android:gravity="center_vertical"
         android:orientation="horizontal">
@@ -33,8 +69,8 @@
             android:layout_weight="1"
             android:fontFamily="sans-serif-medium"
             android:text="--"
-            android:textColor="#F4F6F6"
-            android:textSize="34sp" />
+            android:textColor="#F5F7F6"
+            android:textSize="30sp" />
 
         <TextView
             android:id="@+id/widget_mileage"
@@ -44,8 +80,8 @@
             android:gravity="end"
             android:maxLines="1"
             android:text="-- km"
-            android:textColor="#B7C0C1"
-            android:textSize="14sp" />
+            android:textColor="#C2CBC7"
+            android:textSize="12sp" />
     </LinearLayout>
 
     <TextView
@@ -55,37 +91,37 @@
         android:ellipsize="end"
         android:maxLines="1"
         android:text="尚无车辆状态记录"
-        android:textColor="#8D989A"
-        android:textSize="12sp" />
+        android:textColor="#7E8984"
+        android:textSize="10sp" />
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="40dp"
-        android:layout_marginTop="10dp"
+        android:layout_height="36dp"
+        android:layout_marginTop="9dp"
         android:orientation="horizontal">
 
         <TextView
             android:id="@+id/widget_trip_action"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginEnd="5dp"
+            android:layout_marginEnd="4dp"
             android:layout_weight="1"
-            android:background="@drawable/widget_action_background"
+            android:background="@drawable/widget_action_primary_background"
             android:gravity="center"
             android:text="行程"
-            android:textColor="#32F080"
-            android:textSize="13sp" />
+            android:textColor="#70F79D"
+            android:textSize="12sp" />
 
         <TextView
             android:id="@+id/widget_app_action"
             android:layout_width="0dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="5dp"
+            android:layout_marginStart="4dp"
             android:layout_weight="1"
             android:background="@drawable/widget_action_background"
             android:gravity="center"
             android:text="打开 App"
-            android:textColor="#DCE1E2"
-            android:textSize="13sp" />
+            android:textColor="#E0E5E2"
+            android:textSize="12sp" />
     </LinearLayout>
 </LinearLayout>
