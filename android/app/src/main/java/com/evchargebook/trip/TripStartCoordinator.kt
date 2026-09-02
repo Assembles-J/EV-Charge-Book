@@ -6,6 +6,7 @@ import com.evchargebook.autotrip.AutoTripDetectionState
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
+import com.evchargebook.domain.VehicleActivityConflictPolicy
 import kotlinx.coroutines.flow.first
 
 sealed interface TripStartSource {
@@ -32,10 +33,10 @@ sealed interface TripStartResult {
  * Single authority for creating a new Trip.
  *
  * UI, Bluetooth prompt actions and automatic Bluetooth starts converge here so the active Trip
- * guard, VehicleState snapshot and detection-session linkage are evaluated in one Room
- * transaction. Tracking service startup happens only after the Trip is persisted; if Android
- * rejects service startup, the Trip becomes INTERRUPTED and an associated detection session
- * becomes START_FAILED rather than silently retrying or creating another Trip.
+ * guard, same-vehicle charging guard, VehicleState snapshot and detection-session linkage are
+ * evaluated in one Room transaction. Tracking service startup happens only after the Trip is
+ * persisted; if Android rejects service startup, the Trip becomes INTERRUPTED and an associated
+ * detection session becomes START_FAILED rather than silently retrying or creating another Trip.
  */
 class TripStartCoordinator(
     private val database: AppDatabase,
@@ -44,6 +45,7 @@ class TripStartCoordinator(
     private val tripDao = database.tripDao()
     private val vehicleDao = database.vehicleDao()
     private val vehicleStateDao = database.vehicleStateDao()
+    private val chargingSessionDao = database.chargingSessionDao()
     private val detectionDao = database.autoTripDetectionDao()
 
     suspend fun start(request: TripStartRequest): TripStartResult {
@@ -55,6 +57,13 @@ class TripStartCoordinator(
 
             val vehicle = vehicleDao.observeActive().first().firstOrNull { it.id == request.vehicleId }
                 ?: return@withTransaction PreparedResult.Blocked("当前车辆不可用")
+
+            VehicleActivityConflictPolicy.tripStartBlockReason(
+                vehicleId = vehicle.id,
+                activeChargingVehicleId = chargingSessionDao.getActiveForVehicle(vehicle.id)?.vehicleId,
+            )?.let { reason ->
+                return@withTransaction PreparedResult.Blocked(reason)
+            }
 
             val detectionSession = when (val source = request.source) {
                 TripStartSource.ManualUi -> null
