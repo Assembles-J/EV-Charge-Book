@@ -22,6 +22,9 @@ interface ChargingSessionDao {
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC")
     suspend fun getPendingForVehicle(vehicleId: Long): List<ChargingSessionEntity>
 
+    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status IN ('COMPLETED', 'PENDING_DETAILS') AND unitPricePerKwh IS NOT NULL AND unitPricePerKwh >= 0 ORDER BY COALESCE(endedAtEpochMillis, startedAtEpochMillis) DESC, updatedAtEpochMillis DESC")
+    fun observePricedForVehicle(vehicleId: Long): Flow<List<ChargingSessionEntity>>
+
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' AND endSoc IS NOT NULL ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC LIMIT 1")
     suspend fun getLatestPendingWithEndSocForVehicle(vehicleId: Long): ChargingSessionEntity?
 
