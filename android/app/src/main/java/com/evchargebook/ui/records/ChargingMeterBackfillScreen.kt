@@ -78,10 +78,11 @@ fun ChargingMeterBackfillScreen(
 
     val meterEnergy = billing.meterEnergyKwh
     val totalCost = billing.totalCost
+    val unitPrice = billing.unitPrice
     val meterIsConfirmed = ChargeBillingField.METER_ENERGY in billing.calculationInput.authoritativeBillingFields
     val invalidMeterText = billing.meterEnergyText.isNotBlank() && (meterEnergy == null || meterEnergy <= 0.0)
     val invalidCostText = billing.totalCostText.isNotBlank() && (totalCost == null || totalCost < 0.0)
-    val invalidPriceText = billing.unitPriceText.isNotBlank() && (billing.unitPrice == null || billing.unitPrice < 0.0)
+    val invalidPriceText = billing.unitPriceText.isNotBlank() && (unitPrice == null || unitPrice < 0.0)
     val blockingBillingIssue = billing.issues.any {
         it == ChargeCalculationIssue.NEGATIVE_VALUE || it == ChargeCalculationIssue.BILLING_CONFLICT
     }
