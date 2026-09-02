@@ -4,6 +4,7 @@ import com.evchargebook.data.entity.ChargingRecordEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.time.LocalDateTime
 import java.time.YearMonth
 import java.time.ZoneId
 
@@ -34,6 +35,39 @@ class MonthlyChargingTrendTest {
     }
 
     @Test
+    fun `cross month charging belongs to month where charging started`() {
+        val startedAt = LocalDateTime.of(2026, 8, 31, 23, 30)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+        val endedAt = LocalDateTime.of(2026, 9, 1, 7, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val buckets = MonthlyChargingTrend.summarize(
+            records = listOf(
+                record(
+                    id = 1,
+                    epochMillis = startedAt,
+                    endedAtEpochMillis = endedAt,
+                    energy = 42.0,
+                    cost = 18.0,
+                )
+            ),
+            currentMonth = YearMonth.of(2026, 9),
+            zoneId = zone,
+            monthCount = 2,
+        )
+
+        assertEquals(listOf(8, 9), buckets.map { it.month })
+        assertEquals(1, buckets[0].chargingCount)
+        assertEquals(42.0, buckets[0].energyKwh, 0.0001)
+        assertEquals(18.0, buckets[0].cost, 0.0001)
+        assertEquals(0, buckets[1].chargingCount)
+    }
+
+    @Test
     fun `empty month has no average price`() {
         val bucket = MonthlyChargingTrend.summarize(
             records = emptyList(),
@@ -47,10 +81,17 @@ class MonthlyChargingTrendTest {
         assertNull(bucket.averagePricePerKwh)
     }
 
-    private fun record(id: Long, epochMillis: Long, energy: Double, cost: Double) = ChargingRecordEntity(
+    private fun record(
+        id: Long,
+        epochMillis: Long,
+        energy: Double,
+        cost: Double,
+        endedAtEpochMillis: Long? = null,
+    ) = ChargingRecordEntity(
         id = id,
         vehicleId = 1,
         chargeTimeEpochMillis = epochMillis,
+        endedAtEpochMillis = endedAtEpochMillis,
         energyKwh = energy,
         cost = cost,
         startSoc = 20,
