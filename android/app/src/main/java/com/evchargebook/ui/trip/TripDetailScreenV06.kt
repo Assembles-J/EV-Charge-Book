@@ -193,7 +193,7 @@ internal fun TripDetailScreenV06(
                             )
                         }
                     }
-                    item { CompletedTripTrendsV06(points) }
+                    item { CompletedTripTrendsV06(trip = trip, points = points) }
                 }
 
                 TripDetailSectionV06.DATA -> {
