@@ -27,7 +27,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.viewmodel.MainUiState
 import java.util.Locale
 
@@ -37,7 +36,10 @@ fun EnergyCockpitCard(
     onOpenRecords: () -> Unit = {}
 ) {
     val surfaceBrush = Brush.verticalGradient(
-        listOf(Color(0xFF0D1512), Color(0xFF09100E))
+        listOf(
+            MaterialTheme.colorScheme.surfaceContainerHigh,
+            MaterialTheme.colorScheme.surfaceContainerLow
+        )
     )
 
     Surface(
@@ -60,13 +62,13 @@ fun EnergyCockpitCard(
                     Box(
                         modifier = Modifier
                             .size(34.dp)
-                            .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Default.Bolt,
                             contentDescription = null,
-                            tint = EVDesignTokens.Energy.green,
+                            tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(18.dp)
                         )
                     }
@@ -95,7 +97,7 @@ fun EnergyCockpitCard(
                     Text(
                         "${state.chargingCount} 次充电",
                         style = MaterialTheme.typography.bodySmall,
-                        color = EVDesignTokens.Energy.green,
+                        color = MaterialTheme.colorScheme.primary,
                         maxLines = 1
                     )
                     Icon(
@@ -172,7 +174,7 @@ private fun EnergyMetric(
                 Text(
                     unit,
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (highlightUnit) EVDesignTokens.Energy.green else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (highlightUnit) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Clip
                 )

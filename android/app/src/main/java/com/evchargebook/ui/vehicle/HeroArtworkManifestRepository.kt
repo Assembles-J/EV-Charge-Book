@@ -1,7 +1,6 @@
 package com.evchargebook.ui.vehicle
 
 import android.content.Context
-import android.content.res.Configuration
 import com.evchargebook.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -33,6 +32,10 @@ import java.net.URL
  * - <base>-light
  *
  * Existing <base> entries remain a supported legacy fallback.
+ *
+ * The caller supplies the active app-theme preference. Do not infer it from Android's system
+ * uiMode because EV Charge Book supports an in-app theme that may intentionally differ from the
+ * device theme.
  */
 object HeroArtworkManifestRepository {
     data class RemoteArtwork(
@@ -55,16 +58,21 @@ object HeroArtworkManifestRepository {
     @Volatile private var artworks: Map<String, RemoteArtwork> = emptyMap()
 
     /**
-     * Resolve the best Hero for the current Android UI mode.
+     * Resolve the best Hero for the active EV Charge Book theme.
      *
      * Dark: <base>-dark -> legacy <base>
      * Light: <base>-light -> <base>-dark -> legacy <base>
+     *
+     * Light intentionally falls back to the dark or legacy artwork instead of showing an empty
+     * Hero while a light-specific asset is still being published.
      */
-    suspend fun resolve(context: Context, artworkKey: String): RemoteArtwork? {
+    suspend fun resolve(
+        context: Context,
+        artworkKey: String,
+        preferLight: Boolean,
+    ): RemoteArtwork? {
         val appContext = context.applicationContext
         ensureCachedManifestLoaded(appContext)
-        val preferLight = (context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) !=
-            Configuration.UI_MODE_NIGHT_YES
 
         resolveCached(artworkKey, preferLight)?.let { cached ->
             startRemoteRefresh(appContext)
@@ -98,8 +106,8 @@ object HeroArtworkManifestRepository {
         val base = artworkKey.trim().removeSuffix("-dark").removeSuffix("-light")
         return candidateKeys(base, preferLight).firstNotNullOfOrNull { key ->
             entries[key]?.let { artwork ->
-                // HeroVehicleCard historically uses RemoteArtwork.version as an explicit Coil cache key.
-                // Encode only the resolved semantic variant into that cache version so light/dark v1
+                // HeroVehicleCard uses RemoteArtwork.version as an explicit Coil cache key.
+                // Encode the resolved semantic variant into that cache version so light/dark v1
                 // cannot collide in memory/disk cache. manifestVersion remains the authoritative vN.
                 val marker = when {
                     key.endsWith("-light") -> 2

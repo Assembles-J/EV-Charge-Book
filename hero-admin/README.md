@@ -35,6 +35,26 @@ The operator is responsible for uploading an official brand asset with appropria
 
 ## Hero contract
 
+The vehicle catalog stores one stable semantic **base Hero key** such as `leapmotor-c16-2026`. Theme variants belong in the Hero manifest, not in the catalog row:
+
+```text
+<base>-dark
+<base>-light
+```
+
+For example:
+
+```text
+leapmotor-c16-2026-dark
+leapmotor-c16-2026-light
+```
+
+Android resolves the variant from the **EV Charge Book in-app theme**, which may differ from the device/system theme. Dark mode prefers `<base>-dark`; light mode prefers `<base>-light`. Legacy `<base>` entries remain a compatibility fallback while an older asset set is being migrated.
+
+A newly published supported Hero should provide **both** light and dark variants. Publishing only the base key is legacy-compatible but does not constitute complete light/dark visual acceptance.
+
+Both variants must preserve the Hero safe-area contract: the top status/title zone remains contrast-safe for white system/title chrome, while the light variant uses a brighter vehicle/background treatment and a light lower transition into the dashboard surface.
+
 Hero publishing:
 
 - PNG/WebP source;
@@ -118,7 +138,7 @@ No public container port is required; Nginx reaches `hero-admin:8080` on the exi
 
 ## Nginx
 
-The existing `/ev-charge-book/releases/` static location serves both `hero-assets/` and `brand-logos/` immutable files.
+The existing `/ev-charge-book/releases/` static location serves both `hero-assets/` and `brand-logos` immutable files.
 
 The mutable runtime pointers must not be cached as immutable:
 

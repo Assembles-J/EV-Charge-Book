@@ -42,29 +42,24 @@ val LocalAppThemeController = staticCompositionLocalOf { AppThemeController(true
 val MaterialTheme.spacing: AppSpacing
     @Composable get() = LocalAppSpacing.current
 
-private val LightBackground = Color(0xFFF4F7F5)
-private val LightSurface = Color(0xFFFFFFFF)
-private val LightSurfaceLow = Color(0xFFF0F4F2)
-private val LightSurfaceHigh = Color(0xFFE7EDE9)
-
 private val BrandLight = lightColorScheme(
     primary = Color(0xFF087A3B),
     onPrimary = Color.White,
     primaryContainer = Color(0xFFD6F8E2),
     onPrimaryContainer = Color(0xFF082414),
-    background = LightBackground,
-    onBackground = Color(0xFF101512),
-    surface = LightSurface,
-    onSurface = Color(0xFF101512),
-    surfaceVariant = LightSurfaceLow,
-    onSurfaceVariant = Color(0xFF5F6D66),
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF4F7F5),
-    surfaceContainer = LightSurfaceLow,
-    surfaceContainerHigh = LightSurfaceHigh,
-    surfaceContainerHighest = Color(0xFFDDE6E1),
-    outline = Color(0xFFC9D5CF),
-    outlineVariant = Color(0xFFDCE5E0),
+    background = EVDesignTokens.Light.background,
+    onBackground = EVDesignTokens.Light.primaryText,
+    surface = EVDesignTokens.Light.surface,
+    onSurface = EVDesignTokens.Light.primaryText,
+    surfaceVariant = EVDesignTokens.Light.surfaceLow,
+    onSurfaceVariant = EVDesignTokens.Light.secondaryText,
+    surfaceContainerLowest = EVDesignTokens.Light.surface,
+    surfaceContainerLow = EVDesignTokens.Light.background,
+    surfaceContainer = EVDesignTokens.Light.surfaceLow,
+    surfaceContainerHigh = EVDesignTokens.Light.surfaceHigh,
+    surfaceContainerHighest = EVDesignTokens.Light.surfaceHighest,
+    outline = EVDesignTokens.Light.outline,
+    outlineVariant = EVDesignTokens.Light.outlineVariant,
     error = Color(0xFFBA1A1A),
     onError = Color.White
 )
@@ -80,13 +75,13 @@ private val BrandDark = darkColorScheme(
     onSurface = EVDesignTokens.Dark.primaryText,
     surfaceVariant = EVDesignTokens.Dark.surfaceElevated,
     onSurfaceVariant = EVDesignTokens.Dark.secondaryText,
-    surfaceContainerLowest = Color(0xFF060908),
-    surfaceContainerLow = Color(0xFF0D1311),
+    surfaceContainerLowest = EVDesignTokens.Dark.surfaceLowest,
+    surfaceContainerLow = EVDesignTokens.Dark.surfaceLow,
     surfaceContainer = EVDesignTokens.Dark.surface,
     surfaceContainerHigh = EVDesignTokens.Dark.surfaceElevated,
-    surfaceContainerHighest = Color(0xFF202925),
+    surfaceContainerHighest = EVDesignTokens.Dark.surfaceHighest,
     outline = EVDesignTokens.Dark.outline,
-    outlineVariant = Color(0xFF1B2521),
+    outlineVariant = EVDesignTokens.Dark.outlineVariant,
     error = EVDesignTokens.Energy.danger,
     onError = Color(0xFF220001),
     inverseSurface = Color(0xFFEAF3EE),
@@ -138,7 +133,8 @@ fun EvChargeTheme(
 
     CompositionLocalProvider(
         LocalAppSpacing provides AppSpacing(),
-        LocalAppThemeController provides controller
+        LocalAppThemeController provides controller,
+        LocalCockpitColors provides cockpitColorsFor(colors)
     ) {
         MaterialTheme(
             colorScheme = colors,

@@ -44,7 +44,6 @@ import androidx.compose.ui.unit.sp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.location.AndroidGeocoderAddressResolver
-import com.evchargebook.ui.theme.EVDesignTokens
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -97,7 +96,7 @@ fun DashboardRecentTripCard(
         isInterrupted -> Icons.Default.ErrorOutline
         else -> Icons.Default.CheckCircle
     }
-    val statusColor = if (isInterrupted) MaterialTheme.colorScheme.error else EVDesignTokens.Energy.green
+    val statusColor = if (isInterrupted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
     val endText = if (isActive) {
         if (trip.endLatitude != null && trip.endLongitude != null) "当前位置 · 持续更新" else "等待当前位置"
     } else {
@@ -107,7 +106,7 @@ fun DashboardRecentTripCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = Color(0xFF0A1210)
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
@@ -223,13 +222,13 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(34.dp)
-                    .background(EVDesignTokens.Energy.green.copy(alpha = 0.12f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     Icons.Default.Route,
                     contentDescription = null,
-                    tint = EVDesignTokens.Energy.green,
+                    tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.size(18.dp)
                 )
             }
@@ -253,7 +252,7 @@ private fun RecentTripHeader(onViewAll: () -> Unit) {
             Text(
                 "查看全部",
                 style = MaterialTheme.typography.bodySmall,
-                color = EVDesignTokens.Energy.green
+                color = MaterialTheme.colorScheme.primary
             )
             Icon(
                 Icons.Default.ChevronRight,
@@ -285,7 +284,7 @@ private fun TripRouteRail() {
         Icon(
             imageVector = Icons.Default.PlayArrow,
             contentDescription = "起点",
-            tint = EVDesignTokens.Energy.green,
+            tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(17.dp)
         )
         Box(
@@ -341,7 +340,7 @@ private fun RecentTripEmptyState(onViewAll: () -> Unit) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = MaterialTheme.shapes.large,
-        color = Color(0xFF0A1210)
+        color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 11.dp),
