@@ -50,7 +50,9 @@ fun VehicleScreen(
         ManagedVehicleCatalogResolver.resolveHeroArtworkKey(vehicle, catalogVehicles)
     }
     val managedCatalogVehicle = remember(vehicle, catalogVehicles) {
-        ManagedVehicleCatalogResolver.resolveCatalogVehicle(vehicle, catalogVehicles)
+        vehicle
+            ?.takeIf { !it.catalogVehicleId.isNullOrBlank() }
+            ?.let { ManagedVehicleCatalogResolver.resolveCatalogVehicle(it, catalogVehicles) }
     }
 
     Scaffold(
@@ -134,7 +136,7 @@ private fun VehicleSpecificationCard(
     val sourceDescription = if (managedCatalogVehicle != null) {
         "$displayBrand $displayModel · 当前标准车型资料来自车型库"
     } else {
-        "$displayBrand $displayModel · 未匹配当前车型库，显示车辆历史快照"
+        "$displayBrand $displayModel · 未确认精确车型库身份，显示车辆历史快照"
     }
     val batteryText = if (managedCatalogVehicle != null) {
         managedCatalogVehicle.batteryCapacityKwh?.let { "${one(it)} kWh" } ?: "--"
