@@ -189,7 +189,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
     }
 
     /**
-     * End physical charging without inventing missing meter facts.
+     * End physical charging or revise an already-pending session without inventing meter facts.
      *
      * The pending session immediately becomes a vehicle-state fact, but it does not create a
      * `ChargingRecordEntity` and therefore cannot enter charging cost / energy statistics.
@@ -198,7 +198,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
         database.withTransaction {
             val session = chargingSessionDao.get(request.sessionId) ?: error("充电会话不存在")
             when (session.status) {
-                ChargingSessionStatus.PENDING_DETAILS -> return@withTransaction
+                ChargingSessionStatus.PENDING_DETAILS -> Unit
                 ChargingSessionStatus.COMPLETED -> error("本次充电已经完成")
                 ChargingSessionStatus.CANCELLED -> error("已取消的充电不能结束")
                 ChargingSessionStatus.ACTIVE -> Unit
