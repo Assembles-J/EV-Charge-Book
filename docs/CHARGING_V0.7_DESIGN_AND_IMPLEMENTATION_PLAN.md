@@ -2,7 +2,7 @@
 
 Status: Authority for #251
 Updated: 2026-09-02
-Current implementation baseline: `main@86f5e69152480546e69ed2b90cb9e62afcc63dd3`
+Current implementation baseline: `main@5878cf72ef8ca39a469570529190cc6af7e2a8e5`
 
 ## 1. Purpose
 
@@ -32,7 +32,7 @@ When a local active session exists, Records may show one compact `充电中` car
 
 ### 2.2 Completed charging detail
 
-A dedicated completed charging detail surface remains a product option under #251; do not infer that it is shipped merely because Add/Edit maintenance exists.
+A dedicated completed charging detail surface remains a future product option. Its absence does **not** block Charging v0.7 closeout as long as current Add/Edit/Completion/Pending surfaces remain truthful and usable.
 
 If/when rendered, primary facts may include location / charger type, total cost, billed or meter energy, effective unit price, start/end time, explicitly known start/end SOC, odometer and notes.
 
@@ -50,9 +50,9 @@ The app does not have an authoritative live SOC/BMS feed. Do not display a fake 
 
 Current app VehicleState may be used as an editable candidate only. Finish prefill must not substitute target SOC for actual end SOC.
 
-Start time defaults to now and remains editable. End time defaults to now and remains editable. Duration is derived from start/end time.
+Start time defaults to now and remains editable. End time defaults to now and remains editable. Displayed completion duration must consume the shared calculation contract.
 
-Location defaults to a real coordinate fix when permission/provider is available. Persist latitude, longitude, accuracy and a readable address when reverse geocoding succeeds. If the user edits address text manually, stale coordinate evidence must be cleared. Interactive map-point selection remains under #254.
+Location defaults to a real coordinate fix when permission/provider is available. Persist latitude, longitude, accuracy and a readable address when reverse geocoding succeeds. If the user edits address text manually, stale coordinate evidence must be cleared. Interactive map-point selection remains optional future work under #254.
 
 Unknown meter energy / cost must remain missing. Never encode unknown as `0`.
 
@@ -112,6 +112,8 @@ Merged #276 provides:
 
 No fake live SOC/power/BMS telemetry is shown.
 
+Merged #292 further compacts the Start/Finish hierarchy, prefills Start SOC from app-known VehicleState when available, removes primary remark clutter, carries charger type from Start into Finish and keeps SOC × battery-capacity energy visibly estimate-only.
+
 ### 4.4 Completion UI
 
 Merged #277 provides the active-session finish flow:
@@ -123,7 +125,15 @@ Merged #277 provides the active-session finish flow:
 - exactly-once repository transaction remains completion authority;
 - editing location clears stale coordinate evidence.
 
+Merged #313 removes the remaining screen-local completion-duration formula:
+
+- displayed duration consumes `ChargeCalculationEngine.durationMillis`;
+- invalid `end <= start` consumes shared `END_NOT_AFTER_START`;
+- UI formatting remains presentation-only.
+
 ### 4.5 Delayed home-meter backfill
+
+Merged #294 adds durable `PENDING_DETAILS` persistence, Room v17 -> v18 migration coverage and Backup v10 support.
 
 Merged #297 adds the truthful next-day-meter path:
 
@@ -151,6 +161,17 @@ Merged #305 routes selected-vehicle pending state and complete/defer/update-pend
 
 `RecordsScreen` and `CompleteChargingScreen` no longer construct `AppDatabase`, `ChargingRepository`, or Room DAO access. Existing repository/session transactions remain the only persistence authority.
 
+### 4.7 Tariff reuse truth
+
+Merged #310 makes Start Charging tariff reuse conservative and source-aware:
+
+- silent auto-fill uses stored `ChargingSession.unitPricePerKwh` only;
+- automatic reuse requires the same vehicle + normalized location + charger type;
+- same charger type at another location is suggestion-only;
+- historical completed-record `cost / energy` effective prices are suggestion-only and are not assumed to be original tariffs;
+- once the user edits, clears or explicitly selects a price, later location/type changes must not silently overwrite that choice;
+- an untouched auto-filled price is cleared when its context no longer matches.
+
 ## 5. Derived calculation contract
 
 Authority issue: #252.
@@ -161,7 +182,7 @@ Derived duration:
 duration = endTime - startTime
 ```
 
-If `endTime <= startTime`, duration is unavailable/invalid.
+If `endTime <= startTime`, duration is unavailable/invalid. Current Completion UI consumes this result from `ChargeCalculationEngine` via merged #313.
 
 Derived average power:
 
@@ -184,24 +205,31 @@ Guardrails:
 - vehicle energy > meter energy -> inconsistent;
 - SOC-derived vehicle energy remains estimate semantics and cannot become measured vehicle-side energy.
 
-Any future completed-record detail/analysis display must consume this shared contract rather than introduce a second formula path.
+Current v0.7 does not need to fabricate average-power/loss displays when compatible measured facts are unavailable. Any later completed-record detail/analysis display must consume this shared contract rather than introduce a second formula path.
 
 ## 6. Preset boundary
 
-Preset persistence/UX is **not currently shipped** and remains a decision under #253/#251.
+Reusable charging preset persistence/UX is **explicitly deferred out of Charging v0.7** to #311.
 
-If retained in v0.7, a preset may store reusable environment inputs such as charger context, price defaults and location labels. It must never pre-commit future actual meter energy, end time, end SOC or final cost.
+The current v0.7 workflow instead relies on:
 
-Do not block truthful active/pending lifecycle code on a speculative preset implementation. Resolve preset scope explicitly before #253/#251 close.
+- current-location/default-time behavior;
+- reusable/common places;
+- source-aware, location-safe tariff memory/suggestions from #310.
+
+Do not add another preset persistence/schema layer before #253/#289 physical lifecycle acceptance.
+
+If #311 is implemented later, a preset may store reusable environment/setup inputs only. It must never pre-commit future actual meter energy, measured vehicle energy, end time, actual end SOC, final cost or odometer.
 
 ## 7. Implementation ownership
 
 - #251 — parent product / end-to-end acceptance owner.
-- #252 — centralized coupled calculation + truthful derived metrics.
+- #252 — shared calculation contract + physical semantic acceptance.
 - #253 — active / pending / completion lifecycle and physical acceptance.
-- #260 — Add/Edit editor physical acceptance.
-- #289 — compact Start/Finish + delayed-meter physical feedback acceptance.
-- #254 — current-location behavior + future map-point picker.
+- #260 — manual Add/Edit editor physical acceptance.
+- #289 — compact Start/Finish + delayed-meter current-main physical acceptance.
+- #254 — current-location behavior + optional future map-point picker.
+- #311 — reusable preset follow-up after v0.7 acceptance; not a v0.7 blocker.
 - #14 — Location / Geocoder physical acceptance foundation.
 - #42 — accessibility / dirty forms / state safety.
 - #159 / #164 — v0.6 Records visual closeout only.
@@ -214,9 +242,13 @@ Merged implementation evidence:
 - #271 — charging persistence / exactly-once foundation.
 - #276 — Start / Active UI.
 - #277 — completion UI.
-- #297 — delayed-meter pending lifecycle.
+- #292 — compact physical-feedback Start/Finish UX.
+- #294 — durable pending persistence / Room v18 / Backup v10.
+- #297 — delayed-meter pending lifecycle UI.
 - #302 — pending end-fact revision.
 - #305 — MainViewModel lifecycle boundary.
+- #310 — location-safe tariff reuse truth.
+- #313 — shared completion-duration/time-validity wiring.
 
 ## 8. Migration and backup requirements
 
@@ -224,40 +256,42 @@ Historical fields must remain truthful; migrations must not synthesize fake end 
 
 Backup must include charging sessions and extended completed-record facts. Restore must not duplicate active/pending/completed sessions and must remain blocked while local unfinished lifecycle state would make overwrite unsafe.
 
-Automated migration/backup tests are evidence, but real historical-install/database-open behavior remains a physical acceptance gate under #253.
+Automated migration/backup tests are evidence, but real historical-install/database-open behavior remains a physical acceptance gate under #253/#289.
 
 ## 9. Remaining acceptance
 
-Implementation is no longer blocked on the old Draft PR stack. Remaining v0.7 closeout is mainly physical acceptance and explicit product-scope decisions.
+Implementation and v0.7 scope decisions are now resolved. Remaining closeout is **current-main physical acceptance**, not another broad implementation round.
 
-### Lifecycle/device
+### Lifecycle/device — #253 / #289
 
 - ACTIVE survives force-stop/process-kill/relaunch;
 - active edits survive relaunch;
-- complete produces exactly one historical row;
-- repeated completion does not duplicate;
-- PENDING_DETAILS survives relaunch;
-- next-day backfill produces exactly one historical row;
-- pending end-fact revision persists truthfully;
+- PENDING_DETAILS survives relaunch with correct confirmed end facts;
+- pending releases the ACTIVE slot and stays outside completed statistics;
+- complete/backfill produces exactly one historical row and retry/relaunch does not duplicate;
+- pending end-fact revision persists truthfully and rebuilds VehicleState;
 - cancel/discard produces no historical row;
 - backup/restore guards behave truthfully;
-- historical/current database opens on a real Android device.
+- historical/current database opens on a real Android device;
+- current vehicle/time/location/SOC/tariff defaults behave truthfully.
 
-### UI/editor
+### UI/editor — #252 / #260 / #289
 
 - Dark / Light readability;
 - 320–360dp width;
-- large font;
+- fontScale 1.3+;
 - keyboard does not make primary actions unreachable;
 - raw decimal edits (`1.`, clear, retype) remain stable;
-- no P0 cursor jump, recomposition loop or value flicker;
+- no P0 cursor jump, recomposition loop, rounding drift or value flicker;
+- billing conflict preserves authoritative user facts;
+- completion date/time edits refresh shared duration correctly;
 - back navigation / unsaved-edit behavior passes.
 
-### Product decisions
+### Future, non-blocking follow-ups
 
-- decide whether preset storage/UX is v0.7 or explicitly deferred;
-- decide whether a dedicated completed charging detail surface is still required for v0.7;
-- if duration / average power / loss are rendered, use the centralized derived contract and truthful labels.
+- #254 interactive map-point picker, if still desired;
+- #311 reusable charging presets, if real usage still shows meaningful setup friction;
+- dedicated completed charging detail/analytics, if later product UX requires it.
 
 ## 10. Status rule
 

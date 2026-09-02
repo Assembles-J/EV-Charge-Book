@@ -2,7 +2,7 @@
 
 Updated: 2026-09-02
 Status: Operational status authority
-Baseline: `main@86f5e69152480546e69ed2b90cb9e62afcc63dd3`
+Baseline: `main@5878cf72ef8ca39a469570529190cc6af7e2a8e5`
 
 ## Purpose
 
@@ -54,24 +54,29 @@ The connected GitHub tool can read these states but currently exposes neither br
 
 Current product/data authority:
 
-- #251 parent workflow and truth rules;
+- #251 parent workflow and end-to-end closeout;
 - `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md`;
-- #252 coupled calculation / truthful derived metrics;
-- #260 Add/Edit billing editor physical acceptance;
+- #252 shared calculation contract + physical semantic acceptance;
+- #260 manual Add/Edit billing editor physical acceptance;
 - #253 active / pending / completion lifecycle physical acceptance;
-- #289 compact Start/Finish + delayed-meter physical feedback acceptance;
-- #254 current-location behavior / future map-point picker.
+- #289 compact Start/Finish + delayed-meter current-main physical acceptance;
+- #254 current-location truth / optional future map-point picker;
+- #311 reusable charging presets after v0.7 acceptance, explicitly non-blocking.
 
-Current `main` implementation is no longer the old #258/#261/#267 Draft stack. Merged authority now includes:
+Current `main` implementation is no longer an implementation-candidate/Draft stack. Merged authority now includes:
 
 - #268 — centralized calculation/provenance engine;
 - #261 — shared Add/Edit `ChargeBillingEditor` adoption;
 - #271 — durable charging-session persistence + exactly-once completion foundation;
 - #276 — separate `开始充电` / `充电记录维护`, Start screen and persisted active card;
 - #277 — completion UI;
-- #297 — truthful `PENDING_DETAILS` delayed-meter lifecycle, backfill and explicit pending delete;
+- #292 — compact Start/Finish physical-feedback UX;
+- #294 — durable `PENDING_DETAILS`, Room v17 -> v18 and Backup v10 foundation;
+- #297 — truthful delayed-meter lifecycle, backfill and explicit pending delete;
 - #302 — `修改结束信息` for pending end time/SOC/location/odometer;
-- #305 — pending state and complete/defer/update-pending/backfill/discard commands routed through `MainViewModel`; Records/Completion UI no longer constructs database/repository/Room access.
+- #305 — pending state and complete/defer/update-pending/backfill/discard commands routed through `MainViewModel`; Records/Completion UI no longer constructs a second database/repository lifecycle boundary;
+- #310 — source-aware, location-safe tariff reuse and explicit-user-edit protection;
+- #313 — displayed completion duration/time validity routed through the shared `ChargeCalculationEngine`.
 
 Key current truth rules:
 
@@ -83,25 +88,33 @@ Key current truth rules:
 - pending physical charge-end facts may update VehicleState but pending does not enter completed charging statistics;
 - completion/backfill remains exactly-once under repository/session transaction authority;
 - manual completed-record maintenance remains independent of active-session lifecycle;
-- SOC-delta × battery capacity is display-only vehicle-energy estimate, not measured/BMS truth.
+- SOC-delta × battery capacity is display-only vehicle-energy estimate, not measured/BMS truth;
+- automatic tariff reuse requires same vehicle + normalized location + charger type and stored session tariff provenance; other historical prices are suggestion-only;
+- displayed completion duration consumes the shared calculation contract; invalid `end <= start` uses the shared timing issue.
 
 Architecture follow-up #285 is completed/closed after #305. Do not reopen it to duplicate transaction logic.
 
-Remaining Charging v0.7 gates are primarily physical acceptance / explicit scope decisions:
+Charging v0.7 implementation and scope decisions are now resolved. Remaining closeout is current-main physical acceptance:
 
 - real historical/current Android database-open migration pass;
 - ACTIVE process-kill/relaunch and active-edit persistence;
-- complete exactly once / retry no duplicate;
 - PENDING_DETAILS process-kill/relaunch + next-day backfill exactly once;
+- complete/backfill retry no duplicate;
 - pending end-fact revision + VehicleState truth;
 - cancel/delete produce no historical record;
 - active/pending backup and restore guards;
-- current vehicle/time/location defaults;
-- Dark/Light, 320–360dp, large font, keyboard/decimal/back-navigation acceptance;
-- preset decision: implement reusable environment-only presets or explicitly defer them from v0.7;
-- completed-detail / derived-metric presentation decision if still required by final v0.7 UX.
+- current vehicle/time/location/SOC/tariff defaults;
+- shared billing priority/conflict behavior on device;
+- completion date/time refreshes shared duration truthfully;
+- Dark/Light, 320–360dp, fontScale 1.3+, keyboard/decimal/back-navigation acceptance.
 
-#253/#289 remain Open because CI Green is not physical lifecycle acceptance. #252/#260 remain Open for their editor/derived-metric physical gates.
+#253/#289 remain Open because CI Green is not physical lifecycle acceptance. #252/#260 remain Open because CI Green is not physical calculation/editor acceptance.
+
+Explicit non-blocking future work:
+
+- #254 interactive map-point picker, if still desired;
+- #311 reusable charging presets after physical lifecycle acceptance;
+- dedicated completed charging detail/analytics, if later product UX requires it.
 
 ### Vehicle maturity / catalog / resource onboarding — #244 and #20
 
@@ -235,11 +248,12 @@ Completed in the 2026-08-31 audit:
 
 Charging authority normalized 2026-09-02:
 
-- #268/#261/#271/#276/#277/#297/#302/#305 recorded as merged runtime authority;
+- #268/#261/#271/#276/#277/#292/#294/#297/#302/#305/#310/#313 recorded as merged runtime authority;
 - #285 closed as completed architecture cleanup;
-- #251/#253/#289 normalized through status comments to distinguish merged implementation from physical acceptance;
-- old #258/#261 stacked-candidate prose removed from this fast-status file;
-- `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md` updated to current lifecycle truth.
+- #251/#252/#253/#260/#289 normalized to distinguish merged implementation from current-main physical acceptance;
+- #311 created for reusable charging presets after v0.7 acceptance and explicitly removed from v0.7 blockers;
+- old Draft/candidate prose removed from current Charging ownership;
+- `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md` updated to current lifecycle/truth/closeout authority.
 
 Remaining documentation debt:
 
