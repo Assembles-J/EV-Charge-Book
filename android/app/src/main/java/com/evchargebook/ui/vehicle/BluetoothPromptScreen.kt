@@ -83,6 +83,12 @@ fun BluetoothPromptScreen(
                 )
             }
             item {
+                CompanionPresencePocSection(
+                    deviceAddress = settings.deviceAddress,
+                    deviceName = settings.deviceName,
+                )
+            }
+            item {
                 Column {
                     Text("已配对设备", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
