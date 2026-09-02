@@ -33,6 +33,7 @@ import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.domain.TripValidityRules
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
+import com.evchargebook.ui.vehicle.ManagedVehicleCatalogResolver
 import com.evchargebook.viewmodel.MainUiState
 import java.time.Instant
 import java.time.ZoneId
@@ -57,7 +58,10 @@ fun DashboardScreen(
     val dashboardTrip = state.activeTrip
         ?.takeIf { it.vehicleId == selectedVehicleId }
         ?: latestCompletedTrip
-    val dashboardArtworkKey = DashboardHeroArtworkResolver.resolve(state.vehicle, state.catalogVehicles)
+    val dashboardArtworkKey = ManagedVehicleCatalogResolver.resolveHeroArtworkKey(
+        state.vehicle,
+        state.catalogVehicles,
+    )
 
     LazyColumn(
         modifier = Modifier
