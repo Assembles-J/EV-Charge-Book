@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.repository.CompleteChargingSessionRequest
+import com.evchargebook.data.repository.DeferChargingCompletionRequest
 import com.evchargebook.domain.charge.ChargeBillingField
 import com.evchargebook.domain.charge.ChargeCalculationIssue
 import com.evchargebook.ui.theme.spacing
@@ -60,6 +61,7 @@ fun CompleteChargingScreen(
     session: ChargingSessionEntity,
     onBack: () -> Unit,
     onComplete: suspend (CompleteChargingSessionRequest) -> Long,
+    onDefer: suspend (DeferChargingCompletionRequest) -> Unit,
     onCompleted: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -69,26 +71,27 @@ fun CompleteChargingScreen(
     val vehicles by database.vehicleDao().observeActive().collectAsState(initial = emptyList())
     val batteryCapacityKwh = vehicles.firstOrNull { it.id == session.vehicleId }?.batteryCapacityKwh
 
-    val initialUnitPrice = session.unitPricePerKwh?.toEditableCompletionNumber().orEmpty()
     val initialBilling = remember(session.id, session.updatedAtEpochMillis) {
         ChargeBillingEditor.create(
-            totalCostText = "",
-            unitPriceText = initialUnitPrice,
-            meterEnergyText = "",
-            authoritativeBillingFields = if (session.unitPricePerKwh != null) {
-                setOf(ChargeBillingField.UNIT_PRICE)
-            } else {
-                emptySet()
+            totalCostText = session.pendingTotalCost?.toEditableCompletionNumber().orEmpty(),
+            unitPriceText = session.unitPricePerKwh?.toEditableCompletionNumber().orEmpty(),
+            meterEnergyText = session.pendingMeterEnergyKwh?.toEditableCompletionNumber().orEmpty(),
+            authoritativeBillingFields = buildSet {
+                if (session.pendingTotalCost != null) add(ChargeBillingField.TOTAL_COST)
+                if (session.unitPricePerKwh != null) add(ChargeBillingField.UNIT_PRICE)
+                if (session.pendingMeterEnergyKwh != null) add(ChargeBillingField.METER_ENERGY)
             },
         )
     }
 
     var startSoc by remember(session.id) { mutableStateOf(session.startSoc?.toString().orEmpty()) }
-    var endSoc by remember(session.id) { mutableStateOf("") }
-    var endSocTouched by remember(session.id) { mutableStateOf(false) }
+    var endSoc by remember(session.id) { mutableStateOf(session.endSoc?.toString().orEmpty()) }
+    var endSocTouched by remember(session.id) { mutableStateOf(session.endSoc != null) }
     var billing by remember(session.id, session.updatedAtEpochMillis) { mutableStateOf(initialBilling) }
-    var odometer by remember(session.id) { mutableStateOf("") }
-    var endedAt by remember(session.id) { mutableLongStateOf(System.currentTimeMillis()) }
+    var odometer by remember(session.id) { mutableStateOf(session.odometerKm?.toEditableCompletionNumber().orEmpty()) }
+    var endedAt by remember(session.id) {
+        mutableLongStateOf(session.endedAtEpochMillis ?: System.currentTimeMillis())
+    }
     var location by remember(session.id) { mutableStateOf(session.location.orEmpty()) }
     var latitude by remember(session.id) { mutableStateOf(session.latitude) }
     var longitude by remember(session.id) { mutableStateOf(session.longitude) }
@@ -113,10 +116,15 @@ fun CompleteChargingScreen(
     val meterEnergy = billing.meterEnergyKwh
     val totalCost = billing.totalCost
     val odometerValue = odometer.takeIf { it.isNotBlank() }?.toDoubleOrNull()
-    val invalidOdometer = odometer.isNotBlank() && odometerValue == null
+
+    val invalidMeterText = billing.meterEnergyText.isNotBlank() && (meterEnergy == null || meterEnergy <= 0.0)
+    val invalidCostText = billing.totalCostText.isNotBlank() && (totalCost == null || totalCost < 0.0)
+    val invalidPriceText = billing.unitPriceText.isNotBlank() && (billing.unitPrice == null || billing.unitPrice < 0.0)
+    val invalidOdometer = odometer.isNotBlank() && (odometerValue == null || odometerValue < 0.0)
     val blockingBillingIssue = billing.issues.any {
         it == ChargeCalculationIssue.NEGATIVE_VALUE || it == ChargeCalculationIssue.BILLING_CONFLICT
     }
+
     val estimatedVehicleEnergy = if (
         batteryCapacityKwh != null && batteryCapacityKwh > 0.0 &&
         startSocValue != null && endSocValue != null && endSocValue >= startSocValue
@@ -125,14 +133,16 @@ fun CompleteChargingScreen(
     } else {
         null
     }
-    val canSubmit = !submitting &&
+
+    val hasFinalBilling =
+        meterEnergy != null && meterEnergy > 0.0 && totalCost != null && totalCost >= 0.0 && !blockingBillingIssue
+
+    val canEnd = !submitting &&
         startSocValue != null && startSocValue in 0..100 &&
         endSocValue != null && endSocValue in 0..100 && endSocValue >= startSocValue &&
-        meterEnergy != null && meterEnergy > 0.0 &&
-        totalCost != null && totalCost >= 0.0 &&
         endedAt > session.startedAtEpochMillis &&
-        !invalidOdometer && !blockingBillingIssue &&
-        (odometerValue == null || odometerValue >= 0.0)
+        !invalidMeterText && !invalidCostText && !invalidPriceText && !invalidOdometer &&
+        !blockingBillingIssue
 
     val dateText = remember(endedAt) {
         SimpleDateFormat("M月d日", Locale.SIMPLIFIED_CHINESE).format(Date(endedAt))
@@ -189,12 +199,8 @@ fun CompleteChargingScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {
-                    Text("结束充电", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, contentDescription = "返回") }
-                },
+                title = { Text("结束充电", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) },
+                navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "返回") } },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -268,7 +274,7 @@ fun CompleteChargingScreen(
 
             estimatedVehicleEnergy?.let {
                 Text(
-                    "按 SOC 与电池容量估算，本次车辆约充入 ${"%.1f".format(Locale.US, it)} kWh",
+                    "按 SOC 与电池容量估算，车辆约充入 ${"%.1f".format(Locale.US, it)} kWh",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -280,7 +286,7 @@ fun CompleteChargingScreen(
                     billing = ChargeBillingEditor.edit(billing, ChargeBillingField.METER_ENERGY, it)
                     submitError = null
                 },
-                label = "电表 / 桩端电量",
+                label = "电表 / 桩端电量（可稍后补）",
                 suffix = "kWh",
                 modifier = Modifier.fillMaxWidth(),
                 keyboardType = KeyboardType.Decimal,
@@ -310,8 +316,23 @@ fun CompleteChargingScreen(
                     keyboardType = KeyboardType.Decimal,
                 )
             }
-            if (blockingBillingIssue) {
-                Text("费用、单价和电量不一致，请确认输入。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+
+            when {
+                blockingBillingIssue -> Text(
+                    "费用、单价和电量不一致，请确认输入。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                invalidMeterText || invalidCostText || invalidPriceText -> Text(
+                    "已填写的电表/费用信息需要是有效数字；暂时不知道可以直接留空。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                !hasFinalBilling -> Text(
+                    "电表数据还没出来也可以结束充电；本次会保存为待补录，不进入费用和电量统计。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             OutlinedTextField(
@@ -355,36 +376,69 @@ fun CompleteChargingScreen(
             }
 
             Button(
-                enabled = canSubmit,
+                enabled = canEnd,
                 onClick = {
-                    val request = CompleteChargingSessionRequest(
-                        sessionId = session.id,
-                        startSoc = startSocValue!!,
-                        endSoc = endSocValue!!,
-                        meterEnergyKwh = meterEnergy!!,
-                        vehicleEnergyKwh = null,
-                        totalCost = totalCost!!,
-                        endedAtEpochMillis = endedAt,
-                        odometerKm = odometerValue,
-                        chargerType = session.chargerType,
-                        location = location.trim().takeIf { it.isNotEmpty() },
-                        remark = session.remark,
-                        latitude = latitude,
-                        longitude = longitude,
-                        locationAccuracyMeters = locationAccuracyMeters,
-                    )
                     submitting = true
                     submitError = null
                     scope.launch {
-                        runCatching { onComplete(request) }
+                        val result = if (hasFinalBilling) {
+                            runCatching {
+                                onComplete(
+                                    CompleteChargingSessionRequest(
+                                        sessionId = session.id,
+                                        startSoc = startSocValue!!,
+                                        endSoc = endSocValue!!,
+                                        meterEnergyKwh = meterEnergy!!,
+                                        vehicleEnergyKwh = null,
+                                        totalCost = totalCost!!,
+                                        endedAtEpochMillis = endedAt,
+                                        odometerKm = odometerValue,
+                                        chargerType = session.chargerType,
+                                        location = location.trim().takeIf { it.isNotEmpty() },
+                                        remark = session.remark,
+                                        latitude = latitude,
+                                        longitude = longitude,
+                                        locationAccuracyMeters = locationAccuracyMeters,
+                                    )
+                                )
+                            }
+                        } else {
+                            runCatching {
+                                onDefer(
+                                    DeferChargingCompletionRequest(
+                                        sessionId = session.id,
+                                        startSoc = startSocValue!!,
+                                        endSoc = endSocValue!!,
+                                        endedAtEpochMillis = endedAt,
+                                        odometerKm = odometerValue,
+                                        meterEnergyKwh = meterEnergy?.takeIf { it > 0.0 },
+                                        totalCost = totalCost?.takeIf { it >= 0.0 },
+                                        vehicleEnergyKwh = null,
+                                        location = location.trim().takeIf { it.isNotEmpty() },
+                                        remark = session.remark,
+                                        latitude = latitude,
+                                        longitude = longitude,
+                                        locationAccuracyMeters = locationAccuracyMeters,
+                                    )
+                                )
+                            }
+                        }
+                        result
                             .onSuccess { onCompleted() }
-                            .onFailure { submitError = it.message ?: "无法完成充电记录" }
+                            .onFailure { submitError = it.message ?: "无法结束充电" }
                         submitting = false
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(50.dp),
             ) {
-                Text(if (submitting) "正在保存…" else "完成并写入充电账本", fontWeight = FontWeight.SemiBold)
+                Text(
+                    when {
+                        submitting -> "正在保存…"
+                        hasFinalBilling -> "完成并写入充电账本"
+                        else -> "结束充电 · 稍后补电表"
+                    },
+                    fontWeight = FontWeight.SemiBold,
+                )
             }
 
             Spacer(Modifier.height(MaterialTheme.spacing.sm))
@@ -422,5 +476,7 @@ private fun formatCompletionDuration(milliseconds: Long): String {
     return if (hours > 0L) "${hours}小时${minutes}分" else "${minutes}分钟"
 }
 
-private fun Double.toEditableCompletionNumber(): String =
-    if (this % 1.0 == 0.0) toLong().toString() else toString()
+private fun Double.toEditableCompletionNumber(): String {
+    val text = String.format(Locale.US, "%.4f", this)
+    return text.trimEnd('0').trimEnd('.')
+}

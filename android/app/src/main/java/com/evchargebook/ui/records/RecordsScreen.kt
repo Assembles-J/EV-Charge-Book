@@ -36,10 +36,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,11 +52,12 @@ import androidx.compose.ui.unit.dp
 import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.ChargingSessionEntity
-import com.evchargebook.data.repository.ChargingSessionRepository
+import com.evchargebook.data.repository.ChargingRepository
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -72,20 +75,35 @@ fun RecordsScreen(
     onEditActive: (ChargingSessionEntity) -> Unit,
     onCancelActive: (ChargingSessionEntity) -> Unit,
 ) {
+    val context = LocalContext.current.applicationContext
+    val scope = rememberCoroutineScope()
+    val database = remember(context) { AppDatabase.getInstance(context) }
+    val chargingRepository = remember(database, context) { ChargingRepository(database, context) }
+    val pendingSessions by chargingRepository.pendingChargingSessions.collectAsState(initial = emptyList())
+
     var pendingDelete by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingCancel by remember { mutableStateOf<ChargingSessionEntity?>(null) }
+    var pendingDiscard by remember { mutableStateOf<ChargingSessionEntity?>(null) }
     var completingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
+    var backfillingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
 
     completingSession?.let { session ->
-        val context = LocalContext.current.applicationContext
-        val completionRepository = remember(context) {
-            ChargingSessionRepository(AppDatabase.getInstance(context))
-        }
         CompleteChargingScreen(
             session = session,
             onBack = { completingSession = null },
-            onComplete = completionRepository::complete,
+            onComplete = chargingRepository::completeChargingSession,
+            onDefer = chargingRepository::deferChargingCompletion,
             onCompleted = { completingSession = null },
+        )
+        return
+    }
+
+    backfillingSession?.let { session ->
+        ChargingMeterBackfillScreen(
+            session = session,
+            onBack = { backfillingSession = null },
+            onBackfill = chargingRepository::backfillChargingSession,
+            onCompleted = { backfillingSession = null },
         )
         return
     }
@@ -94,9 +112,7 @@ fun RecordsScreen(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {
-                    Text("充电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                },
+                title = { Text("充电记录", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -125,12 +141,40 @@ fun RecordsScreen(
                 }
             }
 
+            if (pendingSessions.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = MaterialTheme.spacing.xs),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("待补录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            "${pendingSessions.size} 笔",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                items(pendingSessions, key = { "pending-${it.id}" }) { session ->
+                    PendingChargingCard(
+                        session = session,
+                        onBackfill = { backfillingSession = session },
+                        onDiscard = { pendingDiscard = session },
+                    )
+                }
+            }
+
             if (records.isEmpty()) {
                 item {
-                    Box(Modifier.fillMaxWidth().height(260.dp)) {
+                    Box(Modifier.fillMaxWidth().height(if (pendingSessions.isEmpty()) 260.dp else 180.dp)) {
                         EmptyState(
                             "还没有已完成的充电记录",
-                            if (activeSession != null) "当前充电仍在进行；完成后会进入历史账本。" else "可以开始记录充电，也可以补录已有账单。",
+                            when {
+                                activeSession != null -> "当前充电仍在进行；结束后会进入账本或待补录。"
+                                pendingSessions.isNotEmpty() -> "上方充电等待补充电表数据，补齐后才进入正式统计。"
+                                else -> "可以开始记录充电，也可以补录已有账单。"
+                            },
                             "补录历史充电",
                             onMaintainRecord,
                         )
@@ -191,6 +235,25 @@ fun RecordsScreen(
             dismissButton = { TextButton(onClick = { pendingCancel = null }) { Text("继续记录") } },
         )
     }
+
+    pendingDiscard?.let { session ->
+        AlertDialog(
+            onDismissRequest = { pendingDiscard = null },
+            title = { Text("删除这次待补录充电？") },
+            text = { Text("这次物理充电已经结束。删除后不会生成历史账本记录，也无法恢复这次待补录信息。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        scope.launch { chargingRepository.discardPendingChargingSession(session.id) }
+                        pendingDiscard = null
+                    }
+                ) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = { TextButton(onClick = { pendingDiscard = null }) { Text("保留") } },
+        )
+    }
 }
 
 @Composable
@@ -210,10 +273,7 @@ private fun ChargingEntryActions(
         ) {
             Text(if (hasActiveSession) "充电进行中" else "开始充电")
         }
-        OutlinedButton(
-            onClick = onMaintainRecord,
-            modifier = Modifier.weight(1f),
-        ) {
+        OutlinedButton(onClick = onMaintainRecord, modifier = Modifier.weight(1f)) {
             Text("充电记录维护")
         }
     }
@@ -255,11 +315,7 @@ private fun ActiveChargingCard(
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
                 Text("充电中", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    formatElapsed(elapsed),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
+                Text(formatElapsed(elapsed), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             }
             Text(
                 session.location?.takeIf { it.isNotBlank() } ?: "未记录充电地点",
@@ -282,15 +338,6 @@ private fun ActiveChargingCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            session.remark?.takeIf { it.isNotBlank() }?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
@@ -299,6 +346,70 @@ private fun ActiveChargingCard(
                 TextButton(onClick = onCancel) { Text("取消") }
                 TextButton(onClick = onEdit) { Text("编辑") }
                 Button(onClick = onComplete) { Text("结束充电") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PendingChargingCard(
+    session: ChargingSessionEntity,
+    onBackfill: () -> Unit,
+    onDiscard: () -> Unit,
+) {
+    val facts = listOfNotNull(
+        session.startSoc?.let { start -> session.endSoc?.let { end -> "SOC $start% → $end%" } },
+        session.pendingMeterEnergyKwh?.let { "${one(it)} kWh" },
+        session.pendingTotalCost?.let { "¥${two(it)}" },
+        session.chargerType?.takeIf { it.isNotBlank() },
+    )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.sm),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.xs),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.secondary, CircleShape))
+                Spacer(Modifier.width(MaterialTheme.spacing.xs))
+                Text("待补电表数据", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.weight(1f))
+                Text(
+                    session.endedAtEpochMillis?.let(::format) ?: format(session.startedAtEpochMillis),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                session.location?.takeIf { it.isNotBlank() } ?: "未记录充电地点",
+                style = MaterialTheme.typography.titleSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (facts.isNotEmpty()) {
+                Text(
+                    facts.joinToString(" · "),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Text(
+                "补齐前不计入累计费用、电量和充电次数。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = onDiscard) { Text("删除") }
+                Button(onClick = onBackfill) { Text("补充电表数据") }
             }
         }
     }
@@ -327,17 +438,11 @@ private fun LedgerSummaryV06(records: List<ChargingRecordEntity>) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(7.dp).background(MaterialTheme.colorScheme.primary, CircleShape))
                 Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                Text(
-                    "累计账本",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("累计账本", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Row(verticalAlignment = Alignment.Bottom) {
-                Column {
-                    Text("累计支出", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("¥ ${two(totalCost)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-                }
+            Column {
+                Text("累计支出", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("¥ ${two(totalCost)}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .24f))
             ResponsiveMetricGrid(metrics.size) { index, modifier ->
@@ -363,18 +468,12 @@ private fun RecordTimelineItemV06(
     onDelete: () -> Unit,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onEdit)
-            .padding(vertical = MaterialTheme.spacing.xs),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onEdit).padding(vertical = MaterialTheme.spacing.xs),
         verticalAlignment = Alignment.Top,
     ) {
         ChargingRailV06()
         Spacer(Modifier.width(MaterialTheme.spacing.sm))
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(5.dp),
-        ) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Column(Modifier.weight(1f)) {
                     Text(
@@ -384,29 +483,18 @@ private fun RecordTimelineItemV06(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    Text(
-                        format(record.chargeTimeEpochMillis),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(format(record.chargeTimeEpochMillis), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Spacer(Modifier.width(MaterialTheme.spacing.sm))
                 Column(horizontalAlignment = Alignment.End) {
                     Text("¥ ${two(record.cost)}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "+${one(record.energyKwh)} kWh",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+                    Text("+${one(record.energyKwh)} kWh", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                 }
             }
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text(
-                        "SOC ${record.startSoc}% → ${record.endSoc}% · ¥ ${two(record.pricePerKwh)}/kWh",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                    Text("SOC ${record.startSoc}% → ${record.endSoc}% · ¥ ${two(record.pricePerKwh)}/kWh", style = MaterialTheme.typography.bodySmall)
                     val extras = listOfNotNull(
                         record.chargerType?.takeIf { it.isNotBlank() },
                         record.odometerKm?.let { "里程 ${formatKm(it)} km" },
@@ -444,20 +532,10 @@ private fun ChargingRailV06() {
             color = MaterialTheme.colorScheme.primary.copy(alpha = .10f),
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    Icons.Default.Bolt,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(15.dp),
-                )
+                Icon(Icons.Default.Bolt, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(15.dp))
             }
         }
-        Box(
-            Modifier
-                .width(1.dp)
-                .height(66.dp)
-                .background(MaterialTheme.colorScheme.outline.copy(alpha = .32f)),
-        )
+        Box(Modifier.width(1.dp).height(66.dp).background(MaterialTheme.colorScheme.outline.copy(alpha = .32f)))
     }
 }
 

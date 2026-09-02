@@ -15,7 +15,7 @@ data class ChargeBillingEditorState(
     val issues: Set<ChargeCalculationIssue> = emptySet()
 ) {
     val totalCost: Double? get() = calculationInput.totalCost
-    val unitPrice: Double? get() = calculationInput.unitPrice
+    val unitPrice: Double? = calculationInput.unitPrice
     val meterEnergyKwh: Double? get() = calculationInput.meterEnergyKwh
 }
 
