@@ -1,6 +1,5 @@
 package com.evchargebook.ui.trip
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -40,13 +39,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
@@ -73,9 +67,8 @@ private enum class TripDetailSectionV06(val label: String) {
 /**
  * v0.6 completed/selected Trip detail.
  *
- * The approved design treats overview, route and diagnostics as distinct reading surfaces. This
- * screen keeps one route but separates those supported facts into lightweight tabs; unsupported
- * charging/notes/destination concepts are intentionally not exposed.
+ * Overview, route and diagnostics stay separate reading surfaces. Route rendering is delegated to
+ * the shared interactive viewport used by playback so pan/zoom/speed semantics cannot drift.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -504,7 +497,6 @@ private fun SummaryMetricGridV06(metrics: List<SummaryMetricV06>) {
 
 @Composable
 private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEndpoint: Boolean) {
-    val accent = EVDesignTokens.Energy.green
     val geometry = remember(points) {
         TripRouteGeometryBuilder.build(points.map { it.toV06RoutePoint() })
     } ?: return
@@ -528,65 +520,11 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEnd
                 )
             }
 
-            val endColor = MaterialTheme.colorScheme.error
-            Canvas(
-                Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
-                    .semantics {
-                        contentDescription = if (finalEndpoint) {
-                            "真实行程轨迹；绿色播放标记为起点，红旗标记为终点，长 GPS 缺口保持断开"
-                        } else {
-                            "真实行程轨迹；绿色播放标记为起点，绿色圆点为当前或最后记录点，长 GPS 缺口保持断开"
-                        }
-                    }
-            ) {
-                val pad = 12.dp.toPx()
-                val width = (size.width - pad * 2).coerceAtLeast(1f)
-                val height = (size.height - pad * 2).coerceAtLeast(1f)
-                fun offset(x: Float, y: Float) = Offset(pad + x * width, pad + y * height)
-
-                geometry.segments.forEach { segment ->
-                    segment.zipWithNext().forEach { (from, to) ->
-                        drawLine(
-                            color = accent.copy(alpha = .78f),
-                            start = offset(from.x, from.y),
-                            end = offset(to.x, to.y),
-                            strokeWidth = 3.dp.toPx(),
-                            cap = StrokeCap.Round
-                        )
-                    }
-                }
-
-                val start = geometry.points.first().let { offset(it.x, it.y) }
-                val end = geometry.points.last().let { offset(it.x, it.y) }
-                val marker = 6.dp.toPx()
-                val startTriangle = Path().apply {
-                    moveTo(start.x - marker * .45f, start.y - marker)
-                    lineTo(start.x + marker, start.y)
-                    lineTo(start.x - marker * .45f, start.y + marker)
-                    close()
-                }
-                drawPath(startTriangle, accent)
-
-                if (finalEndpoint) {
-                    val poleHeight = 13.dp.toPx()
-                    val flagWidth = 9.dp.toPx()
-                    val flagHeight = 6.dp.toPx()
-                    drawLine(endColor, end, Offset(end.x, end.y - poleHeight), strokeWidth = 2.dp.toPx(), cap = StrokeCap.Round)
-                    val flag = Path().apply {
-                        moveTo(end.x, end.y - poleHeight)
-                        lineTo(end.x + flagWidth, end.y - poleHeight)
-                        lineTo(end.x + flagWidth, end.y - poleHeight + flagHeight)
-                        lineTo(end.x, end.y - poleHeight + flagHeight)
-                        close()
-                    }
-                    drawPath(flag, endColor)
-                } else {
-                    drawCircle(accent.copy(alpha = .22f), 6.dp.toPx(), end)
-                    drawCircle(accent, 3.dp.toPx(), end)
-                }
-            }
+            TripRouteViewportV07(
+                points = points,
+                finalEndpoint = finalEndpoint,
+                height = 190.dp,
+            )
 
             if (geometry.gapCount > 0) {
                 Text(
@@ -594,100 +532,6 @@ private fun CompletedTripRoutePreviewV06(points: List<TripPointEntity>, finalEnd
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompletedTripAltitudeCardV06(trip: TripSessionEntity, points: List<TripPointEntity>) {
-    val summary = remember(points) { TripElevationAnalytics.summarize(points) }
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-        ) {
-            Text("海拔", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            SummaryMetricGridV06(
-                listOf(
-                    SummaryMetricV06("起点", formatV06Altitude(summary?.startAltitudeMeters ?: trip.startAltitudeMeters)),
-                    SummaryMetricV06("终点", formatV06Altitude(summary?.endAltitudeMeters ?: trip.endAltitudeMeters)),
-                    SummaryMetricV06("最低", formatV06Altitude(summary?.minAltitudeMeters ?: trip.minAltitudeMeters)),
-                    SummaryMetricV06("最高", formatV06Altitude(summary?.maxAltitudeMeters ?: trip.maxAltitudeMeters)),
-                    SummaryMetricV06("累计爬升", if (summary?.hasCumulativeEstimate == true) formatV06Altitude(summary.elevationGainMeters) else "--"),
-                    SummaryMetricV06("累计下降", if (summary?.hasCumulativeEstimate == true) formatV06Altitude(summary.elevationLossMeters) else "--")
-                )
-            )
-            if ((summary?.skippedLongGapCount ?: 0) > 0) {
-                Text(
-                    "${summary?.skippedLongGapCount} 个 GPS 长缺口已从累计海拔变化中断开。",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun CompletedTripDiagnosticsV06(
-    points: List<TripPointEntity>,
-    gapCount: Int,
-    expanded: Boolean,
-    onToggle: () -> Unit
-) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md)) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("GPS 诊断", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "${points.size} 点${if (gapCount > 0) " · $gapCount 个长缺口" else " · 未检测到长缺口"}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                TextButton(onClick = onToggle) { Text(if (expanded) "收起" else "查看轨迹点") }
-            }
-
-            if (expanded) {
-                Spacer(Modifier.height(MaterialTheme.spacing.xs))
-                if (points.isEmpty()) {
-                    Text("本次没有保存有效 GPS 轨迹点。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } else {
-                    points.takeLast(6).reversed().forEachIndexed { index, point ->
-                        if (index > 0) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .16f))
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(vertical = MaterialTheme.spacing.xs),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    SimpleDateFormat("HH:mm:ss", Locale.SIMPLIFIED_CHINESE).format(Date(point.capturedAtEpochMillis)),
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    "${formatV06Coordinate(point.latitude)}, ${formatV06Coordinate(point.longitude)}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            point.horizontalAccuracyMeters?.takeIf { it.isFinite() }?.let {
-                                Text("±${it.toInt()} m", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -748,9 +592,6 @@ private fun formatV06MileageRange(start: Double?, end: Double?): String = when {
 
 private fun formatV06Mileage(value: Double): String =
     if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
-
-private fun formatV06Altitude(value: Double?): String =
-    value?.takeIf { it.isFinite() }?.let { String.format(Locale.US, "%.0f m", it) } ?: "--"
 
 private fun formatV06Coordinate(value: Double): String = String.format(Locale.US, "%.6f", value)
 
