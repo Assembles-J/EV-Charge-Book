@@ -27,12 +27,22 @@ private const val DETAIL_TREND_LONG_GAP_MS = 120_000L
 internal fun CompletedTripTrendsV06(points: List<TripPointEntity>) {
     val speedSamples = remember(points) {
         points.mapNotNull { point ->
-            trustedDetailSpeedV06(point)?.let { TripTrendSampleV06(point.capturedAtEpochMillis, it * 3.6) }
+            trustedDetailSpeedV06(point)?.let {
+                TripTrendSampleV06(
+                    timestamp = point.capturedAtEpochMillis,
+                    value = it * 3.6,
+                    capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
+                )
+            }
         }
     }
     val altitudeSamples = remember(points) {
         TripElevationAnalytics.filteredSeries(points).map { sample ->
-            TripTrendSampleV06(sample.capturedAtEpochMillis, sample.altitudeMeters)
+            TripTrendSampleV06(
+                timestamp = sample.capturedAtEpochMillis,
+                value = sample.altitudeMeters,
+                capturedAtElapsedRealtimeNanos = sample.capturedAtElapsedRealtimeNanos,
+            )
         }
     }
 
