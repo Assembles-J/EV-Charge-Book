@@ -46,6 +46,23 @@ class ManagedVehicleCatalogResolverTest {
     }
 
     @Test
+    fun `legacy exact model beats newer series-only match`() {
+        val newer = c16.copy(
+            catalogId = "leap-c16-2027-reev",
+            modelName = "C16 2027款",
+            modelYear = 2027,
+            heroArtworkKey = "leapmotor-c16-2027",
+        )
+        val vehicle = vehicle(catalogVehicleId = null, model = "C16 2026款")
+
+        assertEquals(c16, ManagedVehicleCatalogResolver.resolveCatalogVehicle(vehicle, listOf(newer, c16)))
+        assertEquals(
+            "leapmotor-c16-2026",
+            ManagedVehicleCatalogResolver.resolveHeroArtworkKey(vehicle, listOf(newer, c16)),
+        )
+    }
+
+    @Test
     fun `legacy model never crosses brand boundary`() {
         val vehicle = vehicle(catalogVehicleId = null, brand = "其他品牌", model = "C16 2026款")
 
