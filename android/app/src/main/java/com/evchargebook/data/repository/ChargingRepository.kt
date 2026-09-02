@@ -78,6 +78,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
     val activeChargingSession: Flow<ChargingSessionEntity?> = vehicle.flatMapLatest { selected ->
         selected?.let { chargingSessionDao.observeActiveForVehicle(it.id) } ?: flowOf(null)
     }
+    val pendingChargingSessions: Flow<List<ChargingSessionEntity>> = vehicle.flatMapLatest { selected ->
+        selected?.let { chargingSessionDao.observePendingForVehicle(it.id) } ?: flowOf(emptyList())
+    }
     val trips: Flow<List<TripSessionEntity>> = vehicle.flatMapLatest { selected ->
         selected?.let { tripDao.observeForVehicle(it.id) } ?: flowOf(emptyList())
     }
@@ -89,8 +92,6 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         seedVehicleCatalog()
         val activeVehicles = vehicles.first()
         if (activeVehicles.isEmpty()) {
-            // An empty garage is a valid first-run state. The app must never decide which
-            // managed model the user owns; the user selects one from the cached catalog.
             context.vehicleSelectionDataStore.edit { it.remove(selectedVehicleIdKey) }
             return
         }
@@ -126,7 +127,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val payload = BackupCodec.decode(content)
         database.withTransaction {
             require(tripDao.getActive() == null) { "请先结束当前行程，再恢复备份" }
-            require(chargingSessionDao.getAnyActive() == null) { "请先结束或取消当前充电，再恢复备份" }
+            require(chargingSessionDao.getAnyUnfinished() == null) {
+                "请先处理进行中或待补录的充电，再恢复备份"
+            }
             chargingSessionDao.deleteAll()
             tripDao.deleteAllSessions()
             chargingRecordDao.deleteAll()
@@ -159,6 +162,15 @@ class ChargingRepository(private val database: AppDatabase, private val context:
 
     suspend fun completeChargingSession(request: CompleteChargingSessionRequest): Long =
         chargingSessionRepository.complete(request)
+
+    suspend fun deferChargingCompletion(request: DeferChargingCompletionRequest) =
+        chargingSessionRepository.deferCompletion(request)
+
+    suspend fun backfillChargingSession(request: BackfillChargingSessionRequest): Long =
+        chargingSessionRepository.backfill(request)
+
+    suspend fun discardPendingChargingSession(sessionId: String) =
+        chargingSessionRepository.discardPending(sessionId)
 
     suspend fun startTrip(
         vehicleId: Long,
@@ -361,6 +373,9 @@ class ChargingRepository(private val database: AppDatabase, private val context:
             val activeTrip = tripDao.getActive()
             require(activeTrip?.vehicleId != vehicleId) { "请先结束这辆车的当前行程" }
             require(chargingSessionDao.getActiveForVehicle(vehicleId) == null) { "请先结束或取消这辆车的当前充电" }
+            require(chargingSessionDao.getPendingForVehicle(vehicleId).isEmpty()) {
+                "请先补录或删除这辆车的待补录充电"
+            }
             val activeVehicles = vehicleDao.observeActive().first()
             require(activeVehicles.size > 1) { "请至少保留一辆车辆" }
             val vehicle = activeVehicles.firstOrNull { it.id == vehicleId } ?: error("车辆不可用")
@@ -388,6 +403,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         val manualState = existing?.takeIf { it.updateSource == VehicleStateUpdateSource.MANUAL_UPDATE.name }
 
         val latestCharge = chargingRecordDao.getLatestForVehicle(vehicleId)
+        val latestPendingSoc = chargingSessionDao.getLatestPendingWithEndSocForVehicle(vehicleId)
         val latestTripSoc = tripDao.getLatestCompletedWithSocForVehicle(vehicleId)
         val socFact = latestFact(
             latestCharge?.let {
@@ -395,6 +411,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                     it.endSoc,
                     it.endedAtEpochMillis ?: it.chargeTimeEpochMillis,
                     VehicleStateUpdateSource.CHARGE_RECORD,
+                )
+            },
+            latestPendingSoc?.endSoc?.let {
+                VehicleStateFact(
+                    it,
+                    latestPendingSoc.endedAtEpochMillis ?: latestPendingSoc.updatedAtEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_PENDING,
                 )
             },
             latestTripSoc?.let {
@@ -406,6 +429,7 @@ class ChargingRepository(private val database: AppDatabase, private val context:
         )
 
         val latestChargeMileage = chargingRecordDao.getLatestWithOdometerForVehicle(vehicleId)
+        val latestPendingMileage = chargingSessionDao.getLatestPendingWithOdometerForVehicle(vehicleId)
         val latestTripMileage = tripDao.getLatestCompletedWithMileageForVehicle(vehicleId)
         val mileageFact = latestFact(
             latestChargeMileage?.odometerKm?.let {
@@ -413,6 +437,13 @@ class ChargingRepository(private val database: AppDatabase, private val context:
                     it,
                     latestChargeMileage.endedAtEpochMillis ?: latestChargeMileage.chargeTimeEpochMillis,
                     VehicleStateUpdateSource.CHARGE_RECORD,
+                )
+            },
+            latestPendingMileage?.odometerKm?.let {
+                VehicleStateFact(
+                    it,
+                    latestPendingMileage.endedAtEpochMillis ?: latestPendingMileage.updatedAtEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_PENDING,
                 )
             },
             latestTripMileage?.endMileageKm?.let {
