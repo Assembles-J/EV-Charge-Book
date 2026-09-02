@@ -74,16 +74,17 @@ object EVDesignTokens {
             stageTop = Color(0xFFF2F6F4),
             stageMiddle = Color(0xFFE8EFEB),
             stageBottom = Color(0xFFF7F9F8),
-            primaryText = Light.primaryText,
-            controlSurface = Color.White.copy(alpha = 0.78f),
-            controlOutline = Color.Black.copy(alpha = 0.10f),
-            // A pale scrim guarantees dark title/status chrome remains readable even when the
-            // light-specific vehicle artwork has mixed brightness near the top edge.
-            scrimStrong = Color(0xB8F4F7F5),
-            scrimSoft = Color(0x42F4F7F5),
-            scrimLower = Color(0x18F4F7F5),
-            scrimBottom = Color(0x8AF4F7F5),
-            darkSurface = false,
+            // Both Hero variants reserve a dark top safe-area for white status/title chrome.
+            // Light mode becomes bright through the artwork itself and the lower transition rather
+            // than flipping system-bar contrast on every image.
+            primaryText = Color(0xFFF4F8F6),
+            controlSurface = Color(0x6607110F),
+            controlOutline = Color.White.copy(alpha = 0.14f),
+            scrimStrong = Color(0x98020806),
+            scrimSoft = Color(0x28020806),
+            scrimLower = Color.White.copy(alpha = 0.05f),
+            scrimBottom = Light.background.copy(alpha = 0.66f),
+            darkSurface = true,
         )
 
         fun forTheme(darkTheme: Boolean): HeroMediaColors = if (darkTheme) dark else light
