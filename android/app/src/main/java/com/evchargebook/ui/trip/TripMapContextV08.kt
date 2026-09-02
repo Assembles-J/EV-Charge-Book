@@ -55,6 +55,7 @@ import org.maplibre.android.style.layers.PropertyFactory.lineJoin
 import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.tile.TileOperation
 import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
@@ -86,6 +87,10 @@ internal fun TripMapContextV08(
     val endColor = MaterialTheme.colorScheme.error.toArgb()
     val markerStrokeColor = MaterialTheme.colorScheme.surface.toArgb()
     var mapController by remember(viewportKey) { mutableStateOf<MapLibreMap?>(null) }
+    var styleLoaded by remember(viewportKey) { mutableStateOf(false) }
+    var tileLoaded by remember(viewportKey) { mutableStateOf(false) }
+    var tileErrorCount by remember(viewportKey) { mutableStateOf(0) }
+    var fullyRendered by remember(viewportKey) { mutableStateOf(false) }
 
     val mapView = remember(viewportKey, context) {
         MapLibre.getInstance(context.applicationContext)
@@ -95,14 +100,34 @@ internal fun TripMapContextV08(
     val failureListener = remember(viewportKey, onProviderFailure) {
         MapView.OnDidFailLoadingMapListener { onProviderFailure() }
     }
+    val tileListener = remember(viewportKey) {
+        MapView.OnTileActionListener { operation, _, _, _, _, _, _ ->
+            when (operation) {
+                TileOperation.LoadFromNetwork,
+                TileOperation.LoadFromCache,
+                TileOperation.EndParse,
+                -> tileLoaded = true
 
-    DisposableEffect(mapView, lifecycleOwner, failureListener) {
+                TileOperation.Error -> tileErrorCount += 1
+                else -> Unit
+            }
+        }
+    }
+    val renderListener = remember(viewportKey) {
+        MapView.OnDidFinishRenderingMapListener { fully ->
+            if (fully) fullyRendered = true
+        }
+    }
+
+    DisposableEffect(mapView, lifecycleOwner, failureListener, tileListener, renderListener) {
         var started = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         var resumed = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
         if (started) mapView.onStart()
         if (resumed) mapView.onResume()
 
         mapView.addOnDidFailLoadingMapListener(failureListener)
+        mapView.addOnTileActionListener(tileListener)
+        mapView.addOnDidFinishRenderingMapListener(renderListener)
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> if (!started) {
@@ -129,6 +154,8 @@ internal fun TripMapContextV08(
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
             mapView.removeOnDidFailLoadingMapListener(failureListener)
+            mapView.removeOnTileActionListener(tileListener)
+            mapView.removeOnDidFinishRenderingMapListener(renderListener)
             if (resumed) mapView.onPause()
             if (started) mapView.onStop()
             mapView.onDestroy()
@@ -171,6 +198,7 @@ internal fun TripMapContextV08(
                             map.uiSettings.setRotateGesturesEnabled(false)
                             map.uiSettings.setTiltGesturesEnabled(false)
                             map.setStyle(Style.Builder().fromUri(BuildConfig.TRIP_MAP_STYLE_URL)) { style ->
+                                styleLoaded = true
                                 installTripRouteLayersV08(
                                     style = style,
                                     points = points,
@@ -216,6 +244,32 @@ internal fun TripMapContextV08(
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
+
+            if (BuildConfig.DEBUG) {
+                val statusText = when {
+                    tileLoaded && fullyRendered -> "底图 Liberty · 瓦片已加载"
+                    tileLoaded -> "底图 Liberty · 正在渲染"
+                    tileErrorCount > 0 -> "底图 Liberty · 瓦片错误 $tileErrorCount"
+                    styleLoaded -> "底图 Liberty · 等待瓦片"
+                    else -> "底图 Liberty · 加载中"
+                }
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(10.dp),
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = .94f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
+                ) {
+                    Text(
+                        statusText,
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
                     )
                 }
             }
