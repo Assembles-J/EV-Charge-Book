@@ -9,6 +9,6 @@ package com.evchargebook.data.database
  */
 object TripCaptureMigration16To17 {
     val statements: List<String> = listOf(
-        "ALTER TABLE trip_points ADD COLUMN capturedAtElapsedRealtimeNanos INTEGER DEFAULT NULL",
+        "ALTER TABLE trip_points ADD COLUMN capturedAtElapsedRealtimeNanos INTEGER",
     )
 }
