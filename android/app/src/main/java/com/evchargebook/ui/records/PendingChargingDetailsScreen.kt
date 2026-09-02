@@ -36,6 +36,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -56,6 +57,7 @@ fun PendingChargingDetailsScreen(
     onSave: suspend (DeferChargingCompletionRequest) -> Unit,
     onSaved: () -> Unit,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val startSoc = session.startSoc
 
@@ -95,19 +97,10 @@ fun PendingChargingDetailsScreen(
         SimpleDateFormat("HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(endedAt))
     }
 
-    fun chooseDate() {
-        val calendar = Calendar.getInstance().apply { timeInMillis = endedAt }
-        DatePickerDialog(
-            calendarContext = null,
-        )
-    }
-
-    val contextHolder = androidx.compose.ui.platform.LocalContext.current
-
     fun openDatePicker() {
         val calendar = Calendar.getInstance().apply { timeInMillis = endedAt }
         DatePickerDialog(
-            contextHolder,
+            context,
             { _, year, month, day ->
                 val next = Calendar.getInstance().apply {
                     timeInMillis = endedAt
@@ -127,7 +120,7 @@ fun PendingChargingDetailsScreen(
     fun openTimePicker() {
         val calendar = Calendar.getInstance().apply { timeInMillis = endedAt }
         TimePickerDialog(
-            contextHolder,
+            context,
             { _, hour, minute ->
                 val next = Calendar.getInstance().apply {
                     timeInMillis = endedAt
