@@ -259,6 +259,9 @@ private fun SpeedTrendCardV07(
                             samples = samples,
                             unit = "km/h",
                             longGapMs = DETAIL_TREND_LONG_GAP_MS,
+                            plotHeight = 168.dp,
+                            fillArea = true,
+                            showInteractionHeader = false,
                         )
                     }
                 }
