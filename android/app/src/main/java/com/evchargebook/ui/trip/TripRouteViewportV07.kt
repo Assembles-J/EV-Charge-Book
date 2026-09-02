@@ -62,9 +62,12 @@ private val SpeedVeryHighV07 = Color(0xFFB64CFF)
 private val SpeedUnknownV07 = Color(0xFF78818D)
 
 /**
- * Shared completed-Trip route renderer used by both the normal route page and playback.
- * The decorative grid is intentionally non-geographic; persisted TripPoint coordinates remain the
- * only route truth and real long gaps/rebases never become a continuous route.
+ * Shared Trip route viewport.
+ *
+ * Completed normal view prefers real MapLibre geographic context. Playback keeps the lightweight
+ * renderer for this provider-validation slice. If the map style/provider fails, normal view falls
+ * back to the same truthful renderer. Persisted TripPoint coordinates remain the only route truth
+ * and real long gaps/rebases never become a continuous route.
  */
 @Composable
 internal fun TripRouteViewportV07(
@@ -91,6 +94,8 @@ internal fun TripRouteViewportV07(
             }
         )
     }
+    val viewportKey = routePoints.firstOrNull()?.tripId
+    var basemapFailed by remember(viewportKey) { mutableStateOf(false) }
 
     if (geometry?.isDrawable != true) return
 
@@ -98,17 +103,26 @@ internal fun TripRouteViewportV07(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        InteractiveTripRouteCanvasV07(
-            points = routePoints,
-            frame = frame,
-            playbackMode = playbackMode,
-            finalEndpoint = finalEndpoint,
-            minLatitude = geometry.minLatitude,
-            maxLatitude = geometry.maxLatitude,
-            minLongitude = geometry.minLongitude,
-            maxLongitude = geometry.maxLongitude,
-            height = height,
-        )
+        if (!playbackMode && !basemapFailed) {
+            TripMapContextV08(
+                points = routePoints,
+                finalEndpoint = finalEndpoint,
+                height = height,
+                onProviderFailure = { basemapFailed = true },
+            )
+        } else {
+            InteractiveTripRouteCanvasV07(
+                points = routePoints,
+                frame = frame,
+                playbackMode = playbackMode,
+                finalEndpoint = finalEndpoint,
+                minLatitude = geometry.minLatitude,
+                maxLatitude = geometry.maxLatitude,
+                minLongitude = geometry.minLongitude,
+                maxLongitude = geometry.maxLongitude,
+                height = height,
+            )
+        }
         TripSpeedLegendV07()
     }
 }
@@ -254,7 +268,7 @@ private fun InteractiveTripRouteCanvasV07(
                     .pointerInput(viewportKey) {
                         detectTransformGestures(panZoomLock = true) { centroid, gesturePan, gestureZoom, _ ->
                             val oldZoom = zoom.coerceAtLeast(1f)
-                            val newZoom = (oldZoom * gestureZoom).coerceIn(1f, 6f)
+                            val newZoom = (oldZoom * gestureZoom).coerceIn(1f, 24f)
                             val ratio = newZoom / oldZoom
                             val center = Offset(size.width / 2f, size.height / 2f)
                             val anchoredPan = Offset(
