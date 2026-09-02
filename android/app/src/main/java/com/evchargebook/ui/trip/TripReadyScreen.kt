@@ -335,6 +335,9 @@ private fun TripPreparationContentV06(
             )
         }
         item {
+            TripBackgroundRecordingGuidance()
+        }
+        item {
             TripSlideAction(
                 label = "滑动开始行程",
                 enabled = vehicle != null,
