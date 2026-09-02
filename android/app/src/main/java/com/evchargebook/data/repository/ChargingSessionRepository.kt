@@ -26,9 +26,7 @@ data class StartChargingSessionRequest(
 )
 
 /**
- * Final completion facts. The completion editor must pass its final visible values, including the
- * session defaults it kept. Null coordinates intentionally mean "no coordinates" so manually
- * replacing an address never keeps stale coordinates behind the scenes.
+ * Final completion facts when billing / meter data is already known at charge end.
  */
 data class CompleteChargingSessionRequest(
     val sessionId: String,
@@ -47,6 +45,36 @@ data class CompleteChargingSessionRequest(
     val locationAccuracyMeters: Double? = null,
 )
 
+/**
+ * Physical charging has ended but final meter / billing data may still be unavailable.
+ *
+ * Optional billing values are retained only when the user already knows them. Unknown values stay
+ * null; zero is never used as an "unknown" sentinel.
+ */
+data class DeferChargingCompletionRequest(
+    val sessionId: String,
+    val startSoc: Int,
+    val endSoc: Int,
+    val endedAtEpochMillis: Long = System.currentTimeMillis(),
+    val odometerKm: Double? = null,
+    val meterEnergyKwh: Double? = null,
+    val totalCost: Double? = null,
+    val vehicleEnergyKwh: Double? = null,
+    val location: String? = null,
+    val remark: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val locationAccuracyMeters: Double? = null,
+)
+
+/** Final billing facts supplied later for a `PENDING_DETAILS` session. */
+data class BackfillChargingSessionRequest(
+    val sessionId: String,
+    val meterEnergyKwh: Double,
+    val totalCost: Double,
+    val vehicleEnergyKwh: Double? = null,
+)
+
 private data class ChargingVehicleStateFact<T>(
     val value: T,
     val timestamp: Long,
@@ -59,9 +87,9 @@ private fun <T> latestChargingFact(vararg facts: ChargingVehicleStateFact<T>?): 
 /**
  * Transaction boundary for the optional charging lifecycle.
  *
- * A session is not a completed charging record. It persists known start facts so process death does
- * not erase a user-started charge. Completion atomically inserts exactly one historical record and
- * marks the session completed; retries return the already-created record id.
+ * `ACTIVE` means physical charging is still in progress. `PENDING_DETAILS` means physical charging
+ * has ended and end facts are durable, but billing facts are not complete enough for a historical
+ * charging record. `COMPLETED` owns exactly one historical record id.
  */
 class ChargingSessionRepository(private val database: AppDatabase) {
     private val vehicleDao = database.vehicleDao()
@@ -73,8 +101,14 @@ class ChargingSessionRepository(private val database: AppDatabase) {
     fun observeActiveForVehicle(vehicleId: Long): Flow<ChargingSessionEntity?> =
         chargingSessionDao.observeActiveForVehicle(vehicleId)
 
+    fun observePendingForVehicle(vehicleId: Long): Flow<List<ChargingSessionEntity>> =
+        chargingSessionDao.observePendingForVehicle(vehicleId)
+
     suspend fun getActiveForVehicle(vehicleId: Long): ChargingSessionEntity? =
         chargingSessionDao.getActiveForVehicle(vehicleId)
+
+    suspend fun getPendingForVehicle(vehicleId: Long): List<ChargingSessionEntity> =
+        chargingSessionDao.getPendingForVehicle(vehicleId)
 
     suspend fun start(request: StartChargingSessionRequest): String {
         validateStart(request)
@@ -117,6 +151,11 @@ class ChargingSessionRepository(private val database: AppDatabase) {
                 session.copy(
                     status = ChargingSessionStatus.ACTIVE,
                     endedAtEpochMillis = null,
+                    endSoc = null,
+                    odometerKm = null,
+                    pendingMeterEnergyKwh = null,
+                    pendingTotalCost = null,
+                    pendingVehicleEnergyKwh = null,
                     completedRecordId = null,
                     chargerType = session.chargerType.cleanText(),
                     location = session.location.cleanText(),
@@ -133,6 +172,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             when (session.status) {
                 ChargingSessionStatus.CANCELLED -> return@withTransaction
                 ChargingSessionStatus.COMPLETED -> error("已完成的充电不能取消")
+                ChargingSessionStatus.PENDING_DETAILS -> error("充电已结束并待补录；请补录或删除此次充电")
                 ChargingSessionStatus.ACTIVE -> Unit
                 else -> error("未知充电会话状态")
             }
@@ -148,6 +188,63 @@ class ChargingSessionRepository(private val database: AppDatabase) {
         }
     }
 
+    /**
+     * End physical charging without inventing missing meter facts.
+     *
+     * The pending session immediately becomes a vehicle-state fact, but it does not create a
+     * `ChargingRecordEntity` and therefore cannot enter charging cost / energy statistics.
+     */
+    suspend fun deferCompletion(request: DeferChargingCompletionRequest) {
+        database.withTransaction {
+            val session = chargingSessionDao.get(request.sessionId) ?: error("充电会话不存在")
+            when (session.status) {
+                ChargingSessionStatus.PENDING_DETAILS -> return@withTransaction
+                ChargingSessionStatus.COMPLETED -> error("本次充电已经完成")
+                ChargingSessionStatus.CANCELLED -> error("已取消的充电不能结束")
+                ChargingSessionStatus.ACTIVE -> Unit
+                else -> error("未知充电会话状态")
+            }
+            validateDeferredCompletion(session, request)
+            chargingSessionDao.update(
+                session.copy(
+                    startSoc = request.startSoc,
+                    status = ChargingSessionStatus.PENDING_DETAILS,
+                    endedAtEpochMillis = request.endedAtEpochMillis,
+                    endSoc = request.endSoc,
+                    odometerKm = request.odometerKm,
+                    pendingMeterEnergyKwh = request.meterEnergyKwh,
+                    pendingTotalCost = request.totalCost,
+                    pendingVehicleEnergyKwh = request.vehicleEnergyKwh,
+                    location = request.location.cleanText(),
+                    remark = request.remark.cleanText(),
+                    latitude = request.latitude,
+                    longitude = request.longitude,
+                    locationAccuracyMeters = request.locationAccuracyMeters,
+                    completedRecordId = null,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                )
+            )
+            rebuildVehicleStateFromEvents(session.vehicleId)
+        }
+    }
+
+    /** Delete an ended-but-unbilled session without creating a historical record. */
+    suspend fun discardPending(sessionId: String) {
+        database.withTransaction {
+            val session = chargingSessionDao.get(sessionId) ?: error("充电会话不存在")
+            if (session.status == ChargingSessionStatus.CANCELLED) return@withTransaction
+            require(session.status == ChargingSessionStatus.PENDING_DETAILS) { "只有待补录充电可以删除" }
+            chargingSessionDao.update(
+                session.copy(
+                    status = ChargingSessionStatus.CANCELLED,
+                    completedRecordId = null,
+                    updatedAtEpochMillis = System.currentTimeMillis(),
+                )
+            )
+            rebuildVehicleStateFromEvents(session.vehicleId)
+        }
+    }
+
     suspend fun complete(request: CompleteChargingSessionRequest): Long {
         return database.withTransaction {
             val session = chargingSessionDao.get(request.sessionId) ?: error("充电会话不存在")
@@ -155,42 +252,125 @@ class ChargingSessionRepository(private val database: AppDatabase) {
                 return@withTransaction session.completedRecordId
                     ?: error("已完成充电缺少关联记录")
             }
-            require(session.status == ChargingSessionStatus.ACTIVE) { "只有进行中的充电可以完成" }
+            require(session.status == ChargingSessionStatus.ACTIVE) { "只有进行中的充电可以直接完成" }
             validateCompletion(session, request)
 
-            val now = System.currentTimeMillis()
-            val recordId = chargingRecordDao.insert(
-                ChargingRecordEntity(
-                    vehicleId = session.vehicleId,
-                    chargeTimeEpochMillis = session.startedAtEpochMillis,
-                    endedAtEpochMillis = request.endedAtEpochMillis,
-                    energyKwh = request.meterEnergyKwh,
-                    vehicleEnergyKwh = request.vehicleEnergyKwh,
-                    cost = request.totalCost,
-                    startSoc = request.startSoc,
-                    endSoc = request.endSoc,
-                    chargerType = request.chargerType.cleanText(),
-                    location = request.location.cleanText(),
-                    remark = request.remark.cleanText(),
-                    odometerKm = request.odometerKm,
-                    latitude = request.latitude,
-                    longitude = request.longitude,
-                    locationAccuracyMeters = request.locationAccuracyMeters,
-                    updatedAtEpochMillis = now,
-                )
+            val recordId = insertCompletedRecord(
+                session = session,
+                startSoc = request.startSoc,
+                endSoc = request.endSoc,
+                endedAtEpochMillis = request.endedAtEpochMillis,
+                meterEnergyKwh = request.meterEnergyKwh,
+                vehicleEnergyKwh = request.vehicleEnergyKwh,
+                totalCost = request.totalCost,
+                odometerKm = request.odometerKm,
+                chargerType = request.chargerType,
+                location = request.location,
+                remark = request.remark,
+                latitude = request.latitude,
+                longitude = request.longitude,
+                locationAccuracyMeters = request.locationAccuracyMeters,
             )
-
-            chargingSessionDao.update(
-                session.copy(
-                    status = ChargingSessionStatus.COMPLETED,
-                    endedAtEpochMillis = request.endedAtEpochMillis,
-                    completedRecordId = recordId,
-                    updatedAtEpochMillis = now,
-                )
-            )
-            rebuildVehicleStateFromEvents(session.vehicleId)
             recordId
         }
+    }
+
+    /** Finalize one pending session exactly once after delayed meter / billing data arrives. */
+    suspend fun backfill(request: BackfillChargingSessionRequest): Long {
+        return database.withTransaction {
+            val session = chargingSessionDao.get(request.sessionId) ?: error("充电会话不存在")
+            if (session.status == ChargingSessionStatus.COMPLETED) {
+                return@withTransaction session.completedRecordId
+                    ?: error("已完成充电缺少关联记录")
+            }
+            require(session.status == ChargingSessionStatus.PENDING_DETAILS) { "只有待补录充电可以补充电表数据" }
+            val startSoc = session.startSoc ?: error("待补录充电缺少开始 SOC")
+            val endSoc = session.endSoc ?: error("待补录充电缺少结束 SOC")
+            val endedAt = session.endedAtEpochMillis ?: error("待补录充电缺少结束时间")
+            val vehicleEnergy = request.vehicleEnergyKwh ?: session.pendingVehicleEnergyKwh
+            validateBillingFacts(request.meterEnergyKwh, request.totalCost, vehicleEnergy)
+            ChargingRecordRules.validate(startSoc, endSoc, request.meterEnergyKwh, request.totalCost, session.odometerKm)
+
+            insertCompletedRecord(
+                session = session,
+                startSoc = startSoc,
+                endSoc = endSoc,
+                endedAtEpochMillis = endedAt,
+                meterEnergyKwh = request.meterEnergyKwh,
+                vehicleEnergyKwh = vehicleEnergy,
+                totalCost = request.totalCost,
+                odometerKm = session.odometerKm,
+                chargerType = session.chargerType,
+                location = session.location,
+                remark = session.remark,
+                latitude = session.latitude,
+                longitude = session.longitude,
+                locationAccuracyMeters = session.locationAccuracyMeters,
+            )
+        }
+    }
+
+    private suspend fun insertCompletedRecord(
+        session: ChargingSessionEntity,
+        startSoc: Int,
+        endSoc: Int,
+        endedAtEpochMillis: Long,
+        meterEnergyKwh: Double,
+        vehicleEnergyKwh: Double?,
+        totalCost: Double,
+        odometerKm: Double?,
+        chargerType: String?,
+        location: String?,
+        remark: String?,
+        latitude: Double?,
+        longitude: Double?,
+        locationAccuracyMeters: Double?,
+    ): Long {
+        validateBillingFacts(meterEnergyKwh, totalCost, vehicleEnergyKwh)
+        val now = System.currentTimeMillis()
+        val recordId = chargingRecordDao.insert(
+            ChargingRecordEntity(
+                vehicleId = session.vehicleId,
+                chargeTimeEpochMillis = session.startedAtEpochMillis,
+                endedAtEpochMillis = endedAtEpochMillis,
+                energyKwh = meterEnergyKwh,
+                vehicleEnergyKwh = vehicleEnergyKwh,
+                cost = totalCost,
+                startSoc = startSoc,
+                endSoc = endSoc,
+                chargerType = chargerType.cleanText(),
+                location = location.cleanText(),
+                remark = remark.cleanText(),
+                odometerKm = odometerKm,
+                latitude = latitude,
+                longitude = longitude,
+                locationAccuracyMeters = locationAccuracyMeters,
+                updatedAtEpochMillis = now,
+            )
+        )
+
+        chargingSessionDao.update(
+            session.copy(
+                startSoc = startSoc,
+                status = ChargingSessionStatus.COMPLETED,
+                endedAtEpochMillis = endedAtEpochMillis,
+                endSoc = endSoc,
+                odometerKm = odometerKm,
+                pendingMeterEnergyKwh = meterEnergyKwh,
+                pendingTotalCost = totalCost,
+                pendingVehicleEnergyKwh = vehicleEnergyKwh,
+                completedRecordId = recordId,
+                chargerType = chargerType.cleanText(),
+                location = location.cleanText(),
+                remark = remark.cleanText(),
+                latitude = latitude,
+                longitude = longitude,
+                locationAccuracyMeters = locationAccuracyMeters,
+                updatedAtEpochMillis = now,
+            )
+        )
+        rebuildVehicleStateFromEvents(session.vehicleId)
+        return recordId
     }
 
     private fun validateStart(request: StartChargingSessionRequest) {
@@ -201,8 +381,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             require(request.targetSoc >= request.startSoc) { "目标 SOC 不能低于开始 SOC" }
         }
         require(request.unitPricePerKwh == null || request.unitPricePerKwh >= 0.0) { "电价不能小于 0" }
-        require((request.latitude == null) == (request.longitude == null)) { "定位坐标不完整" }
-        require(request.locationAccuracyMeters == null || request.locationAccuracyMeters >= 0.0) { "定位精度不能小于 0" }
+        validateLocationFacts(request.latitude, request.longitude, request.locationAccuracyMeters)
     }
 
     private fun validateSessionFacts(session: ChargingSessionEntity) {
@@ -214,8 +393,29 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             require(session.targetSoc >= session.startSoc) { "目标 SOC 不能低于开始 SOC" }
         }
         require(session.unitPricePerKwh == null || session.unitPricePerKwh >= 0.0) { "电价不能小于 0" }
-        require((session.latitude == null) == (session.longitude == null)) { "定位坐标不完整" }
-        require(session.locationAccuracyMeters == null || session.locationAccuracyMeters >= 0.0) { "定位精度不能小于 0" }
+        validateLocationFacts(session.latitude, session.longitude, session.locationAccuracyMeters)
+    }
+
+    private fun validateDeferredCompletion(
+        session: ChargingSessionEntity,
+        request: DeferChargingCompletionRequest,
+    ) {
+        require(request.startSoc in 0..100) { "开始 SOC 必须在 0 到 100 之间" }
+        require(request.endSoc in 0..100) { "结束 SOC 必须在 0 到 100 之间" }
+        require(request.endSoc >= request.startSoc) { "结束 SOC 不能低于开始 SOC" }
+        require(request.endedAtEpochMillis > session.startedAtEpochMillis) { "结束时间必须晚于开始时间" }
+        require(request.odometerKm == null || request.odometerKm >= 0.0) { "里程不能小于 0" }
+        require(request.meterEnergyKwh == null || request.meterEnergyKwh > 0.0) { "电表电量必须大于 0" }
+        require(request.totalCost == null || request.totalCost >= 0.0) { "费用不能小于 0" }
+        if (request.vehicleEnergyKwh != null) {
+            require(request.vehicleEnergyKwh >= 0.0) { "车辆侧充电量不能小于 0" }
+            if (request.meterEnergyKwh != null) {
+                require(request.vehicleEnergyKwh <= request.meterEnergyKwh + 1e-6) {
+                    "车辆侧充电量不能高于桩端 / 电表电量"
+                }
+            }
+        }
+        validateLocationFacts(request.latitude, request.longitude, request.locationAccuracyMeters)
     }
 
     private fun validateCompletion(session: ChargingSessionEntity, request: CompleteChargingSessionRequest) {
@@ -227,12 +427,30 @@ class ChargingSessionRepository(private val database: AppDatabase) {
             request.odometerKm,
         )
         require(request.endedAtEpochMillis > session.startedAtEpochMillis) { "结束时间必须晚于开始时间" }
-        require(request.vehicleEnergyKwh == null || request.vehicleEnergyKwh >= 0.0) { "车辆侧充电量不能小于 0" }
-        require(request.vehicleEnergyKwh == null || request.vehicleEnergyKwh <= request.meterEnergyKwh + 1e-6) {
+        validateBillingFacts(request.meterEnergyKwh, request.totalCost, request.vehicleEnergyKwh)
+        validateLocationFacts(request.latitude, request.longitude, request.locationAccuracyMeters)
+    }
+
+    private fun validateBillingFacts(
+        meterEnergyKwh: Double,
+        totalCost: Double,
+        vehicleEnergyKwh: Double?,
+    ) {
+        require(meterEnergyKwh > 0.0) { "充电量必须大于 0" }
+        require(totalCost >= 0.0) { "费用不能小于 0" }
+        require(vehicleEnergyKwh == null || vehicleEnergyKwh >= 0.0) { "车辆侧充电量不能小于 0" }
+        require(vehicleEnergyKwh == null || vehicleEnergyKwh <= meterEnergyKwh + 1e-6) {
             "车辆侧充电量不能高于桩端 / 电表电量"
         }
-        require((request.latitude == null) == (request.longitude == null)) { "定位坐标不完整" }
-        require(request.locationAccuracyMeters == null || request.locationAccuracyMeters >= 0.0) { "定位精度不能小于 0" }
+    }
+
+    private fun validateLocationFacts(
+        latitude: Double?,
+        longitude: Double?,
+        accuracyMeters: Double?,
+    ) {
+        require((latitude == null) == (longitude == null)) { "定位坐标不完整" }
+        require(accuracyMeters == null || accuracyMeters >= 0.0) { "定位精度不能小于 0" }
     }
 
     private suspend fun rebuildVehicleStateFromEvents(vehicleId: Long) {
@@ -240,10 +458,18 @@ class ChargingSessionRepository(private val database: AppDatabase) {
         val manualState = existing?.takeIf { it.updateSource == VehicleStateUpdateSource.MANUAL_UPDATE.name }
 
         val latestCharge = chargingRecordDao.getLatestForVehicle(vehicleId)
+        val latestPendingSoc = chargingSessionDao.getLatestPendingWithEndSocForVehicle(vehicleId)
         val latestTripSoc = tripDao.getLatestCompletedWithSocForVehicle(vehicleId)
         val socFact = latestChargingFact(
             latestCharge?.let {
                 ChargingVehicleStateFact(it.endSoc, it.endedAtEpochMillis ?: it.chargeTimeEpochMillis, VehicleStateUpdateSource.CHARGE_RECORD)
+            },
+            latestPendingSoc?.endSoc?.let {
+                ChargingVehicleStateFact(
+                    it,
+                    latestPendingSoc.endedAtEpochMillis ?: latestPendingSoc.updatedAtEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_PENDING,
+                )
             },
             latestTripSoc?.let {
                 ChargingVehicleStateFact(it.endSoc!!, it.endedAtEpochMillis!!, VehicleStateUpdateSource.TRIP_END)
@@ -254,6 +480,7 @@ class ChargingSessionRepository(private val database: AppDatabase) {
         )
 
         val latestChargeMileage = chargingRecordDao.getLatestWithOdometerForVehicle(vehicleId)
+        val latestPendingMileage = chargingSessionDao.getLatestPendingWithOdometerForVehicle(vehicleId)
         val latestTripMileage = tripDao.getLatestCompletedWithMileageForVehicle(vehicleId)
         val mileageFact = latestChargingFact(
             latestChargeMileage?.odometerKm?.let {
@@ -261,6 +488,13 @@ class ChargingSessionRepository(private val database: AppDatabase) {
                     it,
                     latestChargeMileage.endedAtEpochMillis ?: latestChargeMileage.chargeTimeEpochMillis,
                     VehicleStateUpdateSource.CHARGE_RECORD,
+                )
+            },
+            latestPendingMileage?.odometerKm?.let {
+                ChargingVehicleStateFact(
+                    it,
+                    latestPendingMileage.endedAtEpochMillis ?: latestPendingMileage.updatedAtEpochMillis,
+                    VehicleStateUpdateSource.CHARGE_PENDING,
                 )
             },
             latestTripMileage?.endMileageKm?.let {
