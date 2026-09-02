@@ -1,9 +1,11 @@
 package com.evchargebook.autotrip
 
 /**
- * User-selected behavior for vehicle Bluetooth automation.
+ * Evidence-policy behavior for vehicle Bluetooth automation.
  *
- * This model is intentionally pure Kotlin and is not wired into production receivers yet.
+ * This pure Kotlin policy is intentionally distinct from the production per-vehicle
+ * `autoStartOnConnect` setting. That setting is a user-defined direct automation shortcut; it must
+ * not be described as VERIFIED_AUTO_START or as proof that the app detected real driving.
  */
 enum class AutoTripMode {
     OFF,
