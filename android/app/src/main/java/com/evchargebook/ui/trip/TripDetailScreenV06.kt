@@ -706,7 +706,8 @@ private fun TripPointEntity.toV06RoutePoint(): TripGeoPoint {
         latitude = latitude,
         longitude = longitude,
         capturedAtEpochMillis = capturedAtEpochMillis,
-        speedMps = trustedSpeed
+        speedMps = trustedSpeed,
+        capturedAtElapsedRealtimeNanos = capturedAtElapsedRealtimeNanos
     )
 }
 
