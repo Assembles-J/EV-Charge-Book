@@ -43,11 +43,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.ChargingSessionEntity
+import com.evchargebook.data.repository.ChargingSessionRepository
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
@@ -71,6 +74,21 @@ fun RecordsScreen(
 ) {
     var pendingDelete by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingCancel by remember { mutableStateOf<ChargingSessionEntity?>(null) }
+    var completingSession by remember { mutableStateOf<ChargingSessionEntity?>(null) }
+
+    completingSession?.let { session ->
+        val context = LocalContext.current.applicationContext
+        val completionRepository = remember(context) {
+            ChargingSessionRepository(AppDatabase.getInstance(context))
+        }
+        CompleteChargingScreen(
+            session = session,
+            onBack = { completingSession = null },
+            onComplete = completionRepository::complete,
+            onCompleted = { completingSession = null },
+        )
+        return
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -100,6 +118,7 @@ fun RecordsScreen(
                 item {
                     ActiveChargingCard(
                         session = session,
+                        onComplete = { completingSession = session },
                         onEdit = { onEditActive(session) },
                         onCancel = { pendingCancel = session },
                     )
@@ -203,6 +222,7 @@ private fun ChargingEntryActions(
 @Composable
 private fun ActiveChargingCard(
     session: ChargingSessionEntity,
+    onComplete: () -> Unit,
     onEdit: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -274,9 +294,11 @@ private fun ActiveChargingCard(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 TextButton(onClick = onCancel) { Text("取消") }
                 TextButton(onClick = onEdit) { Text("编辑") }
+                Button(onClick = onComplete) { Text("结束充电") }
             }
         }
     }
