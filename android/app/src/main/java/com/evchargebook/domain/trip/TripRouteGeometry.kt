@@ -1,10 +1,13 @@
 package com.evchargebook.domain.trip
 
+import com.evchargebook.domain.TripCaptureTimeRules
+
 data class TripGeoPoint(
     val latitude: Double,
     val longitude: Double,
     val capturedAtEpochMillis: Long? = null,
-    val speedMps: Double? = null
+    val speedMps: Double? = null,
+    val capturedAtElapsedRealtimeNanos: Long? = null,
 )
 
 data class TripRoutePoint(
@@ -78,8 +81,18 @@ object TripRouteGeometryBuilder {
         source.zipWithNext().forEach { (previous, next) ->
             val previousTime = previous.capturedAtEpochMillis
             val nextTime = next.capturedAtEpochMillis
-            val isLongGap = previousTime != null && nextTime != null && nextTime - previousTime >= LONG_GAP_THRESHOLD_MS
-            if (isLongGap) {
+            val breaksContinuity = if (previousTime != null && nextTime != null) {
+                val timing = TripCaptureTimeRules.between(
+                    previousEpochMillis = previousTime,
+                    previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
+                    currentEpochMillis = nextTime,
+                    currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
+                )
+                !timing.accepted || timing.breaksContinuity(LONG_GAP_THRESHOLD_MS)
+            } else {
+                false
+            }
+            if (breaksContinuity) {
                 current = mutableListOf()
                 segments += current
             }
