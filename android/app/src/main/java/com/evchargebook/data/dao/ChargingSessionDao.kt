@@ -22,7 +22,44 @@ interface ChargingSessionDao {
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC")
     suspend fun getPendingForVehicle(vehicleId: Long): List<ChargingSessionEntity>
 
-    @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status IN ('COMPLETED', 'PENDING_DETAILS') AND unitPricePerKwh IS NOT NULL AND unitPricePerKwh >= 0 ORDER BY COALESCE(endedAtEpochMillis, startedAtEpochMillis) DESC, updatedAtEpochMillis DESC")
+    /**
+     * Stored session tariff memories that are still truthful enough to reuse.
+     *
+     * Pending sessions remain their own current facts. A completed session is eligible only while
+     * its linked, non-deleted ChargingRecord still matches the reusable completion context. If the
+     * user later corrects or deletes the historical record, the old session tariff stops being an
+     * automatic/suggestion source instead of silently surviving that correction.
+     */
+    @Query(
+        """
+        SELECT s.*
+        FROM charging_sessions AS s
+        WHERE s.vehicleId = :vehicleId
+          AND s.unitPricePerKwh IS NOT NULL
+          AND s.unitPricePerKwh >= 0
+          AND (
+            s.status = 'PENDING_DETAILS'
+            OR (
+              s.status = 'COMPLETED'
+              AND s.completedRecordId IS NOT NULL
+              AND EXISTS (
+                SELECT 1
+                FROM charging_records AS r
+                WHERE r.id = s.completedRecordId
+                  AND r.isDeleted = 0
+                  AND r.vehicleId = s.vehicleId
+                  AND r.chargeTimeEpochMillis = s.startedAtEpochMillis
+                  AND ABS(r.energyKwh - s.pendingMeterEnergyKwh) <= 0.000001
+                  AND ABS(r.cost - s.pendingTotalCost) <= 0.000001
+                  AND LOWER(TRIM(COALESCE(r.chargerType, ''))) = LOWER(TRIM(COALESCE(s.chargerType, '')))
+                  AND LOWER(TRIM(COALESCE(r.location, ''))) = LOWER(TRIM(COALESCE(s.location, '')))
+              )
+            )
+          )
+        ORDER BY COALESCE(s.endedAtEpochMillis, s.startedAtEpochMillis) DESC,
+                 s.updatedAtEpochMillis DESC
+        """
+    )
     fun observePricedForVehicle(vehicleId: Long): Flow<List<ChargingSessionEntity>>
 
     @Query("SELECT * FROM charging_sessions WHERE vehicleId = :vehicleId AND status = 'PENDING_DETAILS' AND endSoc IS NOT NULL ORDER BY endedAtEpochMillis DESC, startedAtEpochMillis DESC LIMIT 1")
