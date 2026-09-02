@@ -3,6 +3,7 @@ package com.evchargebook.data.export
 import com.evchargebook.data.entity.TripDiagnosticEventEntity
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
+import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
 import java.util.Locale
 import kotlin.math.asin
@@ -13,12 +14,13 @@ import kotlin.math.sqrt
 /**
  * Human-readable, diff-friendly Trip diagnostics export intended for physical-device debugging.
  *
- * The export keeps raw persisted facts. It does not interpolate missing GPS points or claim an
- * estimated route. A future analysis can therefore distinguish real capture gaps from rejected or
- * low-quality samples without contaminating the source data.
+ * Epoch timestamps remain raw, human-readable facts. For interval/gap analysis the export prefers
+ * persisted elapsedRealtimeNanos when both adjacent points have it, and explicitly labels legacy
+ * epoch fallback or a monotonic-clock rebase. No missing GPS point or route is synthesized.
  */
 object TripDiagnosticExporter {
     private const val SHORT_GAP_ESTIMATE_CANDIDATE_METERS = 3_000.0
+    private val LONG_GAP_MILLIS = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
 
     fun toCsv(
         trip: TripSessionEntity,
@@ -62,7 +64,7 @@ object TripDiagnosticExporter {
         points: List<TripPointEntity>,
         events: List<TripDiagnosticEventEntity>,
     ) {
-        val sortedPoints = points.sortedBy { it.capturedAtEpochMillis }
+        val orderedPoints = captureOrdered(points)
 
         appendLine()
         appendLine("[events]")
@@ -76,30 +78,36 @@ object TripDiagnosticExporter {
 
         appendLine()
         appendLine("[longGaps]")
-        appendLine("fromCapturedAtEpochMillis,toCapturedAtEpochMillis,deltaMs,straightLineMeters,under3KmEstimateCandidate")
-        sortedPoints.zipWithNext().forEach { (from, to) ->
-            val deltaMs = to.capturedAtEpochMillis - from.capturedAtEpochMillis
-            if (deltaMs < TripContinuityRules.LONG_GAP_SECONDS * 1_000L) return@forEach
+        appendLine("fromCapturedAtEpochMillis,toCapturedAtEpochMillis,deltaMs,timeAuthority,timeDecision,straightLineMeters,under3KmEstimateCandidate")
+        orderedPoints.zipWithNext().forEach { (from, to) ->
+            val timing = captureDelta(from, to)
+            val breaks = !timing.accepted || timing.breaksContinuity(LONG_GAP_MILLIS)
+            if (!breaks) return@forEach
             val straightLineMeters = straightLineMeters(from, to)
             append(from.capturedAtEpochMillis).append(',')
             append(to.capturedAtEpochMillis).append(',')
-            append(deltaMs).append(',')
+            append(timing.deltaMillis ?: "").append(',')
+            append(csv(timing.authority.name)).append(',')
+            append(csv(timeDecision(timing.requiresRebase, timing.rejectReason))).append(',')
             append(String.format(Locale.US, "%.1f", straightLineMeters)).append(',')
             appendLine(straightLineMeters <= SHORT_GAP_ESTIMATE_CANDIDATE_METERS)
         }
 
         appendLine()
         appendLine("[points]")
-        appendLine("capturedAtEpochMillis,deltaMs,latitude,longitude,altitudeMeters,speedMps,bearingDegrees,horizontalAccuracyMeters,verticalAccuracyMeters,speedAccuracyMps,provider")
-        appendPoints(sortedPoints)
+        appendLine("capturedAtEpochMillis,capturedAtElapsedRealtimeNanos,deltaMs,timeAuthority,timeDecision,latitude,longitude,altitudeMeters,speedMps,bearingDegrees,horizontalAccuracyMeters,verticalAccuracyMeters,speedAccuracyMps,provider")
+        appendPoints(orderedPoints)
     }
 
-    private fun StringBuilder.appendPoints(sortedPoints: List<TripPointEntity>) {
-        var previousTimestamp: Long? = null
-        sortedPoints.forEach { point ->
-            val deltaMs = previousTimestamp?.let { point.capturedAtEpochMillis - it }
+    private fun StringBuilder.appendPoints(points: List<TripPointEntity>) {
+        var previous: TripPointEntity? = null
+        points.forEach { point ->
+            val timing = previous?.let { captureDelta(it, point) }
             append(point.capturedAtEpochMillis).append(',')
-            append(deltaMs ?: "").append(',')
+            append(point.capturedAtElapsedRealtimeNanos ?: "").append(',')
+            append(timing?.deltaMillis ?: "").append(',')
+            append(csv(timing?.authority?.name)).append(',')
+            append(csv(timing?.let { timeDecision(it.requiresRebase, it.rejectReason) })).append(',')
             append(number(point.latitude)).append(',')
             append(number(point.longitude)).append(',')
             append(nullableNumber(point.altitudeMeters)).append(',')
@@ -109,8 +117,25 @@ object TripDiagnosticExporter {
             append(nullableNumber(point.verticalAccuracyMeters)).append(',')
             append(nullableNumber(point.speedAccuracyMps)).append(',')
             appendLine(csv(point.provider))
-            previousTimestamp = point.capturedAtEpochMillis
+            previous = point
         }
+    }
+
+    private fun captureOrdered(points: List<TripPointEntity>): List<TripPointEntity> =
+        if (points.isNotEmpty() && points.all { it.id > 0L }) points.sortedBy { it.id } else points
+
+    private fun captureDelta(from: TripPointEntity, to: TripPointEntity) =
+        TripCaptureTimeRules.between(
+            previousEpochMillis = from.capturedAtEpochMillis,
+            previousElapsedRealtimeNanos = from.capturedAtElapsedRealtimeNanos,
+            currentEpochMillis = to.capturedAtEpochMillis,
+            currentElapsedRealtimeNanos = to.capturedAtElapsedRealtimeNanos,
+        )
+
+    private fun timeDecision(rebase: Boolean, rejectReason: String?): String? = when {
+        !rejectReason.isNullOrBlank() -> "rejected:$rejectReason"
+        rebase -> "rebase"
+        else -> null
     }
 
     private fun straightLineMeters(from: TripPointEntity, to: TripPointEntity): Double {
