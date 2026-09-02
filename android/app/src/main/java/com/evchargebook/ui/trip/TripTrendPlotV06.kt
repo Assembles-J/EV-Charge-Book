@@ -23,9 +23,12 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.ui.theme.EVDesignTokens
@@ -94,15 +97,17 @@ internal fun buildTripTrendTimelineV06(
  * Interactive Compose-native trend plot used by active and completed Trip surfaces.
  *
  * The chart renders persisted samples only, never smooths across missing data and never bridges
- * long GPS gaps. X-axis intervals prefer persisted elapsedRealtimeNanos so wall-clock corrections
- * do not distort or reverse a healthy Trip. Epoch time is retained only for the human clock label.
+ * long GPS gaps. Optional area fill is built independently for each real continuous segment.
  */
 @Composable
 internal fun TripTrendPlotV06(
     samples: List<TripTrendSampleV06>,
     unit: String,
     longGapMs: Long,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    plotHeight: Dp = 104.dp,
+    fillArea: Boolean = false,
+    showInteractionHeader: Boolean = true,
 ) {
     if (samples.size < 2) return
 
@@ -133,6 +138,7 @@ internal fun TripTrendPlotV06(
     val maxValue = visibleValueSamples.maxOf { it.value }
     val valueRange = max(1.0, maxValue - minValue)
     val midValue = minValue + valueRange / 2.0
+    val averageValue = visibleValueSamples.map { it.value }.average()
     val selectedSample = selectedTimelineMillis?.let { selected ->
         timelineSamples.minByOrNull { abs(it.timelineMillis - selected) }
     }
@@ -143,29 +149,35 @@ internal fun TripTrendPlotV06(
     val currentStartFraction by rememberUpdatedState(clampedStartFraction)
 
     Column(modifier = modifier.fillMaxWidth()) {
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(
-                text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, unit) }
-                    ?: "长按左右拖动读点 · 双指缩放/平移",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-            if (viewportChanged) {
-                TextButton(
-                    onClick = {
-                        zoom = 1f
-                        viewportStartFraction = 0f
+        if (showInteractionHeader || selectedSample != null || viewportChanged) {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Text(
+                    text = selectedSample?.let { sample -> formatSelectedTrendSample(sample, unit) }
+                        ?: if (showInteractionHeader) {
+                            "长按左右拖动读点 · 双指缩放/平移"
+                        } else {
+                            "已调整查看区间"
+                        },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1
+                )
+                if (viewportChanged) {
+                    TextButton(
+                        onClick = {
+                            zoom = 1f
+                            viewportStartFraction = 0f
+                        }
+                    ) {
+                        Text("全程", style = MaterialTheme.typography.labelSmall)
                     }
-                ) {
-                    Text("全程", style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
 
         Row(modifier = Modifier.fillMaxWidth()) {
             Column(
-                modifier = Modifier.width(44.dp).height(104.dp),
+                modifier = Modifier.width(44.dp).height(plotHeight),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 AxisValue(formatTripTrendAxisValue(maxValue, unit))
@@ -176,7 +188,7 @@ internal fun TripTrendPlotV06(
             Canvas(
                 Modifier
                     .weight(1f)
-                    .height(104.dp)
+                    .height(plotHeight)
                     .pointerInput(viewportKey) {
                         detectTransformGestures(panZoomLock = true) { centroid, pan, gestureZoom, _ ->
                             val canvasWidth = size.width.toFloat().coerceAtLeast(1f)
@@ -255,15 +267,60 @@ internal fun TripTrendPlotV06(
                     return Offset(x, padY + (1f - normalized) * usableHeight)
                 }
 
+                if (fillArea) {
+                    val segments = mutableListOf<MutableList<TripTrendTimelineSampleV06>>()
+                    var currentSegment = mutableListOf<TripTrendTimelineSampleV06>()
+                    timelineSamples.forEach { sample ->
+                        if (sample.breakBefore && currentSegment.isNotEmpty()) {
+                            segments += currentSegment
+                            currentSegment = mutableListOf()
+                        }
+                        currentSegment += sample
+                    }
+                    if (currentSegment.isNotEmpty()) segments += currentSegment
+
+                    val baselineY = padY + usableHeight
+                    segments.forEach { segment ->
+                        if (segment.size < 2 ||
+                            segment.last().timelineMillis < visibleStartTime ||
+                            segment.first().timelineMillis > visibleEndTime
+                        ) return@forEach
+
+                        val first = point(segment.first())
+                        val fillPath = Path().apply {
+                            moveTo(first.x, baselineY)
+                            lineTo(first.x, first.y)
+                            segment.drop(1).forEach { sample ->
+                                val offset = point(sample)
+                                lineTo(offset.x, offset.y)
+                            }
+                            val last = point(segment.last())
+                            lineTo(last.x, baselineY)
+                            close()
+                        }
+                        drawPath(fillPath, color = accent.copy(alpha = .10f))
+                    }
+
+                    val normalizedAverage = ((averageValue - minValue) / valueRange).toFloat().coerceIn(0f, 1f)
+                    val averageY = padY + (1f - normalizedAverage) * usableHeight
+                    drawLine(
+                        color = accent.copy(alpha = .24f),
+                        start = Offset(0f, averageY),
+                        end = Offset(size.width, averageY),
+                        strokeWidth = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(5.dp.toPx(), 5.dp.toPx())),
+                    )
+                }
+
                 timelineSamples.zipWithNext().forEach { (from, to) ->
                     if (!to.breakBefore &&
                         to.timelineMillis >= visibleStartTime && from.timelineMillis <= visibleEndTime
                     ) {
                         drawLine(
-                            color = accent.copy(alpha = 0.82f),
+                            color = accent.copy(alpha = 0.88f),
                             start = point(from),
                             end = point(to),
-                            strokeWidth = 2.dp.toPx(),
+                            strokeWidth = if (fillArea) 2.3.dp.toPx() else 2.dp.toPx(),
                             cap = StrokeCap.Round
                         )
                     }
