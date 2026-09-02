@@ -12,16 +12,22 @@ internal data class ChargingPriceMemory(
 )
 
 internal object ChargingPriceSuggestionPolicy {
+    internal const val DEFAULT_AUTO_FILL_MAX_AGE_MILLIS = 30L * 24L * 60L * 60L * 1000L
+
     fun autoFillPrice(
         chargerType: String,
         location: String,
         memories: List<ChargingPriceMemory>,
+        nowEpochMillis: Long = System.currentTimeMillis(),
+        maxAgeMillis: Long = DEFAULT_AUTO_FILL_MAX_AGE_MILLIS,
     ): Double? {
+        require(maxAgeMillis >= 0L) { "maxAgeMillis must be non-negative" }
         val typeKey = normalizeType(chargerType) ?: return null
         val locationKey = normalizeLocation(location) ?: return null
         return memories
             .asSequence()
             .filter { it.isStoredTariff && it.pricePerKwh >= 0.0 }
+            .filter { isFreshForAutoFill(it.timestampEpochMillis, nowEpochMillis, maxAgeMillis) }
             .filter { normalizeType(it.chargerType) == typeKey }
             .filter { normalizeLocation(it.location) == locationKey }
             .sortedByDescending { it.timestampEpochMillis }
@@ -79,6 +85,16 @@ internal object ChargingPriceSuggestionPolicy {
         ?.replace(Regex("\\s+"), " ")
         ?.lowercase(Locale.ROOT)
         ?.takeIf { it.isNotEmpty() }
+
+    private fun isFreshForAutoFill(
+        timestampEpochMillis: Long,
+        nowEpochMillis: Long,
+        maxAgeMillis: Long,
+    ): Boolean {
+        if (timestampEpochMillis > nowEpochMillis) return false
+        val ageMillis = nowEpochMillis - timestampEpochMillis
+        return ageMillis >= 0L && ageMillis <= maxAgeMillis
+    }
 
     private fun normalizeType(value: String?): String? = value
         ?.trim()
