@@ -36,7 +36,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -45,14 +44,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingRecordEntity
 import com.evchargebook.data.entity.ChargingSessionEntity
-import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.data.repository.BackfillChargingSessionRequest
+import com.evchargebook.data.repository.CompleteChargingSessionRequest
+import com.evchargebook.data.repository.DeferChargingCompletionRequest
 import com.evchargebook.ui.components.EmptyState
 import com.evchargebook.ui.components.ResponsiveMetricGrid
 import com.evchargebook.ui.theme.spacing
@@ -68,18 +67,23 @@ import java.util.Locale
 fun RecordsScreen(
     records: List<ChargingRecordEntity>,
     activeSession: ChargingSessionEntity?,
+    pendingSessions: List<ChargingSessionEntity>,
+    currentSoc: Int?,
+    currentSocUpdatedAtEpochMillis: Long?,
+    batteryCapacityKwh: Double?,
     onDelete: (ChargingRecordEntity) -> Unit,
     onStartCharging: () -> Unit,
     onMaintainRecord: () -> Unit,
     onEdit: (ChargingRecordEntity) -> Unit,
     onEditActive: (ChargingSessionEntity) -> Unit,
     onCancelActive: (ChargingSessionEntity) -> Unit,
+    onCompleteCharging: suspend (CompleteChargingSessionRequest) -> Long,
+    onDeferCharging: suspend (DeferChargingCompletionRequest) -> Unit,
+    onUpdatePendingDetails: suspend (DeferChargingCompletionRequest) -> Unit,
+    onBackfillCharging: suspend (BackfillChargingSessionRequest) -> Long,
+    onDiscardPending: suspend (String) -> Unit,
 ) {
-    val context = LocalContext.current.applicationContext
     val scope = rememberCoroutineScope()
-    val database = remember(context) { AppDatabase.getInstance(context) }
-    val chargingRepository = remember(database, context) { ChargingRepository(database, context) }
-    val pendingSessions by chargingRepository.pendingChargingSessions.collectAsState(initial = emptyList())
 
     var pendingDelete by remember { mutableStateOf<ChargingRecordEntity?>(null) }
     var pendingCancel by remember { mutableStateOf<ChargingSessionEntity?>(null) }
@@ -91,9 +95,12 @@ fun RecordsScreen(
     completingSession?.let { session ->
         CompleteChargingScreen(
             session = session,
+            currentSoc = currentSoc,
+            currentSocUpdatedAtEpochMillis = currentSocUpdatedAtEpochMillis,
+            batteryCapacityKwh = batteryCapacityKwh,
             onBack = { completingSession = null },
-            onComplete = chargingRepository::completeChargingSession,
-            onDefer = chargingRepository::deferChargingCompletion,
+            onComplete = onCompleteCharging,
+            onDefer = onDeferCharging,
             onCompleted = { completingSession = null },
         )
         return
@@ -103,7 +110,7 @@ fun RecordsScreen(
         ChargingMeterBackfillScreen(
             session = session,
             onBack = { backfillingSession = null },
-            onBackfill = chargingRepository::backfillChargingSession,
+            onBackfill = onBackfillCharging,
             onCompleted = { backfillingSession = null },
         )
         return
@@ -113,7 +120,7 @@ fun RecordsScreen(
         PendingChargingDetailsScreen(
             session = session,
             onBack = { editingPendingSession = null },
-            onSave = chargingRepository::deferChargingCompletion,
+            onSave = onUpdatePendingDetails,
             onSaved = { editingPendingSession = null },
         )
         return
@@ -256,8 +263,8 @@ fun RecordsScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        scope.launch { chargingRepository.discardPendingChargingSession(session.id) }
                         pendingDiscard = null
+                        scope.launch { runCatching { onDiscardPending(session.id) } }
                     }
                 ) {
                     Text("删除", color = MaterialTheme.colorScheme.error)

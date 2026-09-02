@@ -11,7 +11,10 @@ import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleCatalogEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.data.repository.BackfillChargingSessionRequest
 import com.evchargebook.data.repository.ChargingRepository
+import com.evchargebook.data.repository.CompleteChargingSessionRequest
+import com.evchargebook.data.repository.DeferChargingCompletionRequest
 import com.evchargebook.data.repository.StartChargingSessionRequest
 import com.evchargebook.domain.ChargerCategorySummary
 import com.evchargebook.domain.ChargerTypeAnalytics
@@ -34,6 +37,8 @@ import java.time.ZoneId
 data class MainUiState(
     val vehicle: VehicleEntity? = null,
     val currentSoc: Int? = null,
+    val currentSocUpdatedAtEpochMillis: Long? = null,
+    val currentSocUpdateSource: String? = null,
     val currentMileageKm: Double? = null,
     val vehicles: List<VehicleEntity> = emptyList(),
     val catalogVehicles: List<VehicleCatalogEntity> = emptyList(),
@@ -41,6 +46,7 @@ data class MainUiState(
     val pairedBluetoothDevices: List<PairedBluetoothDevice> = emptyList(),
     val chargingRecords: List<ChargingRecordEntity> = emptyList(),
     val activeChargingSession: ChargingSessionEntity? = null,
+    val pendingChargingSessions: List<ChargingSessionEntity> = emptyList(),
     val trips: List<TripSessionEntity> = emptyList(),
     val activeTrip: TripSessionEntity? = null,
     val selectedTripId: Long? = null,
@@ -80,10 +86,13 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
         viewModelScope.launch { repository.bluetoothSettings.collect { settings -> _uiState.value = _uiState.value.copy(bluetoothSettings = settings) } }
         viewModelScope.launch { repository.activeTrip.collect { trip -> _uiState.value = _uiState.value.copy(activeTrip = trip) } }
         viewModelScope.launch { repository.activeChargingSession.collect { session -> _uiState.value = _uiState.value.copy(activeChargingSession = session) } }
+        viewModelScope.launch { repository.pendingChargingSessions.collect { sessions -> _uiState.value = _uiState.value.copy(pendingChargingSessions = sessions) } }
         viewModelScope.launch {
             repository.vehicleState.collect { vehicleState ->
                 _uiState.value = _uiState.value.copy(
                     currentSoc = vehicleState?.currentSoc,
+                    currentSocUpdatedAtEpochMillis = vehicleState?.updatedAtEpochMillis,
+                    currentSocUpdateSource = vehicleState?.updateSource,
                     currentMileageKm = vehicleState?.currentMileage
                 )
             }
@@ -159,8 +168,12 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
     }
 
     fun restoreBackup(content: String) {
-        if (_uiState.value.activeTrip != null || _uiState.value.activeChargingSession != null) {
-            _uiState.value = _uiState.value.copy(errorMessage = "有进行中的行程或充电，请结束后再恢复备份")
+        if (
+            _uiState.value.activeTrip != null ||
+            _uiState.value.activeChargingSession != null ||
+            _uiState.value.pendingChargingSessions.isNotEmpty()
+        ) {
+            _uiState.value = _uiState.value.copy(errorMessage = "有进行中或待补录的行程/充电，请处理后再恢复备份")
             return
         }
         viewModelScope.launch {
@@ -191,6 +204,57 @@ class MainViewModel(private val repository: ChargingRepository) : ViewModel() {
             runCatching { repository.cancelChargingSession(sessionId) }
                 .onSuccess { _uiState.value = _uiState.value.copy(successMessage = "已取消本次充电记录") }
                 .onFailure { _uiState.value = _uiState.value.copy(errorMessage = it.message ?: "无法取消充电") }
+        }
+    }
+
+    suspend fun completeChargingSession(request: CompleteChargingSessionRequest): Long =
+        runChargingCommand(
+            successMessage = "充电已完成并写入账本",
+            fallbackError = "无法结束充电",
+        ) { repository.completeChargingSession(request) }
+
+    suspend fun deferChargingCompletion(request: DeferChargingCompletionRequest) {
+        runChargingCommand(
+            successMessage = "充电已结束，等待补充电表数据",
+            fallbackError = "无法结束充电",
+        ) { repository.deferChargingCompletion(request) }
+    }
+
+    suspend fun updatePendingChargingDetails(request: DeferChargingCompletionRequest) {
+        runChargingCommand(
+            successMessage = "结束信息已更新",
+            fallbackError = "无法更新结束信息",
+        ) { repository.deferChargingCompletion(request) }
+    }
+
+    suspend fun backfillChargingSession(request: BackfillChargingSessionRequest): Long =
+        runChargingCommand(
+            successMessage = "电表数据已补录，充电账本已完成",
+            fallbackError = "无法补充电表数据",
+        ) { repository.backfillChargingSession(request) }
+
+    suspend fun discardPendingChargingSession(sessionId: String) {
+        runChargingCommand(
+            successMessage = "已删除待补录充电",
+            fallbackError = "无法删除待补录充电",
+        ) { repository.discardPendingChargingSession(sessionId) }
+    }
+
+    private suspend fun <T> runChargingCommand(
+        successMessage: String,
+        fallbackError: String,
+        block: suspend () -> T,
+    ): T {
+        return try {
+            val result = block()
+            _uiState.value = _uiState.value.copy(successMessage = successMessage, errorMessage = null)
+            result
+        } catch (error: Throwable) {
+            _uiState.value = _uiState.value.copy(
+                successMessage = null,
+                errorMessage = error.message ?: fallbackError,
+            )
+            throw error
         }
     }
 

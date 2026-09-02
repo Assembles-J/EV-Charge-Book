@@ -30,7 +30,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -42,7 +41,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.evchargebook.data.database.AppDatabase
 import com.evchargebook.data.entity.ChargingSessionEntity
 import com.evchargebook.data.repository.CompleteChargingSessionRequest
 import com.evchargebook.data.repository.DeferChargingCompletionRequest
@@ -59,6 +57,9 @@ import java.util.Locale
 @Composable
 fun CompleteChargingScreen(
     session: ChargingSessionEntity,
+    currentSoc: Int?,
+    currentSocUpdatedAtEpochMillis: Long?,
+    batteryCapacityKwh: Double?,
     onBack: () -> Unit,
     onComplete: suspend (CompleteChargingSessionRequest) -> Long,
     onDefer: suspend (DeferChargingCompletionRequest) -> Unit,
@@ -66,10 +67,6 @@ fun CompleteChargingScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val database = remember(context) { AppDatabase.getInstance(context.applicationContext) }
-    val vehicleState by database.vehicleStateDao().observe(session.vehicleId).collectAsState(initial = null)
-    val vehicles by database.vehicleDao().observeActive().collectAsState(initial = emptyList())
-    val batteryCapacityKwh = vehicles.firstOrNull { it.id == session.vehicleId }?.batteryCapacityKwh
 
     val initialBilling = remember(session.id, session.updatedAtEpochMillis) {
         ChargeBillingEditor.create(
@@ -99,9 +96,9 @@ fun CompleteChargingScreen(
     var submitError by remember(session.id) { mutableStateOf<String?>(null) }
     var submitting by remember(session.id) { mutableStateOf(false) }
 
-    LaunchedEffect(vehicleState?.currentSoc, vehicleState?.updatedAtEpochMillis, session.id) {
-        val knownSoc = vehicleState?.currentSoc
-        val isNewerFact = (vehicleState?.updatedAtEpochMillis ?: 0L) > session.startedAtEpochMillis
+    LaunchedEffect(currentSoc, currentSocUpdatedAtEpochMillis, session.id) {
+        val knownSoc = currentSoc
+        val isNewerFact = (currentSocUpdatedAtEpochMillis ?: 0L) > session.startedAtEpochMillis
         val differsFromStart = knownSoc != null && knownSoc != session.startSoc
         val notBelowStart = knownSoc != null && (session.startSoc == null || knownSoc >= session.startSoc)
         if (!endSocTouched && endSoc.isBlank() && isNewerFact && differsFromStart && notBelowStart) {

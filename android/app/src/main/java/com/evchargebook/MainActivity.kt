@@ -518,6 +518,10 @@ fun MainApp(
                     1 -> RecordsScreen(
                         records = state.chargingRecords,
                         activeSession = state.activeChargingSession,
+                        pendingSessions = state.pendingChargingSessions,
+                        currentSoc = state.currentSoc,
+                        currentSocUpdatedAtEpochMillis = state.currentSocUpdatedAtEpochMillis,
+                        batteryCapacityKwh = state.vehicle?.batteryCapacityKwh,
                         onDelete = viewModel::deleteChargingRecord,
                         onStartCharging = {
                             if (state.vehicle == null) {
@@ -530,6 +534,11 @@ fun MainApp(
                         onEdit = { editingRecord = it },
                         onEditActive = { editActiveCharging = true },
                         onCancelActive = { session -> viewModel.cancelChargingSession(session.id) },
+                        onCompleteCharging = viewModel::completeChargingSession,
+                        onDeferCharging = viewModel::deferChargingCompletion,
+                        onUpdatePendingDetails = viewModel::updatePendingChargingDetails,
+                        onBackfillCharging = viewModel::backfillChargingSession,
+                        onDiscardPending = viewModel::discardPendingChargingSession,
                     )
                     2 -> StatsScreen(state)
                     3 -> {
