@@ -21,7 +21,7 @@ val heroArtworkManifestUrl = System.getenv("HERO_ARTWORK_MANIFEST_URL")
 val vehicleCatalogUrl = System.getenv("VEHICLE_CATALOG_URL")
     ?: "https://groupim.cn/ev-charge-book/release-meta/vehicle-catalog-v1.json"
 val tripMapStyleUrl = System.getenv("TRIP_MAP_STYLE_URL")
-    ?: "https://tiles.openfreemap.org/styles/dark"
+    ?: "https://tiles.openfreemap.org/styles/liberty"
 
 android {
     namespace = "com.evchargebook"
