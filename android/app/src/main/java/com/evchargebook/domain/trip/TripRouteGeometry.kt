@@ -74,12 +74,7 @@ data class TripRouteContinuity(
 
 object TripRouteContinuityBuilder {
     fun build(source: List<TripGeoPoint>): TripRouteContinuity {
-        val finite = source.filter {
-            it.latitude.isFinite() &&
-                it.longitude.isFinite() &&
-                it.latitude in -90.0..90.0 &&
-                it.longitude in -180.0..180.0
-        }
+        val finite = source.filter { it.latitude.isFinite() && it.longitude.isFinite() }
         if (finite.isEmpty()) return TripRouteContinuity(emptyList(), emptyList())
 
         val segments = mutableListOf<MutableList<TripGeoPoint>>()
