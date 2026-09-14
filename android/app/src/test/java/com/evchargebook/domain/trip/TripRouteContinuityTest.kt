@@ -109,4 +109,21 @@ class TripRouteContinuityTest {
         assertEquals(first + second, continuity.defaultFitPoints)
         assertEquals(first + second, continuity.fullRouteFitPoints)
     }
+
+    @Test
+    fun `out of range geographic coordinates are not admitted into route context`() {
+        val valid = listOf(
+            TripGeoPoint(31.2000, 121.4000, 0L),
+            TripGeoPoint(31.2010, 121.4010, 4_000L),
+        )
+        val invalid = listOf(
+            TripGeoPoint(91.0, 121.4020, 8_000L),
+            TripGeoPoint(31.2020, 181.0, 12_000L),
+        )
+
+        val continuity = TripRouteContinuityBuilder.build(valid + invalid)
+
+        assertEquals(valid, continuity.fullRouteFitPoints)
+        assertEquals(valid, continuity.defaultFitPoints)
+    }
 }
