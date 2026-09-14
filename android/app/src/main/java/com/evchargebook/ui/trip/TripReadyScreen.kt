@@ -1,5 +1,6 @@
 package com.evchargebook.ui.trip
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -16,11 +17,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Route
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,8 +38,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -43,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.ui.dashboard.HeroVehicleCard
 import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.text.SimpleDateFormat
@@ -93,34 +98,35 @@ fun TripReadyScreen(
                         }
                     }
                 },
-                actions = {
-                    if (!preparing) {
-                        TextButton(
-                            onClick = { preparing = true },
-                            enabled = vehicle != null
-                        ) {
-                            Text("开始行程", color = if (vehicle != null) accent else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
+        },
+        floatingActionButton = {
+            if (!preparing) {
+                FloatingActionButton(
+                    onClick = { if (vehicle != null) preparing = true },
+                    containerColor = if (vehicle != null) accent else MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = if (vehicle != null) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
+                ) {
+                    Icon(Icons.Default.PlayArrow, contentDescription = "开始行程")
+                }
+            }
         }
     ) { padding ->
         if (preparing) {
-            TripPreparationContentV06(
+            TripPreparationContentV08(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 vehicle = vehicle,
                 currentSoc = currentSoc,
                 currentMileageKm = currentMileageKm,
+                latestTrip = orderedTrips.firstOrNull(),
                 onStart = onStart
             )
         } else {
-            TripHomeContentV06(
+            TripHomeContentV08(
                 modifier = Modifier.fillMaxSize().padding(padding),
                 orderedTrips = orderedTrips,
-                onStartPreparation = { preparing = true },
                 canStart = vehicle != null,
                 onOpenDetail = onOpenDetail,
                 onDelete = { deleteTarget = it }
@@ -133,9 +139,7 @@ fun TripReadyScreen(
             onDismissRequest = { deleteTarget = null },
             title = { Text("删除这条行程？") },
             text = {
-                Text(
-                    "行程及关联轨迹点会一并删除，删除后无法恢复。若这条行程提供了最新 SOC 或里程，车辆当前状态会根据剩余记录重新计算。"
-                )
+                Text("行程及关联轨迹点会一并删除，删除后无法恢复。若这条行程提供了最新 SOC 或里程，车辆当前状态会根据剩余记录重新计算。")
             },
             confirmButton = {
                 TextButton(
@@ -143,9 +147,7 @@ fun TripReadyScreen(
                         onDelete(trip)
                         deleteTarget = null
                     }
-                ) {
-                    Text("确认删除", color = MaterialTheme.colorScheme.error)
-                }
+                ) { Text("确认删除", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { deleteTarget = null }) { Text("取消") }
@@ -155,17 +157,23 @@ fun TripReadyScreen(
 }
 
 @Composable
-private fun TripHomeContentV06(
+private fun TripHomeContentV08(
     modifier: Modifier,
     orderedTrips: List<TripSessionEntity>,
     canStart: Boolean,
-    onStartPreparation: () -> Unit,
     onOpenDetail: (Long) -> Unit,
     onDelete: (TripSessionEntity) -> Unit
 ) {
+    var expanded by rememberSaveable { mutableStateOf(true) }
+
     LazyColumn(
         modifier = modifier,
-        contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
+        contentPadding = PaddingValues(
+            start = MaterialTheme.spacing.md,
+            end = MaterialTheme.spacing.md,
+            top = MaterialTheme.spacing.sm,
+            bottom = 96.dp
+        ),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
     ) {
         orderedTrips.firstOrNull()?.let { latest ->
@@ -179,23 +187,32 @@ private fun TripHomeContentV06(
 
         item {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.Bottom
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(enabled = orderedTrips.isNotEmpty()) { expanded = !expanded }
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("最近行程", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (orderedTrips.isEmpty()) "完成第一段行程后会显示在这里" else "共 ${orderedTrips.size} 条 · 点击查看轨迹与明细",
+                        when {
+                            orderedTrips.isEmpty() -> "完成第一段行程后会显示在这里"
+                            expanded -> "共 ${orderedTrips.size} 条 · 点击收起"
+                            else -> "共 ${orderedTrips.size} 条 · 点击展开"
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (!canStart) {
-                    Text(
-                        "请先选择车辆",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                if (orderedTrips.isNotEmpty()) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "收起最近行程" else "展开最近行程",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                } else if (!canStart) {
+                    Text("请先选择车辆", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -209,21 +226,18 @@ private fun TripHomeContentV06(
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
-                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text("还没有行程记录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                         Text(
-                            "开始后只记录真实 GPS 轨迹；不会预设终点或虚构路线。",
+                            "右下角开始行程后，只记录真实 GPS 轨迹，不预设终点或虚构路线。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        TextButton(onClick = onStartPreparation, enabled = canStart) {
-                            Text("准备开始行程")
-                        }
                     }
                 }
             }
-        } else {
+        } else if (expanded) {
             items(orderedTrips, key = { it.id }) { trip ->
                 TripHistoryCardV06(
                     trip = trip,
@@ -232,7 +246,6 @@ private fun TripHomeContentV06(
                 )
             }
         }
-        item { Spacer(Modifier.height(16.dp)) }
     }
 }
 
@@ -256,11 +269,7 @@ private fun LatestTripSummaryV06(trip: TripSessionEntity, onClick: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(1.dp)
                 ) {
                     Text("最近一次", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(
-                        formatHomeTripTime(trip.startedAtEpochMillis),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(formatHomeTripTime(trip.startedAtEpochMillis), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 }
                 Text("已完成", style = MaterialTheme.typography.labelSmall, color = accent)
             }
@@ -273,20 +282,14 @@ private fun LatestTripSummaryV06(trip: TripSessionEntity, onClick: () -> Unit) {
                 val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
                 if (compact) {
                     Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-                        ) {
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
                             HomeMetricV06("距离", formatHomeDistance(trip.distanceMeters), Modifier.weight(1f))
                             HomeMetricV06("耗时", formatHomeDuration(trip.elapsedSeconds), Modifier.weight(1f))
                         }
                         HomeMetricV06("能耗", energyText, Modifier.fillMaxWidth())
                     }
                 } else {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)
-                    ) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
                         HomeMetricV06("距离", formatHomeDistance(trip.distanceMeters), Modifier.weight(1f))
                         HomeMetricV06("耗时", formatHomeDuration(trip.elapsedSeconds), Modifier.weight(1f))
                         HomeMetricV06("能耗", energyText, Modifier.weight(1f))
@@ -294,12 +297,11 @@ private fun LatestTripSummaryV06(trip: TripSessionEntity, onClick: () -> Unit) {
                 }
             }
 
-            val socText = when {
+            when {
                 trip.startSoc != null && trip.endSoc != null -> "SOC ${trip.startSoc}% → ${trip.endSoc}%"
                 trip.startSoc != null -> "SOC ${trip.startSoc}% → --"
                 else -> null
-            }
-            socText?.let {
+            }?.let {
                 Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
@@ -315,11 +317,12 @@ private fun HomeMetricV06(label: String, value: String, modifier: Modifier) {
 }
 
 @Composable
-private fun TripPreparationContentV06(
+private fun TripPreparationContentV08(
     modifier: Modifier,
     vehicle: VehicleEntity?,
     currentSoc: Int?,
     currentMileageKm: Double?,
+    latestTrip: TripSessionEntity?,
     onStart: () -> Unit
 ) {
     LazyColumn(
@@ -328,15 +331,16 @@ private fun TripPreparationContentV06(
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
     ) {
         item {
-            ReadyVehicleSnapshotCard(
+            HeroVehicleCard(
                 vehicle = vehicle,
                 currentSoc = currentSoc,
-                currentMileageKm = currentMileageKm
+                currentMileageKm = currentMileageKm,
+                latestTrip = latestTrip,
+                vehicleSwitchEnabled = false
             )
         }
-        item {
-            TripBackgroundRecordingGuidance()
-        }
+        item { ReadyGpsTruthCardV08() }
+        item { TripBackgroundRecordingGuidance() }
         item {
             TripSlideAction(
                 label = "滑动开始行程",
@@ -364,103 +368,30 @@ private fun TripPreparationContentV06(
 }
 
 @Composable
-private fun ReadyVehicleSnapshotCard(
-    vehicle: VehicleEntity?,
-    currentSoc: Int?,
-    currentMileageKm: Double?
-) {
+private fun ReadyGpsTruthCardV08() {
     val accent = EVDesignTokens.Energy.green
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surfaceContainerLow
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = MaterialTheme.spacing.md, vertical = 14.dp),
-            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
-            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text(
-                        vehicle?.let { "${it.brand} ${it.model}" } ?: "请选择车辆",
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        "开始时记录当前车辆状态",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                if (vehicle != null) {
-                    Text("READY", style = MaterialTheme.typography.labelMedium, color = accent)
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.lg),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                ReadySnapshotMetric(
-                    label = "当前 SOC",
-                    value = currentSoc?.let { "$it%" } ?: "--",
-                    modifier = Modifier.weight(1f)
-                )
-                ReadySnapshotMetric(
-                    label = "当前里程",
-                    value = currentMileageKm?.let { "${formatReadyMileage(it)} km" } ?: "--",
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = .22f))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
-            ) {
-                Icon(
-                    Icons.Default.LocationOn,
-                    contentDescription = null,
-                    tint = accent,
-                    modifier = Modifier.size(18.dp)
-                )
-                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
-                    Text("GPS 实录", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Medium)
-                    Text(
-                        "开始后记录真实定位；不预设终点，也不会虚构路线。",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (currentSoc == null && vehicle != null) {
+            Icon(Icons.Default.LocationOn, contentDescription = null, tint = accent, modifier = Modifier.size(22.dp))
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("GPS 实录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "当前 SOC 未维护：仍可记录真实行程，但不会据此估算行驶能耗。",
-                    style = MaterialTheme.typography.labelSmall,
+                    "开始后记录真实定位；不预设终点，也不会虚构路线。",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
     }
 }
-
-@Composable
-private fun ReadySnapshotMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(2.dp)
-    ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-private fun formatReadyMileage(value: Double): String =
-    if (value % 1.0 == 0.0) value.toLong().toString() else String.format(Locale.US, "%.1f", value)
 
 private fun formatHomeTripTime(epochMillis: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.SIMPLIFIED_CHINESE).format(Date(epochMillis))
@@ -473,7 +404,7 @@ private fun formatHomeDuration(seconds: Long): String {
     val hours = seconds / 3600
     val minutes = (seconds % 3600) / 60
     return when {
-        hours > 0 -> "${hours}h${minutes}m"
+        hours > 0 -> "${hours}h ${minutes}m"
         minutes > 0 -> "${minutes}m"
         else -> "<1m"
     }

@@ -108,6 +108,20 @@ fun VehicleScreen(
 
             item { SettingsSectionTitle("连接与数据", "CONNECTION & DATA") }
             item { SettingsRow(Icons.Default.Bluetooth, "车载蓝牙", "连接指定设备时提醒开始行程", onBluetoothPrompt) }
+            item {
+                SettingsRow(
+                    Icons.Default.Home,
+                    "桌面小组件",
+                    "直接请求系统添加，不依赖 ColorOS 卡片中心"
+                ) {
+                    val result = com.evchargebook.widget.VehicleWidgetPinning.request(context)
+                    android.widget.Toast.makeText(
+                        context,
+                        com.evchargebook.widget.VehicleWidgetPinning.message(result),
+                        android.widget.Toast.LENGTH_LONG
+                    ).show()
+                }
+            }
             item { SettingsRow(Icons.Default.UploadFile, "导出备份", "完整 JSON，可用于恢复车辆、充电记录和行程", onExportBackup) }
             item { SettingsRow(Icons.Default.TableView, "导出分析 CSV", "当前车辆充电账本，可用于 Excel / Python 分析", onExportCsv) }
             item { SettingsRow(Icons.Default.Download, "恢复备份", "从本地 JSON 备份恢复数据", onImportBackup) }

@@ -54,6 +54,9 @@ internal fun TripHistoryCardV06(
     onDelete: () -> Unit
 ) {
     val endpoints = rememberTripEndpointLabels(trip)
+    val displayEndpoints = remember(endpoints) {
+        compactTripEndpointDisplayV08(endpoints.start, endpoints.end)
+    }
     val validity = remember(trip) { TripValidityRules.assess(trip) }
     val accent = EVDesignTokens.Energy.green
     val statusLabel = when (validity.status) {
@@ -114,8 +117,8 @@ internal fun TripHistoryCardV06(
                     )
                 }
 
-                EndpointHistoryLineV06("起", endpoints.start)
-                EndpointHistoryLineV06("终", endpoints.end)
+                EndpointHistoryLineV06("起", displayEndpoints.start)
+                EndpointHistoryLineV06("终", displayEndpoints.end)
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),

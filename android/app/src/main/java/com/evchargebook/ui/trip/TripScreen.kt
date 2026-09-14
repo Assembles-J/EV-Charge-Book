@@ -1,9 +1,7 @@
 package com.evchargebook.ui.trip
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -15,15 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Route
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.WarningAmber
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -40,24 +33,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
-import com.evchargebook.ui.theme.EVDesignTokens
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 import kotlinx.coroutines.delay
 
-/**
- * Trip router + active v0.6 cockpit.
- *
- * The no-active state is owned by TripReadyScreen. Selected/completed detail is intentionally
- * isolated in TripDetailScreen.kt so detail/map/diagnostics can evolve without destabilizing live tracking.
- */
+/** Trip router + compact active Trip experience. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TripScreen(
@@ -91,26 +77,14 @@ fun TripScreen(
 
     val activeVehicle = vehicles.firstOrNull { it.id == activeTrip.vehicleId } ?: vehicle
     val interrupted = activeTrip.status == TripStatus.INTERRUPTED
-    val telemetry = remember(selectedTripPoints) { summarizeActiveTripTelemetry(selectedTripPoints) }
     val liveElapsedSeconds = rememberLiveTripElapsedSeconds(activeTrip)
-    val accent = EVDesignTokens.Energy.green
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("行程进行中", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                        Spacer(Modifier.width(8.dp))
-                        Box(
-                            Modifier
-                                .size(7.dp)
-                                .background(if (interrupted) MaterialTheme.colorScheme.error else accent, CircleShape)
-                        )
-                    }
-                },
+                title = { Text("行程中", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) },
                 windowInsets = WindowInsets(0, 0, 0, 0),
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
             )
@@ -121,6 +95,8 @@ fun TripScreen(
             contentPadding = PaddingValues(horizontal = MaterialTheme.spacing.md, vertical = MaterialTheme.spacing.sm),
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
+            item { TripActiveVehicleHeroV08(vehicle = activeVehicle) }
+
             item {
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -131,58 +107,48 @@ fun TripScreen(
                         modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
                         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
                     ) {
-                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                            Column(Modifier.weight(1f)) {
-                                Text(
-                                    activeVehicle?.let { "${it.brand} ${it.model}" } ?: "车辆 #${activeTrip.vehicleId}",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                                Text(
-                                    if (interrupted) "定位已中断，等待用户恢复" else "真实 GPS 持续记录",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            ActiveStatusPill(
-                                text = if (interrupted) "需恢复" else "记录中",
-                                warning = interrupted
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md),
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            ActivePrimaryMetric(
-                                label = "行程距离",
-                                value = if (activeTrip.distanceMeters > 0.0) formatActiveDistance(activeTrip.distanceMeters) else "--",
-                                modifier = Modifier.weight(1f)
-                            )
-                            ActivePrimaryMetric(
-                                label = "当前速度",
-                                value = telemetry.trustedLatestSpeedMps?.let(::formatActiveSpeed) ?: "--",
-                                modifier = Modifier.weight(1f)
-                            )
-                        }
-
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f))
-
-                        ActiveMetricGrid(
-                            listOf(
-                                ActiveMetric("已记录", formatActiveDuration(liveElapsedSeconds)),
-                                ActiveMetric("行驶均速", activeTrip.averageSpeedMps?.let(::formatActiveSpeed) ?: "--"),
-                                ActiveMetric("最高速度", activeTrip.maxSpeedMps?.let(::formatActiveSpeed) ?: "--"),
-                                ActiveMetric("起始 SOC", activeTrip.startSoc?.let { "$it%" } ?: "--")
-                            )
+                        Text(
+                            if (interrupted) "记录已中断" else "行程进行中",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (interrupted) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        )
+                        ActiveMetricRowsV08(
+                            elapsedSeconds = liveElapsedSeconds,
+                            distanceMeters = activeTrip.distanceMeters,
+                            averageSpeedMps = activeTrip.averageSpeedMps,
+                            maxSpeedMps = activeTrip.maxSpeedMps
                         )
                     }
                 }
             }
 
             item {
-                TripActiveTelemetryV06(points = selectedTripPoints)
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerLow
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
+                    ) {
+                        Text("实时轨迹", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        if (selectedTripPoints.size >= 2) {
+                            TripRouteViewportV07(
+                                points = selectedTripPoints,
+                                finalEndpoint = false,
+                                height = 190.dp
+                            )
+                        } else {
+                            Text(
+                                "正在等待足够的可信 GPS 点绘制轨迹…",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
             }
 
             if (interrupted) {
@@ -190,7 +156,7 @@ fun TripScreen(
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = MaterialTheme.shapes.large,
-                        color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f)
+                        color = MaterialTheme.colorScheme.error.copy(alpha = .08f)
                     ) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
@@ -213,17 +179,6 @@ fun TripScreen(
             }
 
             item {
-                OutlinedButton(
-                    onClick = { onOpenDetail(activeTrip.id) },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Route, contentDescription = null)
-                    Spacer(Modifier.width(MaterialTheme.spacing.xs))
-                    Text("查看完整轨迹与诊断")
-                }
-            }
-
-            item {
                 TripSlideAction(
                     label = if (interrupted) "滑动结束已中断行程" else "滑动结束行程",
                     enabled = true,
@@ -232,7 +187,7 @@ fun TripScreen(
                     releaseLabel = "松开结束"
                 )
                 Text(
-                    "滑动后进入结束确认；返回可继续记录，保存后结束本次行程。",
+                    "结束确认后才计算本次能耗等完成态数据；进行中不展示临时估算。",
                     modifier = Modifier.padding(top = 6.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -241,6 +196,33 @@ fun TripScreen(
 
             item { Spacer(Modifier.size(MaterialTheme.spacing.md)) }
         }
+    }
+}
+
+@Composable
+private fun ActiveMetricRowsV08(
+    elapsedSeconds: Long,
+    distanceMeters: Double,
+    averageSpeedMps: Double?,
+    maxSpeedMps: Double?
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+            ActiveMetricV08("行驶时长", formatActiveDuration(elapsedSeconds), Modifier.weight(1f))
+            ActiveMetricV08("行驶里程", formatActiveDistance(distanceMeters), Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
+            ActiveMetricV08("平均速度", averageSpeedMps?.let(::formatActiveSpeed) ?: "--", Modifier.weight(1f))
+            ActiveMetricV08("最高速度", maxSpeedMps?.let(::formatActiveSpeed) ?: "--", Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun ActiveMetricV08(label: String, value: String, modifier: Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -262,61 +244,10 @@ private fun rememberLiveTripElapsedSeconds(trip: TripSessionEntity): Long {
     return maxOf(trip.elapsedSeconds, wallClockElapsed)
 }
 
-private data class ActiveMetric(val label: String, val value: String)
-
-@Composable
-private fun ActivePrimaryMetric(label: String, value: String, modifier: Modifier) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-    }
-}
-
-@Composable
-private fun ActiveMetricGrid(metrics: List<ActiveMetric>) {
-    BoxWithConstraints(Modifier.fillMaxWidth()) {
-        val compact = maxWidth < 360.dp || LocalConfiguration.current.fontScale >= 1.3f
-        val columns = if (compact) 2 else 3
-        Column(verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)) {
-            metrics.chunked(columns).forEach { rowMetrics ->
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.md)) {
-                    rowMetrics.forEach { metric ->
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(metric.label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(metric.value, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                        }
-                    }
-                    repeat(columns - rowMetrics.size) { Spacer(Modifier.weight(1f)) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ActiveStatusPill(text: String, warning: Boolean) {
-    val accent = EVDesignTokens.Energy.green
-    val color = if (warning) MaterialTheme.colorScheme.error else accent
-    Surface(shape = CircleShape, color = color.copy(alpha = 0.10f)) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Icon(
-                imageVector = if (warning) Icons.Default.WarningAmber else Icons.Default.CheckCircle,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(14.dp)
-            )
-            Text(text, style = MaterialTheme.typography.labelSmall, color = color)
-        }
-    }
-}
-
 private fun formatActiveDistance(meters: Double): String =
     if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0)
-    else String.format(Locale.US, "%.0f m", meters)
+    else if (meters >= 0.0) String.format(Locale.US, "%.0f m", meters)
+    else "--"
 
 private fun formatActiveSpeed(mps: Double): String =
     String.format(Locale.US, "%.0f km/h", mps * 3.6)
@@ -326,8 +257,7 @@ private fun formatActiveDuration(seconds: Long): String {
     val minutes = (seconds % 3600) / 60
     val secs = seconds % 60
     return when {
-        hours > 0 -> "${hours}h ${minutes}m"
-        minutes > 0 -> "${minutes}m ${secs}s"
-        else -> "${secs}s"
+        hours > 0 -> "%02d:%02d:%02d".format(hours, minutes, secs)
+        else -> "%02d:%02d".format(minutes, secs)
     }
 }
