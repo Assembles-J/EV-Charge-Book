@@ -1,9 +1,9 @@
 package com.evchargebook.ui.trip
 
+import android.annotation.SuppressLint
+import android.view.MotionEvent
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -32,8 +32,9 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.evchargebook.BuildConfig
 import com.evchargebook.data.entity.TripPointEntity
-import com.evchargebook.domain.TripCaptureTimeRules
-import com.evchargebook.domain.TripContinuityRules
+import com.evchargebook.domain.trip.TripGeoPoint
+import com.evchargebook.domain.trip.TripRouteContinuity
+import com.evchargebook.domain.trip.TripRouteContinuityBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -51,6 +52,7 @@ import org.maplibre.android.style.layers.PropertyFactory.circleStrokeColor
 import org.maplibre.android.style.layers.PropertyFactory.circleStrokeWidth
 import org.maplibre.android.style.layers.PropertyFactory.lineCap
 import org.maplibre.android.style.layers.PropertyFactory.lineColor
+import org.maplibre.android.style.layers.PropertyFactory.lineDasharray
 import org.maplibre.android.style.layers.PropertyFactory.lineJoin
 import org.maplibre.android.style.layers.PropertyFactory.lineOpacity
 import org.maplibre.android.style.layers.PropertyFactory.lineWidth
@@ -68,6 +70,7 @@ import org.maplibre.geojson.Point
  * never snapped, converted in storage, or bridged across a LONG_GAP. If the provider/style fails,
  * the caller falls back to the truthful no-basemap renderer.
  */
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 internal fun TripMapContextV08(
     points: List<TripPointEntity>,
@@ -86,6 +89,19 @@ internal fun TripMapContextV08(
     val accentColor = EVDesignTokens.Energy.green.toArgb()
     val endColor = MaterialTheme.colorScheme.error.toArgb()
     val markerStrokeColor = MaterialTheme.colorScheme.surface.toArgb()
+    val gapColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .66f).toArgb()
+    val routeSource = remember(points) {
+        points.map { point ->
+            TripGeoPoint(
+                latitude = point.latitude,
+                longitude = point.longitude,
+                capturedAtEpochMillis = point.capturedAtEpochMillis,
+                speedMps = trustedTripSpeedMpsV07(point),
+                capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
+            )
+        }
+    }
+    val continuity = remember(routeSource) { TripRouteContinuityBuilder.build(routeSource) }
     var mapController by remember(viewportKey) { mutableStateOf<MapLibreMap?>(null) }
     var styleLoaded by remember(viewportKey) { mutableStateOf(false) }
     var tileLoaded by remember(viewportKey) { mutableStateOf(false) }
@@ -94,7 +110,21 @@ internal fun TripMapContextV08(
 
     val mapView = remember(viewportKey, context) {
         MapLibre.getInstance(context.applicationContext)
-        MapView(context).apply { onCreate(null) }
+        MapView(context).apply {
+            onCreate(null)
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN,
+                    MotionEvent.ACTION_POINTER_DOWN,
+                    -> view.parent?.requestDisallowInterceptTouchEvent(true)
+
+                    MotionEvent.ACTION_UP,
+                    MotionEvent.ACTION_CANCEL,
+                    -> view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+                false
+            }
+        }
     }
 
     val failureListener = remember(viewportKey, onProviderFailure) {
@@ -167,7 +197,7 @@ internal fun TripMapContextV08(
             fitTripRouteV08(
                 map = map,
                 mapView = mapView,
-                points = points,
+                points = continuity.cameraFitPoints,
                 paddingPx = routePaddingPx,
             )
         }
@@ -194,6 +224,7 @@ internal fun TripMapContextV08(
                             map.setMinZoomPreference(1.0)
                             map.setMaxZoomPreference(22.5)
                             map.uiSettings.setAttributionEnabled(true)
+                            map.uiSettings.setLogoEnabled(false)
                             map.uiSettings.setCompassEnabled(false)
                             map.uiSettings.setRotateGesturesEnabled(false)
                             map.uiSettings.setTiltGesturesEnabled(false)
@@ -201,16 +232,19 @@ internal fun TripMapContextV08(
                                 styleLoaded = true
                                 installTripRouteLayersV08(
                                     style = style,
-                                    points = points,
+                                    continuity = continuity,
+                                    start = routeSource.first(),
+                                    end = routeSource.last(),
                                     finalEndpoint = finalEndpoint,
                                     startColor = accentColor,
                                     endColor = endColor,
                                     markerStrokeColor = markerStrokeColor,
+                                    gapColor = gapColor,
                                 )
                                 fitTripRouteV08(
                                     map = map,
                                     mapView = this,
-                                    points = points,
+                                    points = continuity.cameraFitPoints,
                                     paddingPx = routePaddingPx,
                                 )
                             }
@@ -219,33 +253,22 @@ internal fun TripMapContextV08(
                 },
             )
 
-            Row(
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .align(Alignment.TopEnd)
+                    .padding(10.dp),
+                onClick = ::fitRoute,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .90f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    MapGestureChipV08("拖动")
-                    MapGestureChipV08("双指缩放")
-                    MapGestureChipV08("双击放大")
-                }
-                Surface(
-                    onClick = ::fitRoute,
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .90f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
-                ) {
-                    Text(
-                        "回到全程",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
+                Text(
+                    "回到全程",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
             }
 
             if (BuildConfig.DEBUG) {
@@ -277,27 +300,10 @@ internal fun TripMapContextV08(
     }
 }
 
-@Composable
-private fun MapGestureChipV08(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .86f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .20f)),
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-        )
-    }
-}
-
 private fun fitTripRouteV08(
     map: MapLibreMap,
     mapView: MapView,
-    points: List<TripPointEntity>,
+    points: List<TripGeoPoint>,
     paddingPx: Int,
 ) {
     val latLngs = points.map { LatLng(it.latitude, it.longitude) }
@@ -315,13 +321,16 @@ private fun fitTripRouteV08(
 
 private fun installTripRouteLayersV08(
     style: Style,
-    points: List<TripPointEntity>,
+    continuity: TripRouteContinuity,
+    start: TripGeoPoint,
+    end: TripGeoPoint,
     finalEndpoint: Boolean,
     startColor: Int,
     endColor: Int,
     markerStrokeColor: Int,
+    gapColor: Int,
 ) {
-    val featuresByBand = buildTripSpeedFeaturesV08(points)
+    val featuresByBand = buildTripSpeedFeaturesV08(continuity)
     TripMapSpeedBandV08.entries.forEach { band ->
         val features = featuresByBand[band].orEmpty()
         if (features.isEmpty()) return@forEach
@@ -339,8 +348,32 @@ private fun installTripRouteLayersV08(
         )
     }
 
-    val start = points.first()
-    val end = points.last()
+    if (continuity.gaps.isNotEmpty()) {
+        val gapFeatures = continuity.gaps.map { gap ->
+            Feature.fromGeometry(
+                LineString.fromLngLats(
+                    listOf(
+                        Point.fromLngLat(gap.from.longitude, gap.from.latitude),
+                        Point.fromLngLat(gap.to.longitude, gap.to.latitude),
+                    )
+                )
+            )
+        }
+        val gapSourceId = "trip-route-gap-source"
+        val gapLayerId = "trip-route-gap-layer"
+        style.addSource(GeoJsonSource(gapSourceId, FeatureCollection.fromFeatures(gapFeatures.toTypedArray())))
+        style.addLayer(
+            LineLayer(gapLayerId, gapSourceId).withProperties(
+                lineColor(gapColor),
+                lineWidth(2.2f),
+                lineOpacity(0.72f),
+                lineDasharray(arrayOf(2.4f, 2.4f)),
+                lineCap(Property.LINE_CAP_ROUND),
+                lineJoin(Property.LINE_JOIN_ROUND),
+            )
+        )
+    }
+
     addTripPointLayerV08(
         style = style,
         sourceId = "trip-start-source",
@@ -365,7 +398,7 @@ private fun addTripPointLayerV08(
     style: Style,
     sourceId: String,
     layerId: String,
-    point: TripPointEntity,
+    point: TripGeoPoint,
     color: Int,
     strokeColor: Int,
     radius: Float,
@@ -387,32 +420,25 @@ private fun addTripPointLayerV08(
 }
 
 private fun buildTripSpeedFeaturesV08(
-    points: List<TripPointEntity>,
+    continuity: TripRouteContinuity,
 ): Map<TripMapSpeedBandV08, List<Feature>> {
     val byBand = TripMapSpeedBandV08.entries.associateWith { mutableListOf<Feature>() }
-    val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
 
-    points.zipWithNext().forEach { (from, to) ->
-        val timing = TripCaptureTimeRules.between(
-            previousEpochMillis = from.capturedAtEpochMillis,
-            previousElapsedRealtimeNanos = from.capturedAtElapsedRealtimeNanos,
-            currentEpochMillis = to.capturedAtEpochMillis,
-            currentElapsedRealtimeNanos = to.capturedAtElapsedRealtimeNanos,
-        )
-        if (!timing.accepted || timing.breaksContinuity(longGapMillis)) return@forEach
-
-        val speedKph = (trustedTripSpeedMpsV07(to) ?: trustedTripSpeedMpsV07(from))?.times(3.6)
-        val band = tripMapSpeedBandV08(speedKph)
-        byBand.getValue(band).add(
-            Feature.fromGeometry(
-                LineString.fromLngLats(
-                    listOf(
-                        Point.fromLngLat(from.longitude, from.latitude),
-                        Point.fromLngLat(to.longitude, to.latitude),
+    continuity.drawableSegments.forEach { segment ->
+        segment.zipWithNext().forEach { (from, to) ->
+            val speedKph = (to.speedMps ?: from.speedMps)?.times(3.6)
+            val band = tripMapSpeedBandV08(speedKph)
+            byBand.getValue(band).add(
+                Feature.fromGeometry(
+                    LineString.fromLngLats(
+                        listOf(
+                            Point.fromLngLat(from.longitude, from.latitude),
+                            Point.fromLngLat(to.longitude, to.latitude),
+                        )
                     )
                 )
             )
-        )
+        }
     }
 
     return byBand
