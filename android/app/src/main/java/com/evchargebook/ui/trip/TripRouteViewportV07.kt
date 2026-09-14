@@ -42,6 +42,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.evchargebook.BuildConfig
 import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
@@ -96,6 +97,7 @@ internal fun TripRouteViewportV07(
     }
     val viewportKey = routePoints.firstOrNull()?.tripId
     var basemapFailed by remember(viewportKey) { mutableStateOf(false) }
+    var fallbackDiagnostics by remember(viewportKey) { mutableStateOf(TripBasemapDiagnosticsV08()) }
 
     if (geometry?.isDrawable != true) return
 
@@ -108,7 +110,13 @@ internal fun TripRouteViewportV07(
                 points = routePoints,
                 finalEndpoint = finalEndpoint,
                 height = height,
-                onProviderFailure = { basemapFailed = true },
+                onProviderFailure = {
+                    fallbackDiagnostics = fallbackDiagnostics.copy(
+                        mapFailed = true,
+                        fallbackActive = true,
+                    )
+                    basemapFailed = true
+                },
             )
         } else {
             InteractiveTripRouteCanvasV07(
@@ -123,7 +131,31 @@ internal fun TripRouteViewportV07(
                 height = height,
             )
         }
+        if (BuildConfig.DEBUG && !playbackMode && basemapFailed) {
+            TripBasemapFallbackDiagnosticChipV08(fallbackDiagnostics)
+        }
         TripSpeedLegendV07()
+    }
+}
+
+@Composable
+private fun TripBasemapFallbackDiagnosticChipV08(
+    diagnostics: TripBasemapDiagnosticsV08,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest.copy(alpha = .94f),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .28f)),
+    ) {
+        Text(
+            diagnostics.statusText(),
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+        )
     }
 }
 
