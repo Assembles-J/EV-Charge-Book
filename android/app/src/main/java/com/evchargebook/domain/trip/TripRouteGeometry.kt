@@ -10,6 +10,66 @@ data class TripGeoPoint(
     val capturedAtElapsedRealtimeNanos: Long? = null,
 )
 
+data class TripRouteGap(
+    val from: TripGeoPoint,
+    val to: TripGeoPoint,
+)
+
+data class TripRouteContinuity(
+    val segments: List<List<TripGeoPoint>>,
+    val gaps: List<TripRouteGap>,
+) {
+    val drawableSegments: List<List<TripGeoPoint>>
+        get() = segments.filter { it.size >= 2 }
+
+    /**
+     * Fit the camera around route segments that can actually be drawn. A lone point after a long
+     * GPS gap stays truthful data, but it must not shrink the useful route into a tiny fragment.
+     */
+    val cameraFitPoints: List<TripGeoPoint>
+        get() = drawableSegments.flatten().ifEmpty { segments.flatten() }
+}
+
+object TripRouteContinuityBuilder {
+    fun build(source: List<TripGeoPoint>): TripRouteContinuity {
+        val finite = source.filter { it.latitude.isFinite() && it.longitude.isFinite() }
+        if (finite.isEmpty()) return TripRouteContinuity(emptyList(), emptyList())
+
+        val segments = mutableListOf<MutableList<TripGeoPoint>>()
+        val gaps = mutableListOf<TripRouteGap>()
+        var current = mutableListOf(finite.first())
+        segments += current
+
+        finite.zipWithNext().forEach { (previous, next) ->
+            val previousTime = previous.capturedAtEpochMillis
+            val nextTime = next.capturedAtEpochMillis
+            val breaksContinuity = if (previousTime != null && nextTime != null) {
+                val timing = TripCaptureTimeRules.between(
+                    previousEpochMillis = previousTime,
+                    previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
+                    currentEpochMillis = nextTime,
+                    currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
+                )
+                !timing.accepted || timing.breaksContinuity(TripRouteGeometryBuilder.LONG_GAP_THRESHOLD_MS)
+            } else {
+                false
+            }
+
+            if (breaksContinuity) {
+                gaps += TripRouteGap(from = previous, to = next)
+                current = mutableListOf()
+                segments += current
+            }
+            current += next
+        }
+
+        return TripRouteContinuity(
+            segments = segments.filter { it.isNotEmpty() },
+            gaps = gaps,
+        )
+    }
+}
+
 data class TripRoutePoint(
     val x: Float,
     val y: Float,
@@ -38,11 +98,10 @@ object TripRouteGeometryBuilder {
     ): TripRouteGeometry? {
         if (source.isEmpty() || maxPoints < 2) return null
 
-        val finite = source.filter { it.latitude.isFinite() && it.longitude.isFinite() }
-        if (finite.isEmpty()) return null
+        val continuity = TripRouteContinuityBuilder.build(source)
+        if (continuity.segments.isEmpty()) return null
 
-        val rawSegments = splitAtLongGaps(finite)
-        val sampledSegments = downsampleSegments(rawSegments, maxPoints)
+        val sampledSegments = downsampleSegments(continuity.segments, maxPoints)
         val sampled = sampledSegments.flatten()
         if (sampled.isEmpty()) return null
 
@@ -70,35 +129,6 @@ object TripRouteGeometryBuilder {
             minLongitude = minLon,
             maxLongitude = maxLon
         )
-    }
-
-    private fun splitAtLongGaps(source: List<TripGeoPoint>): List<List<TripGeoPoint>> {
-        if (source.isEmpty()) return emptyList()
-        val segments = mutableListOf<MutableList<TripGeoPoint>>()
-        var current = mutableListOf(source.first())
-        segments += current
-
-        source.zipWithNext().forEach { (previous, next) ->
-            val previousTime = previous.capturedAtEpochMillis
-            val nextTime = next.capturedAtEpochMillis
-            val breaksContinuity = if (previousTime != null && nextTime != null) {
-                val timing = TripCaptureTimeRules.between(
-                    previousEpochMillis = previousTime,
-                    previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
-                    currentEpochMillis = nextTime,
-                    currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
-                )
-                !timing.accepted || timing.breaksContinuity(LONG_GAP_THRESHOLD_MS)
-            } else {
-                false
-            }
-            if (breaksContinuity) {
-                current = mutableListOf()
-                segments += current
-            }
-            current += next
-        }
-        return segments.filter { it.isNotEmpty() }
     }
 
     private fun downsampleSegments(source: List<List<TripGeoPoint>>, maxPoints: Int): List<List<TripGeoPoint>> {
