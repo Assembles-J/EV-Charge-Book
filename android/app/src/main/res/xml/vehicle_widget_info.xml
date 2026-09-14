@@ -4,7 +4,7 @@
     android:minWidth="180dp"
     android:minHeight="150dp"
     android:minResizeWidth="180dp"
-    android:minResizeHeight="130dp"
+    android:minResizeHeight="150dp"
     android:resizeMode="horizontal|vertical"
     android:updatePeriodMillis="0"
     android:widgetCategory="home_screen" />

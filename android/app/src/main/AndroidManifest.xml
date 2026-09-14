@@ -43,6 +43,10 @@
                 android:resource="@xml/vehicle_widget_info" />
         </receiver>
         <service
+            android:name=".widget.VehicleWidgetRemoteViewsService"
+            android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
+        <service
             android:name=".trip.TripTrackingService"
             android:exported="false"
             android:foregroundServiceType="location"
