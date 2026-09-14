@@ -29,6 +29,8 @@ class EvChargeBookApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        registerActivityLifecycleCallbacks(AppVisibilityTracker)
+
         val database = AppDatabase.getInstance(this)
         database.invalidationTracker.addObserver(widgetObserver)
 
