@@ -2,6 +2,7 @@ package com.evchargebook.ui.trip
 
 import android.annotation.SuppressLint
 import android.view.MotionEvent
+import android.view.ViewConfiguration
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -110,13 +111,31 @@ internal fun TripMapContextV08(
 
     val mapView = remember(viewportKey, context) {
         MapLibre.getInstance(context.applicationContext)
+        val touchSlopPx = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
+        var touchStartX = 0f
+        var touchStartY = 0f
         MapView(context).apply {
             onCreate(null)
             setOnTouchListener { view, event ->
                 when (event.actionMasked) {
-                    MotionEvent.ACTION_DOWN,
-                    MotionEvent.ACTION_POINTER_DOWN,
-                    -> view.parent?.requestDisallowInterceptTouchEvent(true)
+                    MotionEvent.ACTION_DOWN -> {
+                        touchStartX = event.x
+                        touchStartY = event.y
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+
+                    MotionEvent.ACTION_POINTER_DOWN ->
+                        view.parent?.requestDisallowInterceptTouchEvent(true)
+
+                    MotionEvent.ACTION_MOVE -> {
+                        val keepWithMap = TripMapGestureArbitration.shouldDisallowParentIntercept(
+                            pointerCount = event.pointerCount,
+                            deltaX = event.x - touchStartX,
+                            deltaY = event.y - touchStartY,
+                            touchSlopPx = touchSlopPx,
+                        )
+                        view.parent?.requestDisallowInterceptTouchEvent(keepWithMap)
+                    }
 
                     MotionEvent.ACTION_UP,
                     MotionEvent.ACTION_CANCEL,
@@ -192,12 +211,12 @@ internal fun TripMapContextV08(
         }
     }
 
-    fun fitRoute() {
+    fun fitFullRoute() {
         mapController?.let { map ->
             fitTripRouteV08(
                 map = map,
                 mapView = mapView,
-                points = continuity.cameraFitPoints,
+                points = continuity.fullRouteFitPoints,
                 paddingPx = routePaddingPx,
             )
         }
@@ -244,7 +263,7 @@ internal fun TripMapContextV08(
                                 fitTripRouteV08(
                                     map = map,
                                     mapView = this,
-                                    points = continuity.cameraFitPoints,
+                                    points = continuity.defaultFitPoints,
                                     paddingPx = routePaddingPx,
                                 )
                             }
@@ -257,7 +276,7 @@ internal fun TripMapContextV08(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(10.dp),
-                onClick = ::fitRoute,
+                onClick = ::fitFullRoute,
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .90f),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
