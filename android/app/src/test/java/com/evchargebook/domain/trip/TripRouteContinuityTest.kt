@@ -71,7 +71,28 @@ class TripRouteContinuityTest {
     }
 
     @Test
-    fun `multiple substantial continuous segments remain visible by default`() {
+    fun `three point distant fragment stays out when the main route clearly dominates`() {
+        val mainRoute = (0..8).map { index ->
+            TripGeoPoint(
+                latitude = 31.2000 + index * 0.001,
+                longitude = 121.4000 + index * 0.001,
+                capturedAtEpochMillis = index * 4_000L,
+            )
+        }
+        val tinyDistantFragment = listOf(
+            TripGeoPoint(32.5000, 123.0000, 180_000L),
+            TripGeoPoint(32.5010, 123.0010, 184_000L),
+            TripGeoPoint(32.5020, 123.0020, 188_000L),
+        )
+
+        val continuity = TripRouteContinuityBuilder.build(mainRoute + tinyDistantFragment)
+
+        assertEquals(mainRoute, continuity.defaultFitPoints)
+        assertEquals(mainRoute + tinyDistantFragment, continuity.fullRouteFitPoints)
+    }
+
+    @Test
+    fun `multiple similarly substantial continuous segments remain visible by default`() {
         val first = listOf(
             TripGeoPoint(31.2000, 121.4000, 0L),
             TripGeoPoint(31.2010, 121.4010, 4_000L),
