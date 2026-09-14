@@ -16,7 +16,11 @@ import android.os.HandlerThread
  */
 class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-    private val callbackThread = HandlerThread("evcb-platform-location").apply { start() }
+    private val callbackThreadOwner = RestartableResourceOwner(
+        create = { HandlerThread("evcb-platform-location") },
+        start = { it.start() },
+        stop = { it.quitSafely() },
+    )
     private var listener: LocationListener? = null
 
     @Volatile
@@ -28,6 +32,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         signalCallback: (TripLocationSourceSignal) -> Unit,
     ) {
         stop()
+        val callbackThread = callbackThreadOwner.acquire()
         val newListener = LocationListener(callback)
         listener = newListener
 
@@ -58,6 +63,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         if (successfulProviders.isEmpty()) {
             listener = null
             registeredProviderNames = emptySet()
+            callbackThreadOwner.release()
             throw IllegalStateException("No enabled platform GPS/network provider could be registered", lastFailure)
         }
 
@@ -76,6 +82,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         listener?.let { current -> runCatching { locationManager.removeUpdates(current) } }
         listener = null
         registeredProviderNames = emptySet()
+        callbackThreadOwner.release()
     }
 
     private companion object {
