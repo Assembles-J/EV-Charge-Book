@@ -10,6 +10,113 @@ data class TripGeoPoint(
     val capturedAtElapsedRealtimeNanos: Long? = null,
 )
 
+data class TripRouteGap(
+    val from: TripGeoPoint,
+    val to: TripGeoPoint,
+)
+
+data class TripGeoBounds(
+    val minLatitude: Double,
+    val maxLatitude: Double,
+    val minLongitude: Double,
+    val maxLongitude: Double,
+)
+
+data class TripRouteContinuity(
+    val segments: List<List<TripGeoPoint>>,
+    val gaps: List<TripRouteGap>,
+) {
+    val drawableSegments: List<List<TripGeoPoint>>
+        get() = segments.filter { it.size >= 2 }
+
+    /**
+     * Default framing favors substantial continuous route context. A tiny fragment after a long
+     * GPS gap stays truthful data, but it must not crush the useful route into a tiny viewport.
+     * Point count is a deliberately small heuristic here because accepted Trip points use a common
+     * sampling cadence; every omitted fragment remains available through fullRouteFitPoints.
+     */
+    val defaultFitPoints: List<TripGeoPoint>
+        get() {
+            val drawable = drawableSegments
+            if (drawable.isEmpty()) return segments.flatten()
+
+            val largestSegmentSize = drawable.maxOf { it.size }
+            val substantialSegments = drawable.filter { segment ->
+                segment.size >= 3 && segment.size * 2 >= largestSegmentSize
+            }
+            return substantialSegments.ifEmpty { drawable }.flatten()
+        }
+
+    /** Every persisted finite point, used only when the user explicitly asks to see the full Trip. */
+    val fullRouteFitPoints: List<TripGeoPoint>
+        get() = segments.flatten()
+
+    val defaultBounds: TripGeoBounds?
+        get() = boundsOf(defaultFitPoints)
+
+    val fullRouteBounds: TripGeoBounds?
+        get() = boundsOf(fullRouteFitPoints)
+
+    /** Compatibility alias for older callers; new code should choose default or full explicitly. */
+    val cameraFitPoints: List<TripGeoPoint>
+        get() = defaultFitPoints
+
+    private fun boundsOf(points: List<TripGeoPoint>): TripGeoBounds? {
+        if (points.isEmpty()) return null
+        return TripGeoBounds(
+            minLatitude = points.minOf { it.latitude },
+            maxLatitude = points.maxOf { it.latitude },
+            minLongitude = points.minOf { it.longitude },
+            maxLongitude = points.maxOf { it.longitude },
+        )
+    }
+}
+
+object TripRouteContinuityBuilder {
+    fun build(source: List<TripGeoPoint>): TripRouteContinuity {
+        val finite = source.filter {
+            it.latitude.isFinite() &&
+                it.longitude.isFinite() &&
+                it.latitude in -90.0..90.0 &&
+                it.longitude in -180.0..180.0
+        }
+        if (finite.isEmpty()) return TripRouteContinuity(emptyList(), emptyList())
+
+        val segments = mutableListOf<MutableList<TripGeoPoint>>()
+        val gaps = mutableListOf<TripRouteGap>()
+        var current = mutableListOf(finite.first())
+        segments += current
+
+        finite.zipWithNext().forEach { (previous, next) ->
+            val previousTime = previous.capturedAtEpochMillis
+            val nextTime = next.capturedAtEpochMillis
+            val breaksContinuity = if (previousTime != null && nextTime != null) {
+                val timing = TripCaptureTimeRules.between(
+                    previousEpochMillis = previousTime,
+                    previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
+                    currentEpochMillis = nextTime,
+                    currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
+                )
+                !timing.accepted || timing.breaksContinuity(TripRouteGeometryBuilder.LONG_GAP_THRESHOLD_MS)
+            } else {
+                false
+            }
+
+            if (breaksContinuity) {
+                gaps += TripRouteGap(from = previous, to = next)
+                current = mutableListOf()
+                segments += current
+            }
+            current += next
+        }
+
+        return TripRouteContinuity(
+            segments = segments.filter { it.isNotEmpty() },
+            gaps = gaps,
+        )
+    }
+}
+
 data class TripRoutePoint(
     val x: Float,
     val y: Float,
@@ -38,11 +145,10 @@ object TripRouteGeometryBuilder {
     ): TripRouteGeometry? {
         if (source.isEmpty() || maxPoints < 2) return null
 
-        val finite = source.filter { it.latitude.isFinite() && it.longitude.isFinite() }
-        if (finite.isEmpty()) return null
+        val continuity = TripRouteContinuityBuilder.build(source)
+        if (continuity.segments.isEmpty()) return null
 
-        val rawSegments = splitAtLongGaps(finite)
-        val sampledSegments = downsampleSegments(rawSegments, maxPoints)
+        val sampledSegments = downsampleSegments(continuity.segments, maxPoints)
         val sampled = sampledSegments.flatten()
         if (sampled.isEmpty()) return null
 
@@ -70,35 +176,6 @@ object TripRouteGeometryBuilder {
             minLongitude = minLon,
             maxLongitude = maxLon
         )
-    }
-
-    private fun splitAtLongGaps(source: List<TripGeoPoint>): List<List<TripGeoPoint>> {
-        if (source.isEmpty()) return emptyList()
-        val segments = mutableListOf<MutableList<TripGeoPoint>>()
-        var current = mutableListOf(source.first())
-        segments += current
-
-        source.zipWithNext().forEach { (previous, next) ->
-            val previousTime = previous.capturedAtEpochMillis
-            val nextTime = next.capturedAtEpochMillis
-            val breaksContinuity = if (previousTime != null && nextTime != null) {
-                val timing = TripCaptureTimeRules.between(
-                    previousEpochMillis = previousTime,
-                    previousElapsedRealtimeNanos = previous.capturedAtElapsedRealtimeNanos,
-                    currentEpochMillis = nextTime,
-                    currentElapsedRealtimeNanos = next.capturedAtElapsedRealtimeNanos,
-                )
-                !timing.accepted || timing.breaksContinuity(LONG_GAP_THRESHOLD_MS)
-            } else {
-                false
-            }
-            if (breaksContinuity) {
-                current = mutableListOf()
-                segments += current
-            }
-            current += next
-        }
-        return segments.filter { it.isNotEmpty() }
     }
 
     private fun downsampleSegments(source: List<List<TripGeoPoint>>, maxPoints: Int): List<List<TripGeoPoint>> {
