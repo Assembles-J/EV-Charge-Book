@@ -26,7 +26,7 @@ class TripRouteContinuityTest {
     }
 
     @Test
-    fun `isolated point after a long gap does not crush map camera fit`() {
+    fun `isolated point after a long gap does not crush default map fit`() {
         val mainRouteStart = TripGeoPoint(31.2000, 121.4000, 0L, 10.0)
         val mainRouteEnd = TripGeoPoint(31.2010, 121.4010, 4_000L, 12.0)
         val isolatedOutlier = TripGeoPoint(32.5000, 123.0000, 180_000L, null)
@@ -35,25 +35,57 @@ class TripRouteContinuityTest {
             listOf(mainRouteStart, mainRouteEnd, isolatedOutlier)
         )
 
-        assertEquals(listOf(mainRouteStart, mainRouteEnd), continuity.cameraFitPoints)
-        assertFalse(continuity.cameraFitPoints.contains(isolatedOutlier))
+        assertEquals(listOf(mainRouteStart, mainRouteEnd), continuity.defaultFitPoints)
+        assertFalse(continuity.defaultFitPoints.contains(isolatedOutlier))
+        assertEquals(listOf(mainRouteStart, mainRouteEnd, isolatedOutlier), continuity.fullRouteFitPoints)
         assertEquals(1, continuity.gaps.size)
     }
 
     @Test
-    fun `camera fit includes every drawable segment`() {
+    fun `tiny distant fragment stays out of default fit but remains in full route`() {
+        val mainRoute = listOf(
+            TripGeoPoint(31.2000, 121.4000, 0L),
+            TripGeoPoint(31.2010, 121.4010, 4_000L),
+            TripGeoPoint(31.2020, 121.4020, 8_000L),
+            TripGeoPoint(31.2030, 121.4030, 12_000L),
+        )
+        val tinyDistantFragment = listOf(
+            TripGeoPoint(32.5000, 123.0000, 180_000L),
+            TripGeoPoint(32.5010, 123.0010, 184_000L),
+        )
+
+        val continuity = TripRouteContinuityBuilder.build(mainRoute + tinyDistantFragment)
+
+        assertEquals(mainRoute, continuity.defaultFitPoints)
+        assertEquals(mainRoute + tinyDistantFragment, continuity.fullRouteFitPoints)
+        assertEquals(
+            TripGeoBounds(
+                minLatitude = 31.2000,
+                maxLatitude = 31.2030,
+                minLongitude = 121.4000,
+                maxLongitude = 121.4030,
+            ),
+            continuity.defaultBounds,
+        )
+        assertTrue(continuity.fullRouteBounds!!.maxLatitude > 32.0)
+    }
+
+    @Test
+    fun `multiple substantial continuous segments remain visible by default`() {
         val first = listOf(
             TripGeoPoint(31.2000, 121.4000, 0L),
             TripGeoPoint(31.2010, 121.4010, 4_000L),
+            TripGeoPoint(31.2020, 121.4020, 8_000L),
         )
         val second = listOf(
             TripGeoPoint(31.2500, 121.4500, 180_000L),
             TripGeoPoint(31.2510, 121.4510, 184_000L),
+            TripGeoPoint(31.2520, 121.4520, 188_000L),
         )
 
         val continuity = TripRouteContinuityBuilder.build(first + second)
 
-        assertEquals(first + second, continuity.cameraFitPoints)
-        assertTrue(continuity.cameraFitPoints.size >= 2)
+        assertEquals(first + second, continuity.defaultFitPoints)
+        assertEquals(first + second, continuity.fullRouteFitPoints)
     }
 }
