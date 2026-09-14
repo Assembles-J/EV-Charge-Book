@@ -93,7 +93,7 @@ fun BluetoothPromptScreen(
                     Text("已配对设备", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                     Text(
                         if (settings.autoStartOnConnect) {
-                            "选择车辆蓝牙；连接后将尝试自动开始行程。"
+                            "选择车辆蓝牙；连接后优先自动开始，后台受系统限制时会改为一键通知。"
                         } else {
                             "选择车辆蓝牙，连接时提醒你确认是否开始行程。"
                         },
@@ -167,7 +167,7 @@ private fun BluetoothStatusCockpit(
                     settings.deviceAddress == null -> "先在下方选择一个已配对设备。"
                     !enabled -> "设备已选择，但蓝牙行程检测当前关闭。"
                     settings.autoStartOnConnect && !canPostNotifications -> "自动开始需要通知权限，当前不会在后台静默记录。"
-                    settings.autoStartOnConnect -> "连接到此设备后，将尝试直接开始本次行程。"
+                    settings.autoStartOnConnect -> "连接后会优先自动开始；锁屏或后台受 Android 限制时，会通知你点一下开始。"
                     else -> "连接到此设备后，会提醒你确认是否开始行程。"
                 },
                 style = MaterialTheme.typography.bodyMedium,
@@ -187,7 +187,7 @@ private fun BluetoothStatusCockpit(
                         when {
                             !enabled -> "先选择车辆蓝牙并开启连接检测。"
                             !canPostNotifications -> "需要开启通知权限，确保自动记录始终对你可见。"
-                            else -> "开启后无需再次确认；已有行程或系统限制会阻止重复启动。"
+                            else -> "前台可直接开始；后台若被 Android 限制，会自动降级为一键通知。"
                         },
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -204,7 +204,7 @@ private fun BluetoothStatusCockpit(
             Text(
                 when {
                     !canPostNotifications -> "通知权限关闭时，自动开始被安全阻断；不会静默创建行程。"
-                    settings.autoStartOnConnect && enabled -> "自动开始只对当前车辆绑定的蓝牙生效；不会跨车辆启动行程。"
+                    settings.autoStartOnConnect && enabled -> "只对当前车辆绑定的蓝牙生效；后台限制时保持候选状态，不会先创建失败行程。"
                     else -> "默认仅做连接提醒，不读取车辆数据，也不会自动开始行程。"
                 },
                 style = MaterialTheme.typography.bodySmall,

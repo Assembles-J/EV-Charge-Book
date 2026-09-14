@@ -14,6 +14,42 @@ enum class AutoTripMode {
 }
 
 /**
+ * Runtime execution plan for the explicit per-vehicle `autoStartOnConnect` shortcut.
+ *
+ * This is deliberately separate from [AutoTripMode]. Bluetooth auto-start is a user-selected
+ * shortcut, not evidence that real driving has been verified.
+ */
+enum class BluetoothAutoStartExecution {
+    CONFIRMATION_PROMPT,
+    DIRECT_START,
+    USER_ACTION_REQUIRED,
+}
+
+/**
+ * Conservative Android execution policy for Bluetooth-triggered Trip starts.
+ *
+ * Android 12+ restricts foreground-service starts from background. Because Trip recording uses a
+ * location foreground service, a background Bluetooth callback must not optimistically create a
+ * Trip and discover the restriction afterwards. Instead, keep the detection session pending and
+ * require one visible user action, which is an Android-supported foreground-service start path.
+ */
+object BluetoothAutoStartExecutionPolicy {
+    const val BACKGROUND_FGS_RESTRICTION_API = 31
+
+    fun decide(
+        autoStartEnabled: Boolean,
+        sdkInt: Int,
+        appInForeground: Boolean,
+    ): BluetoothAutoStartExecution {
+        if (!autoStartEnabled) return BluetoothAutoStartExecution.CONFIRMATION_PROMPT
+        if (sdkInt < BACKGROUND_FGS_RESTRICTION_API || appInForeground) {
+            return BluetoothAutoStartExecution.DIRECT_START
+        }
+        return BluetoothAutoStartExecution.USER_ACTION_REQUIRED
+    }
+}
+
+/**
  * Product-level lifecycle for one Bluetooth detection session.
  */
 enum class AutoTripDetectionState {
