@@ -5,7 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Looper
+import android.os.HandlerThread
 
 /**
  * Framework-only fallback for devices where Google Play services location is unavailable or stalls.
@@ -16,6 +16,11 @@ import android.os.Looper
  */
 class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    private val callbackThreadOwner = RestartableResourceOwner(
+        create = { HandlerThread("evcb-platform-location") },
+        start = { it.start() },
+        stop = { it.quitSafely() },
+    )
     private var listener: LocationListener? = null
 
     @Volatile
@@ -27,6 +32,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         signalCallback: (TripLocationSourceSignal) -> Unit,
     ) {
         stop()
+        val callbackThread = callbackThreadOwner.acquire()
         val newListener = LocationListener(callback)
         listener = newListener
 
@@ -45,7 +51,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
                     SAMPLE_INTERVAL_MS,
                     0f,
                     newListener,
-                    Looper.getMainLooper()
+                    callbackThread.looper
                 )
             }.onSuccess {
                 successfulProviders += provider
@@ -57,6 +63,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         if (successfulProviders.isEmpty()) {
             listener = null
             registeredProviderNames = emptySet()
+            callbackThreadOwner.release()
             throw IllegalStateException("No enabled platform GPS/network provider could be registered", lastFailure)
         }
 
@@ -64,7 +71,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         signalCallback(
             TripLocationSourceSignal(
                 source = SOURCE_PLATFORM,
-                detail = "registered providers=${successfulProviders.joinToString(",")}",
+                detail = "registered providers=${successfulProviders.joinToString(",")} callbackLooper=platform_location",
             )
         )
     }
@@ -75,6 +82,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         listener?.let { current -> runCatching { locationManager.removeUpdates(current) } }
         listener = null
         registeredProviderNames = emptySet()
+        callbackThreadOwner.release()
     }
 
     private companion object {

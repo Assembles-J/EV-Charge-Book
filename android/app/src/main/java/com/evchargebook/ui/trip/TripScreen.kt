@@ -39,6 +39,10 @@ import com.evchargebook.data.entity.TripPointEntity
 import com.evchargebook.data.entity.TripSessionEntity
 import com.evchargebook.data.entity.TripStatus
 import com.evchargebook.data.entity.VehicleEntity
+import com.evchargebook.domain.TripGpsHealth
+import com.evchargebook.domain.TripGpsHealthSnapshot
+import com.evchargebook.domain.TripGpsHealthStatus
+import com.evchargebook.domain.TripGpsNoticePolicy
 import com.evchargebook.ui.theme.spacing
 import java.util.Locale
 import kotlinx.coroutines.delay
@@ -78,6 +82,22 @@ fun TripScreen(
     val activeVehicle = vehicles.firstOrNull { it.id == activeTrip.vehicleId } ?: vehicle
     val interrupted = activeTrip.status == TripStatus.INTERRUPTED
     val liveElapsedSeconds = rememberLiveTripElapsedSeconds(activeTrip)
+    val gpsSnapshot = rememberActiveGpsHealthSnapshot(activeTrip, selectedTripPoints)
+    var previousGpsStatus by remember(activeTrip.id) { mutableStateOf<TripGpsHealthStatus?>(null) }
+    var transientGpsNotice by remember(activeTrip.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(activeTrip.id, gpsSnapshot.status) {
+        val previous = previousGpsStatus
+        previousGpsStatus = gpsSnapshot.status
+        val notice = TripGpsNoticePolicy.transitionNotice(previous, gpsSnapshot.status)
+        if (notice == "GPS 已恢复") {
+            transientGpsNotice = notice
+            delay(GPS_RECOVERY_NOTICE_MS)
+            transientGpsNotice = null
+        } else {
+            transientGpsNotice = null
+        }
+    }
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -96,6 +116,14 @@ fun TripScreen(
             verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.sm)
         ) {
             item { TripActiveVehicleHeroV08(vehicle = activeVehicle) }
+
+            item {
+                ActiveGpsStatusCard(
+                    snapshot = gpsSnapshot,
+                    displayText = transientGpsNotice ?: TripGpsNoticePolicy.statusText(gpsSnapshot.status),
+                    lastProvider = selectedTripPoints.lastOrNull()?.provider,
+                )
+            }
 
             item {
                 Surface(
@@ -200,6 +228,60 @@ fun TripScreen(
 }
 
 @Composable
+private fun ActiveGpsStatusCard(
+    snapshot: TripGpsHealthSnapshot,
+    displayText: String,
+    lastProvider: String?,
+) {
+    val problem = snapshot.status in setOf(
+        TripGpsHealthStatus.DEGRADED,
+        TripGpsHealthStatus.LOST,
+        TripGpsHealthStatus.LONG_GAP,
+    )
+    val containerColor = when (snapshot.status) {
+        TripGpsHealthStatus.WAITING -> MaterialTheme.colorScheme.surfaceContainerHigh
+        TripGpsHealthStatus.GOOD -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = .45f)
+        TripGpsHealthStatus.DEGRADED -> MaterialTheme.colorScheme.tertiaryContainer
+        TripGpsHealthStatus.LOST,
+        TripGpsHealthStatus.LONG_GAP -> MaterialTheme.colorScheme.errorContainer
+    }
+    val contentColor = when (snapshot.status) {
+        TripGpsHealthStatus.LOST,
+        TripGpsHealthStatus.LONG_GAP -> MaterialTheme.colorScheme.onErrorContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        color = containerColor,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(MaterialTheme.spacing.md),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                displayText,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = contentColor,
+            )
+            val detail = when {
+                snapshot.status == TripGpsHealthStatus.WAITING -> "正在获取首个可信定位点"
+                problem && snapshot.secondsSinceLastAcceptedPoint != null ->
+                    "最近有效定位 ${formatGpsAge(snapshot.secondsSinceLastAcceptedPoint)}前${providerSuffix(lastProvider)}"
+                else -> "定位持续更新${providerSuffix(lastProvider)}"
+            }
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColor.copy(alpha = .78f),
+            )
+        }
+    }
+}
+
+@Composable
 private fun ActiveMetricRowsV08(
     elapsedSeconds: Long,
     distanceMeters: Double,
@@ -244,6 +326,38 @@ private fun rememberLiveTripElapsedSeconds(trip: TripSessionEntity): Long {
     return maxOf(trip.elapsedSeconds, wallClockElapsed)
 }
 
+@Composable
+private fun rememberActiveGpsHealthSnapshot(
+    trip: TripSessionEntity,
+    points: List<TripPointEntity>,
+): TripGpsHealthSnapshot {
+    var nowEpochMillis by remember(trip.id) { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(trip.id, trip.status) {
+        while (trip.status == TripStatus.RECORDING) {
+            nowEpochMillis = System.currentTimeMillis()
+            delay(1_000L)
+        }
+    }
+    val latestAcceptedAt = points.lastOrNull()?.capturedAtEpochMillis
+    return TripGpsHealth.evaluate(
+        nowEpochMillis = nowEpochMillis,
+        trackingStartedAtEpochMillis = trip.startedAtEpochMillis,
+        lastCallbackAtEpochMillis = latestAcceptedAt,
+        lastAcceptedPointAtEpochMillis = latestAcceptedAt,
+    )
+}
+
+private fun providerSuffix(provider: String?): String = when (provider) {
+    "gps" -> " · GPS"
+    "network" -> " · 网络定位"
+    "fused" -> " · 融合定位"
+    null -> ""
+    else -> " · $provider"
+}
+
+private fun formatGpsAge(seconds: Long): String =
+    if (seconds < 60L) "${seconds}秒" else "${seconds / 60L}分${seconds % 60L}秒"
+
 private fun formatActiveDistance(meters: Double): String =
     if (meters >= 1000.0) String.format(Locale.US, "%.2f km", meters / 1000.0)
     else if (meters >= 0.0) String.format(Locale.US, "%.0f m", meters)
@@ -261,3 +375,5 @@ private fun formatActiveDuration(seconds: Long): String {
         else -> "%02d:%02d".format(minutes, secs)
     }
 }
+
+private const val GPS_RECOVERY_NOTICE_MS = 5_000L
