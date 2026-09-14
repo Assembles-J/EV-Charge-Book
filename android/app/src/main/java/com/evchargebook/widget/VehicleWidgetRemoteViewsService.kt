@@ -38,6 +38,7 @@ private class VehicleWidgetRemoteViewsFactory(
     override fun getViewAt(position: Int): RemoteViews {
         val page = VehicleWidgetStackSpec.page(position)
         val views = RemoteViews(context.packageName, R.layout.widget_vehicle_page)
+        val stateUpdatedAtEpochMillis = snapshot.stateUpdatedAtEpochMillis
         val formatTime: (Long) -> String = { timestamp ->
             DateFormat.getTimeInstance(DateFormat.SHORT, Locale.getDefault())
                 .format(Date(timestamp))
@@ -123,8 +124,8 @@ private class VehicleWidgetRemoteViewsFactory(
                     R.id.widget_state_label,
                     when {
                         snapshot.activeCharging -> "充电记录中 · 本地状态"
-                        snapshot.stateUpdatedAtEpochMillis != null ->
-                            "上次记录 · ${formatTime(snapshot.stateUpdatedAtEpochMillis)}"
+                        stateUpdatedAtEpochMillis != null ->
+                            "上次记录 · ${formatTime(stateUpdatedAtEpochMillis)}"
                         snapshot.vehicleId != null -> "尚无车辆状态记录"
                         else -> "等待添加车辆"
                     },
