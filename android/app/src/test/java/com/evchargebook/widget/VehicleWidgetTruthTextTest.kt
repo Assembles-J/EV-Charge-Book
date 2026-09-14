@@ -83,31 +83,40 @@ class VehicleWidgetTruthTextTest {
     }
 
     @Test
-    fun `widget pages cycle forward through vehicle trip and charging`() {
-        assertEquals(1, navigatorCall("next", 0))
-        assertEquals(2, navigatorCall("next", 1))
-        assertEquals(0, navigatorCall("next", 2))
+    fun `widget navigation is a three page swipe stack without a dedicated open app action`() {
+        assertEquals(3, stackSpecCall("pageCount"))
+        assertEquals("VEHICLE", stackSpecCall("pageKey", 0))
+        assertEquals("TRIP", stackSpecCall("pageKey", 1))
+        assertEquals("CHARGING", stackSpecCall("pageKey", 2))
+        assertEquals("", stackSpecCall("actionLabel", 0))
+        assertEquals("行程", stackSpecCall("actionLabel", 1))
+        assertEquals("充电记录", stackSpecCall("actionLabel", 2))
+        assertFalse(
+            listOf(0, 1, 2)
+                .map { stackSpecCall("actionLabel", it) }
+                .contains("打开 App")
+        )
     }
 
     @Test
-    fun `widget pages cycle backward through vehicle trip and charging`() {
-        assertEquals(2, navigatorCall("previous", 0))
-        assertEquals(0, navigatorCall("previous", 1))
-        assertEquals(1, navigatorCall("previous", 2))
+    fun `tapping any swipe page opens the app while only contextual actions are specialized`() {
+        assertEquals("APP", stackSpecCall("tapDestination", 0))
+        assertEquals("APP", stackSpecCall("tapDestination", 1))
+        assertEquals("APP", stackSpecCall("tapDestination", 2))
+        assertEquals("NONE", stackSpecCall("actionDestination", 0))
+        assertEquals("TRIP", stackSpecCall("actionDestination", 1))
+        assertEquals("APP", stackSpecCall("actionDestination", 2))
     }
 
-    @Test
-    fun `widget page indicator is stable and one based`() {
-        assertEquals("1/3", navigatorCall("indicator", 0))
-        assertEquals("2/3", navigatorCall("indicator", 1))
-        assertEquals("3/3", navigatorCall("indicator", 2))
-    }
-
-    private fun navigatorCall(method: String, pageIndex: Int): Any? = runCatching {
-        val navigatorClass = Class.forName("com.evchargebook.widget.VehicleWidgetPageNavigator")
-        val navigator = navigatorClass.getField("INSTANCE").get(null)
-        navigatorClass
-            .getMethod(method, Int::class.javaPrimitiveType)
-            .invoke(navigator, pageIndex)
+    private fun stackSpecCall(method: String, position: Int? = null): Any? = runCatching {
+        val specClass = Class.forName("com.evchargebook.widget.VehicleWidgetStackSpec")
+        val spec = specClass.getField("INSTANCE").get(null)
+        if (position == null) {
+            specClass.getMethod(method).invoke(spec)
+        } else {
+            specClass
+                .getMethod(method, Int::class.javaPrimitiveType)
+                .invoke(spec, position)
+        }
     }.getOrNull()
 }
