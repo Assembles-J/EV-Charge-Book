@@ -32,15 +32,19 @@ data class TripRouteContinuity(
     /**
      * Default framing favors substantial continuous route context. A tiny fragment after a long
      * GPS gap stays truthful data, but it must not crush the useful route into a tiny viewport.
+     * Point count is a deliberately small heuristic here because accepted Trip points use a common
+     * sampling cadence; every omitted fragment remains available through fullRouteFitPoints.
      */
     val defaultFitPoints: List<TripGeoPoint>
         get() {
-            val substantialSegments = segments.filter { it.size >= 3 }
-            return when {
-                substantialSegments.isNotEmpty() -> substantialSegments.flatten()
-                drawableSegments.isNotEmpty() -> drawableSegments.flatten()
-                else -> segments.flatten()
+            val drawable = drawableSegments
+            if (drawable.isEmpty()) return segments.flatten()
+
+            val largestSegmentSize = drawable.maxOf { it.size }
+            val substantialSegments = drawable.filter { segment ->
+                segment.size >= 3 && segment.size * 2 >= largestSegmentSize
             }
+            return substantialSegments.ifEmpty { drawable }.flatten()
         }
 
     /** Every persisted finite point, used only when the user explicitly asks to see the full Trip. */
