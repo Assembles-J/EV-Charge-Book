@@ -2,7 +2,7 @@
 
 Updated: 2026-09-14
 Status: Operational status authority
-Baseline: `main@4bd7459f770f404778ce8ea1c45da02fdb974aa0`
+Baseline: `main@aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`
 
 ## Purpose
 
@@ -23,7 +23,7 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 The repository is no longer in a broad implementation phase. The current priority is:
 
 1. current-main physical acceptance for Trip reliability and the standard Android home widget;
-2. close focused Charging v0.7 hardening evidence;
+2. finish Charging v0.7 physical closeout;
 3. validate the mainland-China Trip basemap/provider decision;
 4. normalize old physical-only Issues so they do not look like missing implementation;
 5. finish repository governance settings and branch cleanup.
@@ -31,15 +31,6 @@ The repository is no longer in a broad implementation phase. The current priorit
 Do not start a new implementation stack from an old Issue before checking current `main` and merged PR history.
 
 ## Current PR queue
-
-### #340 — Charging monthly attribution regression
-
-- non-Draft current-main replacement for stale #328;
-- exactly one test file;
-- locks the existing product rule that cross-midnight / cross-month Charging belongs to the month where it **started**, using `ChargingRecordEntity.chargeTimeEpochMillis`;
-- no production logic change;
-- #328 is closed as superseded;
-- merge gate: exact-head Android Build must be Green before merge.
 
 ### #334 — Trip basemap diagnosability / OpenFreeMap Liberty trial
 
@@ -51,17 +42,24 @@ Do not start a new implementation stack from an old Issue before checking curren
 - loaded tiles but unusable mainland roads/labels, or persistent delivery errors -> reject OpenFreeMap for this product and move #199 toward an official mainland provider such as AMap;
 - if #334 is later merged, first normalize it onto current `main` and obtain new current-head CI.
 
+### Recently merged: #340 Charging monthly attribution regression
+
+#328 was closed as stale/superseded. The same focused one-file regression was replayed from current main as #340. Android Build #842 passed on exact head `399e9f3b3e352250712fa7791deafca00602b6ff`, then #340 was squash-merged as `aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`.
+
+The locked product rule is unchanged: a Charging event spanning midnight/month boundaries belongs to the date/month where it **started**, using `ChargingRecordEntity.chargeTimeEpochMillis`.
+
 ## Charging v0.7 — #251 / #321 closeout
 
-Charging v0.7 is no longer an implementation-candidate stack. The core lifecycle/calculation architecture is in `main`.
+Charging v0.7 is no longer an implementation-candidate stack. The core lifecycle/calculation architecture and focused September hardening are in `main`.
 
-Merged authority includes the previously recorded calculation/lifecycle work plus the September hardening:
+Merged hardening authority includes:
 
 - #323 — same-vehicle Trip / Charging mutual exclusion in transactional authority;
 - #325 — 30-day freshness guard for silent tariff auto-fill; stale/future facts are not silent authority;
-- #327 — corrected/deleted linked completed records invalidate misleading reusable completed-session tariff memory.
+- #327 — corrected/deleted linked completed records invalidate misleading reusable completed-session tariff memory;
+- #340 — current-main cross-month start-time attribution regression, exact-head Android Build #842 Green.
 
-The original #321 code blockers are therefore resolved. #321 now owns closeout acceptance rather than another implementation stack.
+The original #321 code blockers are resolved. #321 now owns closeout acceptance rather than another implementation stack.
 
 Current product rules:
 
@@ -77,7 +75,6 @@ Current product rules:
 
 Remaining closeout:
 
-- #340 exact-head CI + merge;
 - multi-vehicle unfinished-session discoverability;
 - real previous-release -> current-release in-place upgrade;
 - Room open/migration on real user data;
@@ -142,7 +139,7 @@ Merged progression includes:
 - #336 — direct standard-Android pin flow from `车辆 → 连接与数据 → 桌面小组件` using `AppWidgetManager.requestPinAppWidget()`;
 - #339 — three deterministic pages (vehicle / Trip / Charging), per-widget previous/next navigation and `1/3` indicator, plus ColorOS data-area collapse fix.
 
-#339 is merged as `main@4bd7459f770f404778ce8ea1c45da02fdb974aa0`. PR-head Android Build #838 and main-push Build #839 were Green; #839 produced the current Debug APK for physical widget acceptance.
+#339 was merged as `4bd7459f770f404778ce8ea1c45da02fdb974aa0`. PR-head Android Build #838 and main-push Build #839 were Green; #839 produced the current widget-acceptance Debug APK.
 
 Truth contract:
 
@@ -152,7 +149,7 @@ Truth contract:
 - Trip/Charging actions must reuse existing business authority;
 - telemetry-aware presentation remains future work under #300.
 
-Remaining #301 gate: install current main artifact, remove/re-add the widget so launcher metadata is reapplied, then verify direct pin, 1/3 -> 2/3 -> 3/3 navigation, no clipping/collapse, truthful unknowns, process death/reboot, state refresh, vehicle switch, active Trip/Charging actions, Dark/Light and at least one non-OPPO launcher.
+Remaining #301 gate: install current-main APK, remove/re-add the widget so launcher metadata is reapplied, then verify direct pin, 1/3 -> 2/3 -> 3/3 navigation, no clipping/collapse, truthful unknowns, process death/reboot, state refresh, vehicle switch, active Trip/Charging actions, Dark/Light and at least one non-OPPO launcher.
 
 ColorOS OEM `卡片中心` is **not** the standard AppWidget authority. Native ColorOS card feasibility is separate under #337 and must use official OEM APIs/SDKs only.
 
@@ -160,7 +157,7 @@ ColorOS OEM `卡片中心` is **not** the standard AppWidget authority. Native C
 
 Basic route interaction is already implemented. Remaining work is provider/context validation for mainland China: road/label usefulness, delivery reliability, licensing/attribution and truthful fallback.
 
-Do not merge a provider implementation merely because CI is Green. #334 is a physical provider experiment and its Shanghai result decides whether OpenFreeMap remains viable or #199 moves to an official mainland provider adapter.
+Do not merge a provider implementation merely because historical CI is Green. #334 is a physical provider experiment and its Shanghai result decides whether OpenFreeMap remains viable or #199 moves to an official mainland provider adapter.
 
 Persistent Trip truth remains WGS84. If a mainland renderer requires GCJ-02, conversion belongs at the renderer/provider adapter boundary rather than rewriting persisted Trip facts.
 
@@ -189,6 +186,8 @@ Remaining repository-setting owners:
 
 Repository metadata still needs to be the source of truth before either Issue closes. Do not claim a setting is complete from documentation alone.
 
+`android-build.yml` intentionally triggers only for `android/**` or changes to that workflow itself. A docs-only PR therefore does not produce an Android Build and should not manufacture a runtime change merely to trigger CI.
+
 The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.md`; this status file intentionally no longer freezes the old “nine workflow files” count because admin/helper workflows have continued to evolve.
 
 ## Documentation governance — #6
@@ -197,11 +196,11 @@ The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.m
 
 - #215 rewritten from “partial implementation” to code-complete / physical-only finalization evidence;
 - #321 rewritten from stale code blockers to Charging v0.7 closeout;
-- #301 synchronized through merged #339 and current artifact #839;
+- #301 synchronized through merged #339 and widget artifact #839;
 - #77 synchronized through merged #319;
 - #283 reframed around OEM matrix / evidence-driven follow-up after #319;
 - #137 reframed as latest-main data-trust investigation;
-- stale PR #328 closed and replaced by current-main #340;
+- stale PR #328 closed; current-main replacement #340 passed exact-head Build #842 and merged;
 - this authority baseline moved from 2026-09-02 to 2026-09-14.
 
 Remaining documentation debt:
