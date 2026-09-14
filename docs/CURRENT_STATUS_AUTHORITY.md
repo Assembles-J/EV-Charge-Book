@@ -24,13 +24,23 @@ The repository is no longer in a broad implementation phase. The current priorit
 
 1. current-main physical acceptance for Trip reliability and the standard Android home widget;
 2. finish Charging v0.7 physical closeout;
-3. validate the mainland-China Trip basemap/provider decision;
-4. normalize old physical-only Issues so they do not look like missing implementation;
-5. finish repository governance settings and branch cleanup.
+3. resolve the focused #338 Trip tunnel/provider-stall Draft safely, then validate it on device;
+4. validate the mainland-China Trip basemap/provider decision;
+5. normalize old physical-only Issues and finish repository governance settings.
 
 Do not start a new implementation stack from an old Issue before checking current `main` and merged PR history.
 
 ## Current PR queue
+
+### #338 — Trip tunnel/provider-stall recovery hardening
+
+- Draft, not runtime authority;
+- based on Trip 34 evidence where a moving gap recovered much later than the intended watchdog window;
+- proposed change moves Fused/platform callbacks and silence watchdogs away from the main looper and adds watchdog timing diagnostics (`expectedDelayMs`, `actualDelayMs`, `lateByMs`);
+- historical Android Build #836 is Green on head `56ad8491c21f7d379067ba6052c85313f208e4e9`, but that does not authorize merge onto the later current main;
+- current review blocker: both proposed `HandlerThread`s start during source construction while `stop()` removes updates/callbacks without quitting the owned threads. Because `TripTrackingService` can create a new `FusedTripLocationSource` on later registrations/lifecycles, the Draft needs explicit thread ownership/disposal before normalization;
+- after lifecycle/resource ownership is fixed with focused evidence, replay/sync onto current main, obtain fresh exact-head Android CI, then run the stated real-device normal-road -> Hongmei South Road tunnel -> open-road acceptance;
+- preserve existing 12s Fused failover, bounded platform re-registration, no synthetic tunnel points and no fabricated distance while location is unavailable.
 
 ### #334 — Trip basemap diagnosability / OpenFreeMap Liberty trial
 
@@ -100,6 +110,8 @@ Important merged steps include:
 
 #319 was driven by real Trip 32 evidence. It intentionally does **not** add a second tracking Service, WorkManager/Alarm heartbeat, long WakeLock, battery exemption, synthetic route points or unlimited provider retries.
 
+Trip 34 later produced a separate scheduler/provider-stall hypothesis tracked by Draft #338. Until #338's thread lifecycle blocker is resolved, normalized onto current main and physically accepted, it is not runtime authority and must not be described as a completed reliability fix.
+
 Locked truth boundaries:
 
 - `capturedAtElapsedRealtimeNanos` is preferred for new Trip point ordering/interval/long-gap decisions when available;
@@ -109,11 +121,11 @@ Locked truth boundaries:
 - stationary GNSS drift must not become distance;
 - provider recovery changes acquisition/diagnostics, not persisted fact meaning.
 
-Remaining P0 evidence is a **latest-main real-device drive** covering lock screen, another app foreground, stationary hold, provider interruption/recovery and final Trip completion. #77 cannot close from CI alone.
+Remaining P0 evidence is a **latest-main real-device drive** covering lock screen, another app foreground, stationary hold, provider interruption/recovery and final Trip completion. If #338 advances, its tunnel test becomes an additional focused acceptance rather than a replacement for #77's broader matrix.
 
 ### #283 OEM/recovery follow-up
 
-The old question “should bounded platform recovery be implemented?” is partially answered by merged #319. #283 now owns the OEM compatibility matrix and any **evidence-driven** next recovery step. No further provider state-machine complexity is authorized without a reproducible latest-main failure.
+The old question “should bounded platform recovery be implemented?” is partially answered by merged #319. #283 now owns the OEM compatibility matrix and any **evidence-driven** next recovery step. Draft #338 is such a focused candidate from Trip 34 evidence, but its unmerged code is not current authority.
 
 ### #137 distance-trust investigation
 
@@ -201,6 +213,7 @@ The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.m
 - #283 reframed around OEM matrix / evidence-driven follow-up after #319;
 - #137 reframed as latest-main data-trust investigation;
 - stale PR #328 closed; current-main replacement #340 passed exact-head Build #842 and merged;
+- final open-PR audit found Draft #338; its Trip 34 evidence and HandlerThread lifecycle blocker are now explicitly recorded rather than omitted;
 - this authority baseline moved from 2026-09-02 to 2026-09-14.
 
 Remaining documentation debt:
