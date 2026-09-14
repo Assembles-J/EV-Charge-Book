@@ -48,7 +48,9 @@ import com.evchargebook.domain.TripCaptureTimeRules
 import com.evchargebook.domain.TripContinuityRules
 import com.evchargebook.domain.TripPlaybackFrame
 import com.evchargebook.domain.TripSpeedTrustRules
+import com.evchargebook.domain.trip.TripGeoBounds
 import com.evchargebook.domain.trip.TripGeoPoint
+import com.evchargebook.domain.trip.TripRouteContinuityBuilder
 import com.evchargebook.domain.trip.TripRouteGeometryBuilder
 import com.evchargebook.ui.theme.EVDesignTokens
 import kotlinx.coroutines.launch
@@ -82,24 +84,36 @@ internal fun TripRouteViewportV07(
     val routePoints = remember(points) {
         points.filter { it.latitude.isFinite() && it.longitude.isFinite() }
     }
-    val geometry = remember(routePoints) {
-        TripRouteGeometryBuilder.build(
-            routePoints.map { point ->
-                TripGeoPoint(
-                    latitude = point.latitude,
-                    longitude = point.longitude,
-                    capturedAtEpochMillis = point.capturedAtEpochMillis,
-                    speedMps = trustedTripSpeedMpsV07(point),
-                    capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
-                )
-            }
-        )
+    val routeGeoPoints = remember(routePoints) {
+        routePoints.map { point ->
+            TripGeoPoint(
+                latitude = point.latitude,
+                longitude = point.longitude,
+                capturedAtEpochMillis = point.capturedAtEpochMillis,
+                speedMps = trustedTripSpeedMpsV07(point),
+                capturedAtElapsedRealtimeNanos = point.capturedAtElapsedRealtimeNanos,
+            )
+        }
     }
+    val continuity = remember(routeGeoPoints) { TripRouteContinuityBuilder.build(routeGeoPoints) }
+    val geometry = remember(routeGeoPoints) { TripRouteGeometryBuilder.build(routeGeoPoints) }
     val viewportKey = routePoints.firstOrNull()?.tripId
     var basemapFailed by remember(viewportKey) { mutableStateOf(false) }
     var fallbackDiagnostics by remember(viewportKey) { mutableStateOf(TripBasemapDiagnosticsV08()) }
 
     if (geometry?.isDrawable != true) return
+
+    val fullBounds = continuity.fullRouteBounds ?: TripGeoBounds(
+        minLatitude = geometry.minLatitude,
+        maxLatitude = geometry.maxLatitude,
+        minLongitude = geometry.minLongitude,
+        maxLongitude = geometry.maxLongitude,
+    )
+    val defaultCanvasBounds = if (!playbackMode && basemapFailed) {
+        continuity.defaultBounds ?: fullBounds
+    } else {
+        fullBounds
+    }
 
     Column(
         modifier = modifier.fillMaxWidth(),
@@ -124,10 +138,8 @@ internal fun TripRouteViewportV07(
                 frame = frame,
                 playbackMode = playbackMode,
                 finalEndpoint = finalEndpoint,
-                minLatitude = geometry.minLatitude,
-                maxLatitude = geometry.maxLatitude,
-                minLongitude = geometry.minLongitude,
-                maxLongitude = geometry.maxLongitude,
+                defaultBounds = defaultCanvasBounds,
+                fullBounds = fullBounds,
                 height = height,
             )
         }
@@ -251,10 +263,8 @@ private fun InteractiveTripRouteCanvasV07(
     frame: TripPlaybackFrame?,
     playbackMode: Boolean,
     finalEndpoint: Boolean,
-    minLatitude: Double,
-    maxLatitude: Double,
-    minLongitude: Double,
-    maxLongitude: Double,
+    defaultBounds: TripGeoBounds,
+    fullBounds: TripGeoBounds,
     height: Dp,
 ) {
     val accent = EVDesignTokens.Energy.green
@@ -265,10 +275,13 @@ private fun InteractiveTripRouteCanvasV07(
     val markerOutline = MaterialTheme.colorScheme.onSurface.copy(alpha = .92f)
     var zoom by remember(viewportKey) { mutableFloatStateOf(1f) }
     var pan by remember(viewportKey) { mutableStateOf(Offset.Zero) }
+    var showFullBounds by remember(viewportKey, playbackMode) { mutableStateOf(playbackMode || defaultBounds == fullBounds) }
     val scope = rememberCoroutineScope()
-    val viewportChanged = zoom > 1.001f || pan != Offset.Zero
+    val activeBounds = if (showFullBounds) fullBounds else defaultBounds
+    val viewportChanged = zoom > 1.001f || pan != Offset.Zero || !showFullBounds
 
     fun animateBackToFullRoute() {
+        showFullBounds = true
         val startZoom = zoom
         val startPan = pan
         scope.launch {
@@ -346,8 +359,8 @@ private fun InteractiveTripRouteCanvasV07(
                 val padBottom = 58.dp.toPx()
                 val width = (size.width - padX * 2).coerceAtLeast(1f)
                 val canvasHeight = (size.height - padTop - padBottom).coerceAtLeast(1f)
-                val latSpan = (maxLatitude - minLatitude).takeIf { it > 0.0 } ?: 1.0
-                val lonSpan = (maxLongitude - minLongitude).takeIf { it > 0.0 } ?: 1.0
+                val latSpan = (activeBounds.maxLatitude - activeBounds.minLatitude).takeIf { it > 0.0 } ?: 1.0
+                val lonSpan = (activeBounds.maxLongitude - activeBounds.minLongitude).takeIf { it > 0.0 } ?: 1.0
                 val longGapMillis = TripContinuityRules.LONG_GAP_SECONDS * 1_000L
                 val center = Offset(size.width / 2f, (padTop + canvasHeight / 2f))
                 val gapDash = PathEffect.dashPathEffect(
@@ -355,8 +368,8 @@ private fun InteractiveTripRouteCanvasV07(
                 )
 
                 fun project(latitude: Double, longitude: Double): Offset {
-                    val x = ((longitude - minLongitude) / lonSpan).toFloat().coerceIn(0f, 1f)
-                    val y = (1.0 - (latitude - minLatitude) / latSpan).toFloat().coerceIn(0f, 1f)
+                    val x = ((longitude - activeBounds.minLongitude) / lonSpan).toFloat().coerceIn(0f, 1f)
+                    val y = (1.0 - (latitude - activeBounds.minLatitude) / latSpan).toFloat().coerceIn(0f, 1f)
                     val base = Offset(padX + x * width, padTop + y * canvasHeight)
                     return Offset(
                         x = center.x + (base.x - center.x) * zoom + pan.x,
@@ -473,55 +486,29 @@ private fun InteractiveTripRouteCanvasV07(
                 }
             }
 
-            Row(
+            Surface(
                 modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
+                    .align(Alignment.BottomEnd)
+                    .padding(10.dp),
+                onClick = ::animateBackToFullRoute,
+                enabled = viewportChanged,
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .90f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    GestureChipV07("拖动")
-                    GestureChipV07("双指缩放")
-                }
-                Surface(
-                    onClick = ::animateBackToFullRoute,
-                    enabled = viewportChanged,
-                    shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .90f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .24f)),
-                ) {
-                    Text(
-                        "回到全程",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = if (viewportChanged) {
-                            MaterialTheme.colorScheme.onSurface
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .58f)
-                        },
-                    )
-                }
+                Text(
+                    "回到全程",
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = if (viewportChanged) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = .58f)
+                    },
+                )
             }
         }
-    }
-}
-
-@Composable
-private fun GestureChipV07(text: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = .84f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = .18f)),
-    ) {
-        Text(
-            text,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 
