@@ -1,5 +1,5 @@
 release_series=0.7
-requested_from_pr=275
-product_source_commit=fe47acdcced97bc044831e096692a44fe77fc8ee
-purpose=main-branch-device-acceptance
-requested_at=2026-09-01T08:08:00Z
+requested_from_pr=334
+product_source_commit=d8582063aaee1a5caf248b2c228d463859d49dd5
+purpose=main-branch-map-provider-device-acceptance
+requested_at=2026-09-14T05:24:00Z
