@@ -1,8 +1,8 @@
 # EV Charge Book Current Status Authority
 
-Updated: 2026-09-02
+Updated: 2026-09-14
 Status: Operational status authority
-Baseline: `main@5878cf72ef8ca39a469570529190cc6af7e2a8e5`
+Baseline: `main@aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`
 
 ## Purpose
 
@@ -16,247 +16,209 @@ When status sources disagree, use this order:
 4. owning Open Issue for remaining acceptance or future work;
 5. older roadmap/history/versioned design text.
 
-An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime authority. CI Green is not physical acceptance.
+An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime authority. CI Green is not physical acceptance. Historical Green CI does not authorize merge after the effective head/base changes.
 
-## Current repository governance
+## Executive status
 
-### Implemented governance baseline
+The repository is no longer in a broad implementation phase. The current priority is:
 
-Merged PR #263 established:
+1. current-main physical acceptance for Trip reliability and the standard Android home widget;
+2. finish Charging v0.7 physical closeout;
+3. validate the mainland-China Trip basemap/provider decision;
+4. normalize old physical-only Issues so they do not look like missing implementation;
+5. finish repository governance settings and branch cleanup.
 
-- root README as a stable project entrypoint instead of a stale pre-Room/MVP checklist;
-- root MIT `LICENSE`;
-- `.github/PULL_REQUEST_TEMPLATE.md`;
-- evidence-first Bug / Feature / Documentation-Governance Issue templates;
-- `docs/BRANCH_AND_PR_GOVERNANCE.md` for branch lifecycle, stacked PRs and merge evidence.
+Do not start a new implementation stack from an old Issue before checking current `main` and merged PR history.
 
-### Remaining repository-setting gaps
+## Current PR queue
 
-Current repository metadata still reports:
+### #334 — Trip basemap diagnosability / OpenFreeMap Liberty trial
 
-- `main` not branch-protected;
-- required status checks empty;
-- repository rulesets empty;
-- `delete_branch_on_merge = false`.
+- Draft physical experiment, not runtime authority;
+- changes OpenFreeMap style to `liberty` and adds debug-only MapLibre basemap diagnostics;
+- historical Android Build #831 was Green on its old head;
+- must be validated on the target Shanghai device before provider choice;
+- useful tiles + roads/labels -> OpenFreeMap remains viable for display;
+- loaded tiles but unusable mainland roads/labels, or persistent delivery errors -> reject OpenFreeMap for this product and move #199 toward an official mainland provider such as AMap;
+- if #334 is later merged, first normalize it onto current `main` and obtain new current-head CI.
 
-The 2026-08-31 branch audit returned 192 remote branch refs across two pages.
+### Recently merged: #340 Charging monthly attribution regression
 
-Ownership:
+#328 was closed as stale/superseded. The same focused one-file regression was replayed from current main as #340. Android Build #842 passed on exact head `399e9f3b3e352250712fa7791deafca00602b6ff`, then #340 was squash-merged as `aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`.
 
-- #75 — `main` protection + current-head required Android CI policy;
-- #265 — stale remote branch cleanup + merge-time branch deletion.
+The locked product rule is unchanged: a Charging event spanning midnight/month boundaries belongs to the date/month where it **started**, using `ChargingRecordEntity.chargeTimeEpochMillis`.
 
-The connected GitHub tool can read these states but currently exposes neither branch-protection/ruleset writes nor remote-ref deletion. #75/#265 must not be closed until GitHub metadata itself confirms the change.
+## Charging v0.7 — #251 / #321 closeout
 
-## Active delivery streams
+Charging v0.7 is no longer an implementation-candidate stack. The core lifecycle/calculation architecture and focused September hardening are in `main`.
 
-### Charging v0.7 — parent #251
+Merged hardening authority includes:
 
-Current product/data authority:
+- #323 — same-vehicle Trip / Charging mutual exclusion in transactional authority;
+- #325 — 30-day freshness guard for silent tariff auto-fill; stale/future facts are not silent authority;
+- #327 — corrected/deleted linked completed records invalidate misleading reusable completed-session tariff memory;
+- #340 — current-main cross-month start-time attribution regression, exact-head Android Build #842 Green.
 
-- #251 parent workflow and end-to-end closeout;
-- `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md`;
-- #252 shared calculation contract + physical semantic acceptance;
-- #260 manual Add/Edit billing editor physical acceptance;
-- #253 active / pending / completion lifecycle physical acceptance;
-- #289 compact Start/Finish + delayed-meter current-main physical acceptance;
-- #254 current-location truth / optional future map-point picker;
-- #311 reusable charging presets after v0.7 acceptance, explicitly non-blocking.
+The original #321 code blockers are resolved. #321 now owns closeout acceptance rather than another implementation stack.
 
-Current `main` implementation is no longer an implementation-candidate/Draft stack. Merged authority now includes:
-
-- #268 — centralized calculation/provenance engine;
-- #261 — shared Add/Edit `ChargeBillingEditor` adoption;
-- #271 — durable charging-session persistence + exactly-once completion foundation;
-- #276 — separate `开始充电` / `充电记录维护`, Start screen and persisted active card;
-- #277 — completion UI;
-- #292 — compact Start/Finish physical-feedback UX;
-- #294 — durable `PENDING_DETAILS`, Room v17 -> v18 and Backup v10 foundation;
-- #297 — truthful delayed-meter lifecycle, backfill and explicit pending delete;
-- #302 — `修改结束信息` for pending end time/SOC/location/odometer;
-- #305 — pending state and complete/defer/update-pending/backfill/discard commands routed through `MainViewModel`; Records/Completion UI no longer constructs a second database/repository lifecycle boundary;
-- #310 — source-aware, location-safe tariff reuse and explicit-user-edit protection;
-- #313 — displayed completion duration/time validity routed through the shared `ChargeCalculationEngine`.
-
-Key current truth rules:
+Current product rules:
 
 - no fake live SOC/BMS/charger-power telemetry;
-- target SOC is intent, not actual end SOC;
-- unknown meter/cost remains null, never fake zero;
+- target SOC is intent, not an actual end-SOC fact;
+- unknown meter/cost stays unknown, never fake zero;
 - only user-confirmed meter/charger kWh may finalize a completed record;
-- a kWh value derived only from cost/price linkage is not a physical meter fact;
-- pending physical charge-end facts may update VehicleState but pending does not enter completed charging statistics;
+- pending physical charge-end facts may update VehicleState but do not enter completed charging statistics;
 - completion/backfill remains exactly-once under repository/session transaction authority;
-- manual completed-record maintenance remains independent of active-session lifecycle;
-- SOC-delta × battery capacity is display-only vehicle-energy estimate, not measured/BMS truth;
-- automatic tariff reuse requires same vehicle + normalized location + charger type and stored session tariff provenance; other historical prices are suggestion-only;
-- displayed completion duration consumes the shared calculation contract; invalid `end <= start` uses the shared timing issue.
+- manual completed-record maintenance remains independent from active-session lifecycle;
+- automatic tariff reuse requires matching vehicle/location/type/provenance and freshness;
+- a cross-month completed Charging record is attributed by charging **start time**.
 
-Architecture follow-up #285 is completed/closed after #305. Do not reopen it to duplicate transaction logic.
+Remaining closeout:
 
-Charging v0.7 implementation and scope decisions are now resolved. Remaining closeout is current-main physical acceptance:
-
-- real historical/current Android database-open migration pass;
-- ACTIVE process-kill/relaunch and active-edit persistence;
-- PENDING_DETAILS process-kill/relaunch + next-day backfill exactly once;
-- complete/backfill retry no duplicate;
+- multi-vehicle unfinished-session discoverability;
+- real previous-release -> current-release in-place upgrade;
+- Room open/migration on real user data;
+- ACTIVE/PENDING process-death and reboot recovery;
+- complete/backfill retry without duplicate records;
 - pending end-fact revision + VehicleState truth;
-- cancel/delete produce no historical record;
-- active/pending backup and restore guards;
-- current vehicle/time/location/SOC/tariff defaults;
-- shared billing priority/conflict behavior on device;
-- completion date/time refreshes shared duration truthfully;
-- Dark/Light, 320–360dp, fontScale 1.3+, keyboard/decimal/back-navigation acceptance.
+- cancel/delete produces no historical charging record;
+- Dark/Light, 320–360dp, fontScale 1.3+, keyboard/decimal/back-navigation physical acceptance.
 
-#253/#289 remain Open because CI Green is not physical lifecycle acceptance. #252/#260 remain Open because CI Green is not physical calculation/editor acceptance.
+#252/#253/#260/#289 remain physical/semantic acceptance owners. #311 reusable presets remain future work and do not block v0.7 closeout.
 
-Explicit non-blocking future work:
+## Trip reliability — #77
 
-- #254 interactive map-point picker, if still desired;
-- #311 reusable charging presets after physical lifecycle acceptance;
-- dedicated completed charging detail/analytics, if later product UX requires it.
+Current `main` contains the established Fused/platform, diagnostics and monotonic-timing baseline plus #319.
 
-### Vehicle maturity / catalog / resource onboarding — #244 and #20
+Important merged steps include:
 
-Already in `main` before #264:
+- #231 — trusted-speed-first stationary distance handling;
+- #275 — per-Trip diagnostic export;
+- #278/#280 — OEM/background guidance and source/power observability;
+- #281 — Room v17 TripPoint epoch + `elapsedRealtimeNanos`; monotonic timing is preferred for new Trip intervals/continuity;
+- #319 — evidence-driven bounded platform-provider re-registration and contradictory zero-speed displacement protection.
 
-- user vehicle nickname and nickname-first display;
-- managed-catalog-only primary add flow;
-- standard vehicle facts read-only in Android;
-- managed brand metadata / stable `brandId`;
-- managed Light/Dark Brand Logo publishing and Android cached rendering;
-- range-standard metadata;
-- catalog JSON/CSV import/export and template;
-- managed Hero semantic key selection;
-- batch Brand Logo / Hero helpers;
-- copyable Logo/Hero standards and prompt center.
+#319 was driven by real Trip 32 evidence. It intentionally does **not** add a second tracking Service, WorkManager/Alarm heartbeat, long WakeLock, battery exemption, synthetic route points or unlimited provider retries.
 
-Merged PR #264 further advanced the resource workflow:
+Locked truth boundaries:
 
-- unified `车型资源工作台` for one-vehicle resource-bundle onboarding;
-- one resource-bundle JSON carrying one managed brand + one vehicle plus coordinated assets;
-- mixed Logo/Hero multi-file queue with automatic matching as suggestion only and explicit manual correction;
-- duplicate/shared Hero-key review with explicit update confirmation;
-- all-in-one full asset-bundle prompt while retaining the single-item prompt library;
-- stable base `heroArtworkKey` with published `<base>-dark` / `<base>-light` variants;
-- Android Hero resolution with backward-compatible fallback:
-  - Dark: `<base>-dark -> legacy <base>`;
-  - Light: `<base>-light -> <base>-dark -> legacy <base>`;
-- old split batch Logo/Hero panels retired from the main admin UI; single-item maintenance remains;
-- new `Admin Resource Workbench` CI contract.
+- `capturedAtElapsedRealtimeNanos` is preferred for new Trip point ordering/interval/long-gap decisions when available;
+- civil epoch remains a readable/exportable fact and historical fallback;
+- `LONG_GAP_SECONDS = 120` remains a hard continuity boundary;
+- no synthetic points and no fabricated route/distance/speed across true gap/rebase boundaries;
+- stationary GNSS drift must not become distance;
+- provider recovery changes acquisition/diagnostics, not persisted fact meaning.
 
-Current product/admin authority: `RESOURCE_BUNDLE_WORKFLOW.md`, owner #244.
+Remaining P0 evidence is a **latest-main real-device drive** covering lock screen, another app foreground, stationary hold, provider interruption/recovery and final Trip completion. #77 cannot close from CI alone.
 
-#244 owns remaining real workflow/device maturity, not implementation of another disconnected Logo/Hero/catalog onboarding system.
+### #283 OEM/recovery follow-up
 
-#20 remains the data-quality owner: provenance, normalization, conflicts/corrections, broader real-model coverage and coverage metrics. The unified one-vehicle workbench does not replace bulk catalog data-quality work.
+The old question “should bounded platform recovery be implemented?” is partially answered by merged #319. #283 now owns the OEM compatibility matrix and any **evidence-driven** next recovery step. No further provider state-machine complexity is authorized without a reproducible latest-main failure.
 
-### Trip background/location reliability — #77
+### #137 distance-trust investigation
 
-Current `main` includes:
+The August 9.x-km symptom remains historical evidence, not a confirmed current algorithm bug. If latest-main reproduces material distance inflation, diagnose from persisted TripPoints/diagnostics and odometer/reference-route evidence before changing distance trust rules.
 
-- #80 removal of old 8m callback displacement gate;
-- #184 delayed-delivery grace while preserving original `Location.time` authority and 120s LONG_GAP;
-- #217 Google Play Fused production source;
-- #220 non-GMS platform GPS/network fallback;
-- #226 ~1 Hz active Trip location target and faster stationary transition handling;
-- #231 trusted-speed-first stationary distance handling;
-- #234 silent-provider recovery with platform-provider restrictions and Google Fused watchdog fallback.
+### #215 elapsed timer/finalization
 
-Truth boundaries remain:
+Current-main audit confirms `ChargingRepository.stopActiveTrip()` writes final `elapsedSeconds` from:
 
-- original `Location.time` is capture-time authority;
-- no synthetic route points;
-- `LONG_GAP_SECONDS = 120` is a hard continuity boundary;
-- stationary GNSS drift must not become distance.
+`TripRules.elapsedSeconds(active.startedAtEpochMillis, endedAtEpochMillis)`
 
-#77 remains Open for current-main physical lock-screen/background/provider-loss acceptance. Closed #203 no longer owns a missing Fused migration.
+Therefore final duration does not depend on the last GPS callback. #215 no longer has a production-code finalization gap; it remains open only for latest-main physical elapsed/finalization consistency.
 
-### Bluetooth-triggered Trip — #235
+## Android home widget — #301
 
-Already in `main`:
+Stage-1 Local First implementation is in `main`.
 
-- #239 auto-trip mode/state/reason model + eligibility policy;
-- #241 persisted per-vehicle Bluetooth detection sessions, dedupe, ignore handling and notification entry flow;
-- #242 explicit per-vehicle Bluetooth auto-start option routed through `TripStartCoordinator` with location/notification/active-Trip guards.
+Merged progression includes:
 
-#235 remains Open for OEM/background physical acceptance, trigger-quality policy, verified-movement evaluation and possible later parking-assistant work. Bluetooth connection alone is not proven driving evidence.
+- #306 — Local First widget baseline;
+- #330 — presentation redesign / compact-expanded behavior;
+- #332 — provider exposure to launcher;
+- #336 — direct standard-Android pin flow from `车辆 → 连接与数据 → 桌面小组件` using `AppWidgetManager.requestPinAppWidget()`;
+- #339 — three deterministic pages (vehicle / Trip / Charging), per-widget previous/next navigation and `1/3` indicator, plus ColorOS data-area collapse fix.
 
-### Trip interaction / analysis
+#339 was merged as `4bd7459f770f404778ce8ea1c45da02fdb974aa0`. PR-head Android Build #838 and main-push Build #839 were Green; #839 produced the current widget-acceptance Debug APK.
 
-Already in `main`:
+Truth contract:
 
-- route pan/pinch/reset and trusted-speed route encoding (#219/#221/#230);
-- trend pan/zoom/tap and stock-style long-press drag inspection (#218/#227);
-- smoother SOC wheel behavior (#230);
-- uncertainty-aware altitude filtering (#228/#232);
-- recent-completed-Trip consumption input for end-SOC estimator (#213);
-- truthful trajectory playback engine/UI (#198/#201).
+- show only app-known Local First facts;
+- unknown SOC/mileage stays `--` / `-- km`;
+- do not infer live connection/range/lock/location/OEM-control state;
+- Trip/Charging actions must reuse existing business authority;
+- telemetry-aware presentation remains future work under #300.
 
-Remaining map work under #192/#199 is basemap/provider/context validation, road labels, licensing/attribution, mainland-China usefulness and truthful fallback — not basic pan/zoom.
+Remaining #301 gate: install current-main APK, remove/re-add the widget so launcher metadata is reapplied, then verify direct pin, 1/3 -> 2/3 -> 3/3 navigation, no clipping/collapse, truthful unknowns, process death/reboot, state refresh, vehicle switch, active Trip/Charging actions, Dark/Light and at least one non-OPPO launcher.
 
-### Updater
+ColorOS OEM `卡片中心` is **not** the standard AppWidget authority. Native ColorOS card feasibility is separate under #337 and must use official OEM APIs/SDKs only.
 
-Updater runtime includes release discovery, DownloadManager, SHA-256, installer handoff, prompt dedupe and #247 persisted recovery of download/install-ready state across process restart.
+## Trip map/provider — #192 / #199 / #334
 
-#102 remains valid only as the production old-APK -> new-APK physical in-place-upgrade acceptance owner.
+Basic route interaction is already implemented. Remaining work is provider/context validation for mainland China: road/label usefulness, delivery reliability, licensing/attribution and truthful fallback.
 
-## GitHub Actions workflow ownership
+Do not merge a provider implementation merely because historical CI is Green. #334 is a physical provider experiment and its Shanghai result decides whether OpenFreeMap remains viable or #199 moves to an official mainland provider adapter.
 
-Detailed trigger/ownership boundaries are documented in `WORKFLOW_OWNERSHIP.md`.
+Persistent Trip truth remains WGS84. If a mainland renderer requires GCJ-02, conversion belongs at the renderer/provider adapter boundary rather than rewriting persisted Trip facts.
 
-At this baseline there are **nine** workflow files:
+## Vehicle/catalog/resource workflow — #244 / #20
 
-- `android-build.yml` — Android PR/push validation + Debug APK artifact;
-- `android-release.yml` — manual production signed APK publish path;
-- `hero-admin.yml` — integrated resource-admin application/container/lifecycle validation;
-- `hero-admin-deploy.yml` — production resource-admin deployment on qualifying `main` push;
-- `hero-assets-publish.yml` — Hero asset package validation;
-- `admin-resource-workbench.yml` — unified vehicle resource-bundle workbench contract validation;
-- `admin-batch-image-upload.yml` — retained focused/legacy batch-helper regression contract, not preferred new-model onboarding authority;
-- `admin-prompt-library.yml` — single-item + full-bundle prompt/index contract validation;
-- `vehicle-catalog-admin-tools.yml` — catalog admin/import-export browser-contract validation.
+The unified managed-resource workflow remains the current admin authority. #244 owns real workflow/device maturity; #20 owns catalog data quality, provenance, normalization, conflict correction, model coverage and coverage metrics.
 
-These workflows overlap by paths intentionally but do not have the same responsibility. Validation, resource publication through existing admin endpoints and production admin deployment are distinct states.
+Do not build a second disconnected Logo/Hero/catalog onboarding system from historical Issues.
+
+## Bluetooth-triggered Trip — #235
+
+The persisted per-vehicle Bluetooth detection/auto-start foundation is already in `main`. #235 remains for OEM/background physical acceptance, trigger-quality policy and possible later verified-movement evolution. Bluetooth connection alone is not proven driving evidence.
+
+## Updater — #102
+
+Runtime includes release discovery, DownloadManager, SHA-256, installer handoff, prompt dedupe and persisted recovery of download/install-ready state across process restart. #102 remains only as the production old-APK -> new-APK physical in-place-upgrade acceptance owner.
+
+## Repository governance
+
+PR #263 established the stable README, MIT license, PR template, evidence-first Issue templates and `BRANCH_AND_PR_GOVERNANCE.md`.
+
+Remaining repository-setting owners:
+
+- #75 — protect `main` and require current-head Android CI;
+- #265 — stale remote branch cleanup and merge-time branch deletion.
+
+Repository metadata still needs to be the source of truth before either Issue closes. Do not claim a setting is complete from documentation alone.
+
+`android-build.yml` intentionally triggers only for `android/**` or changes to that workflow itself. A docs-only PR therefore does not produce an Android Build and should not manufacture a runtime change merely to trigger CI.
+
+The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.md`; this status file intentionally no longer freezes the old “nine workflow files” count because admin/helper workflows have continued to evolve.
+
+## Documentation governance — #6
+
+2026-09-14 reconciliation:
+
+- #215 rewritten from “partial implementation” to code-complete / physical-only finalization evidence;
+- #321 rewritten from stale code blockers to Charging v0.7 closeout;
+- #301 synchronized through merged #339 and widget artifact #839;
+- #77 synchronized through merged #319;
+- #283 reframed around OEM matrix / evidence-driven follow-up after #319;
+- #137 reframed as latest-main data-trust investigation;
+- stale PR #328 closed; current-main replacement #340 passed exact-head Build #842 and merged;
+- this authority baseline moved from 2026-09-02 to 2026-09-14.
+
+Remaining documentation debt:
+
+- normalize old Trip/UI acceptance Issues that still call historical SHAs “latest main”;
+- narrow old #70 local-Hero/model-whitelist wording to physical visual closeout;
+- add explicit supersession/version notes to older docs that still look current;
+- periodically re-audit `WORKFLOW_OWNERSHIP.md` as admin helper surfaces evolve.
 
 ## Authority maintenance rules
 
 1. Update the owning Issue whenever implementation stage changes.
 2. Close superseded implementation-only Issues when their code is merged and physical acceptance is owned elsewhere.
 3. Keep physical-only Issues explicitly written as physical acceptance; do not leave stale implementation checklists.
-4. Draft PRs may propose implementation/design but are not runtime authority.
+4. Draft/unmerged PRs are not runtime authority.
 5. `PROJECT_MASTER.md` owns stable architecture/product principles; this file owns fast-moving execution status.
-6. `ROADMAP.md` owns milestone ordering. When its dated prose lags this file, this file wins for current execution state.
-7. Historical design/reference documents remain useful only when their version/supersession boundary is explicit.
+6. `ROADMAP.md` owns milestone ordering, not current merge/CI facts.
+7. Historical design/reference docs remain useful only within explicit version/supersession boundaries.
 8. No broad reimplementation may start from an old Issue before checking current `main` and merged PR history.
-9. Stacked parent branches remain until every Open child is safely retargeted.
-10. Historical Green CI does not authorize merge after effective head/base changes.
-11. When an admin surface is superseded, its old workflow must be explicitly treated as retained regression coverage or retired; existence of a workflow file does not make that old UI the current product authority.
-
-## Current governance queue
-
-Completed in the 2026-08-31 audit:
-
-- #6 authority graph reconciled;
-- #203/#214/#222/#223/#224/#225 stale implementation Issues closed;
-- #77/#235/#244/#20/#192/#205/#102/#94/#215 rewritten to current responsibilities;
-- stale Draft PR #236/#255 closed without merge;
-- README/LICENSE/templates/branch-stack rules merged by #263;
-- #75 rewritten to exact current branch-protection/CI target;
-- #265 created for stale-branch cleanup/merge-time deletion;
-- PR #264 resource workbench / Hero theme-variant baseline incorporated into current authority.
-
-Charging authority normalized 2026-09-02:
-
-- #268/#261/#271/#276/#277/#292/#294/#297/#302/#305/#310/#313 recorded as merged runtime authority;
-- #285 closed as completed architecture cleanup;
-- #251/#252/#253/#260/#289 normalized to distinguish merged implementation from current-main physical acceptance;
-- #311 created for reusable charging presets after v0.7 acceptance and explicitly removed from v0.7 blockers;
-- old Draft/candidate prose removed from current Charging ownership;
-- `CHARGING_V0.7_DESIGN_AND_IMPLEMENTATION_PLAN.md` updated to current lifecycle/truth/closeout authority.
-
-Remaining documentation debt:
-
-- reconcile older Trip/UI acceptance Issues that still call historical SHAs “latest main”;
-- narrow old #70 local-Hero/model-whitelist wording to physical visual closeout;
-- add explicit supersession/version notes to older docs that still look current.
+9. Historical Green CI does not authorize merge after effective head/base changes.
+10. CI Green and physical/production acceptance remain distinct evidence classes.
