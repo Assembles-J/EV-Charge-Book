@@ -4,7 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.location.Location
 import android.os.Handler
-import android.os.Looper
+import android.os.HandlerThread
+import android.os.SystemClock
 import com.evchargebook.domain.TripPlatformRecoveryPolicy
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -32,7 +33,11 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         LocationServices.getFusedLocationProviderClient(context)
     private val platformFallback = PlatformTripLocationSource(context)
     private val fallbackStarted = AtomicBoolean(false)
-    private val mainHandler = Handler(Looper.getMainLooper())
+
+    // Keep provider callbacks and silence watchdogs off the UI/main looper. A busy or suspended
+    // main looper must not turn a 12-second recovery policy into a multi-minute GPS gap.
+    private val locationThread = HandlerThread("evcb-trip-location").apply { start() }
+    private val locationHandler = Handler(locationThread.looper)
 
     @Volatile private var running = false
     private var callback: LocationCallback? = null
@@ -85,14 +90,13 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         }
 
         this.callback = fusedCallback
-        // The service starts this source from an IO coroutine; always provide a concrete Looper.
-        client.requestLocationUpdates(request, fusedCallback, Looper.getMainLooper())
+        client.requestLocationUpdates(request, fusedCallback, locationThread.looper)
             .addOnSuccessListener {
                 if (running && this.callback === fusedCallback && !fallbackStarted.get()) {
                     signalCallback(
                         TripLocationSourceSignal(
                             source = SOURCE_FUSED,
-                            detail = "registered high_accuracy intervalMs=1000",
+                            detail = "registered high_accuracy intervalMs=1000 callbackLooper=trip_location",
                         )
                     )
                     armPrimarySilenceWatchdog(callback, signalCallback)
@@ -167,8 +171,16 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     ) {
         cancelPrimarySilenceWatchdog()
         if (!running || fallbackStarted.get()) return
+        val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
         val watchdog = Runnable {
             if (running && !fallbackStarted.get()) {
+                val actualDelayMs = SystemClock.elapsedRealtime() - scheduledAtElapsedMs
+                signalCallback(
+                    TripLocationSourceSignal(
+                        source = SOURCE_FUSED,
+                        detail = "silence_watchdog_fired expectedDelayMs=$PRIMARY_SILENCE_TIMEOUT_MS actualDelayMs=$actualDelayMs lateByMs=${(actualDelayMs - PRIMARY_SILENCE_TIMEOUT_MS).coerceAtLeast(0L)}",
+                    )
+                )
                 startPlatformFallback(
                     callback = callback,
                     signalCallback = signalCallback,
@@ -177,7 +189,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
             }
         }
         primarySilenceWatchdog = watchdog
-        mainHandler.postDelayed(watchdog, PRIMARY_SILENCE_TIMEOUT_MS)
+        locationHandler.postDelayed(watchdog, PRIMARY_SILENCE_TIMEOUT_MS)
     }
 
     private fun armPlatformSilenceWatchdog(
@@ -189,14 +201,16 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         val monitoredProvider = platformMonitoredProvider ?: return
         val delayMillis =
             TripPlatformRecoveryPolicy.recoveryDelayMillis(platformRecoveryAttempts) ?: return
+        val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
         val watchdog = Runnable {
             if (!running || !fallbackStarted.get()) return@Runnable
+            val actualDelayMs = SystemClock.elapsedRealtime() - scheduledAtElapsedMs
             val attempt = platformRecoveryAttempts + 1
             platformRecoveryAttempts = attempt
             signalCallback(
                 TripLocationSourceSignal(
                     source = SOURCE_PLATFORM,
-                    detail = "recovery_reregister attempt=$attempt provider=$monitoredProvider silenceMs=$delayMillis",
+                    detail = "recovery_reregister attempt=$attempt provider=$monitoredProvider silenceMs=$delayMillis actualDelayMs=$actualDelayMs lateByMs=${(actualDelayMs - delayMillis).coerceAtLeast(0L)}",
                 )
             )
             runCatching {
@@ -212,7 +226,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
             }
         }
         platformSilenceWatchdog = watchdog
-        mainHandler.postDelayed(watchdog, delayMillis)
+        locationHandler.postDelayed(watchdog, delayMillis)
     }
 
     private fun reportAvailability(
@@ -231,12 +245,12 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     }
 
     private fun cancelPrimarySilenceWatchdog() {
-        primarySilenceWatchdog?.let(mainHandler::removeCallbacks)
+        primarySilenceWatchdog?.let(locationHandler::removeCallbacks)
         primarySilenceWatchdog = null
     }
 
     private fun cancelPlatformSilenceWatchdog() {
-        platformSilenceWatchdog?.let(mainHandler::removeCallbacks)
+        platformSilenceWatchdog?.let(locationHandler::removeCallbacks)
         platformSilenceWatchdog = null
     }
 
