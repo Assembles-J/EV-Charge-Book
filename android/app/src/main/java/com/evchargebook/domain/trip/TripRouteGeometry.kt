@@ -15,6 +15,13 @@ data class TripRouteGap(
     val to: TripGeoPoint,
 )
 
+data class TripGeoBounds(
+    val minLatitude: Double,
+    val maxLatitude: Double,
+    val minLongitude: Double,
+    val maxLongitude: Double,
+)
+
 data class TripRouteContinuity(
     val segments: List<List<TripGeoPoint>>,
     val gaps: List<TripRouteGap>,
@@ -23,11 +30,42 @@ data class TripRouteContinuity(
         get() = segments.filter { it.size >= 2 }
 
     /**
-     * Fit the camera around route segments that can actually be drawn. A lone point after a long
-     * GPS gap stays truthful data, but it must not shrink the useful route into a tiny fragment.
+     * Default framing favors substantial continuous route context. A tiny fragment after a long
+     * GPS gap stays truthful data, but it must not crush the useful route into a tiny viewport.
      */
+    val defaultFitPoints: List<TripGeoPoint>
+        get() {
+            val substantialSegments = segments.filter { it.size >= 3 }
+            return when {
+                substantialSegments.isNotEmpty() -> substantialSegments.flatten()
+                drawableSegments.isNotEmpty() -> drawableSegments.flatten()
+                else -> segments.flatten()
+            }
+        }
+
+    /** Every persisted finite point, used only when the user explicitly asks to see the full Trip. */
+    val fullRouteFitPoints: List<TripGeoPoint>
+        get() = segments.flatten()
+
+    val defaultBounds: TripGeoBounds?
+        get() = boundsOf(defaultFitPoints)
+
+    val fullRouteBounds: TripGeoBounds?
+        get() = boundsOf(fullRouteFitPoints)
+
+    /** Compatibility alias for older callers; new code should choose default or full explicitly. */
     val cameraFitPoints: List<TripGeoPoint>
-        get() = drawableSegments.flatten().ifEmpty { segments.flatten() }
+        get() = defaultFitPoints
+
+    private fun boundsOf(points: List<TripGeoPoint>): TripGeoBounds? {
+        if (points.isEmpty()) return null
+        return TripGeoBounds(
+            minLatitude = points.minOf { it.latitude },
+            maxLatitude = points.maxOf { it.latitude },
+            minLongitude = points.minOf { it.longitude },
+            maxLongitude = points.maxOf { it.longitude },
+        )
+    }
 }
 
 object TripRouteContinuityBuilder {
