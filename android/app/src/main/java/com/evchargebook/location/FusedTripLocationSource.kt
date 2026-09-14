@@ -33,14 +33,15 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         LocationServices.getFusedLocationProviderClient(context)
     private val platformFallback = PlatformTripLocationSource(context)
     private val fallbackStarted = AtomicBoolean(false)
-
-    // Keep provider callbacks and silence watchdogs off the UI/main looper. A busy or suspended
-    // main looper must not turn a 12-second recovery policy into a multi-minute GPS gap.
-    private val locationThread = HandlerThread("evcb-trip-location").apply { start() }
-    private val locationHandler = Handler(locationThread.looper)
+    private val locationThreadOwner = RestartableResourceOwner(
+        create = { HandlerThread("evcb-trip-location") },
+        start = { it.start() },
+        stop = { it.quitSafely() },
+    )
 
     @Volatile private var running = false
     private var callback: LocationCallback? = null
+    private var locationHandler: Handler? = null
     private var primarySilenceWatchdog: Runnable? = null
     private var platformSilenceWatchdog: Runnable? = null
     private var platformRecoveryAttempts: Int = 0
@@ -53,6 +54,8 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         signalCallback: (TripLocationSourceSignal) -> Unit,
     ) {
         stop()
+        val locationThread = locationThreadOwner.acquire()
+        locationHandler = Handler(locationThread.looper)
         running = true
         fallbackStarted.set(false)
         platformRecoveryAttempts = 0
@@ -171,6 +174,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     ) {
         cancelPrimarySilenceWatchdog()
         if (!running || fallbackStarted.get()) return
+        val handler = locationHandler ?: return
         val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
         val watchdog = Runnable {
             if (running && !fallbackStarted.get()) {
@@ -189,7 +193,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
             }
         }
         primarySilenceWatchdog = watchdog
-        locationHandler.postDelayed(watchdog, PRIMARY_SILENCE_TIMEOUT_MS)
+        handler.postDelayed(watchdog, PRIMARY_SILENCE_TIMEOUT_MS)
     }
 
     private fun armPlatformSilenceWatchdog(
@@ -198,6 +202,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     ) {
         cancelPlatformSilenceWatchdog()
         if (!running || !fallbackStarted.get()) return
+        val handler = locationHandler ?: return
         val monitoredProvider = platformMonitoredProvider ?: return
         val delayMillis =
             TripPlatformRecoveryPolicy.recoveryDelayMillis(platformRecoveryAttempts) ?: return
@@ -226,7 +231,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
             }
         }
         platformSilenceWatchdog = watchdog
-        locationHandler.postDelayed(watchdog, delayMillis)
+        handler.postDelayed(watchdog, delayMillis)
     }
 
     private fun reportAvailability(
@@ -245,12 +250,14 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     }
 
     private fun cancelPrimarySilenceWatchdog() {
-        primarySilenceWatchdog?.let(locationHandler::removeCallbacks)
+        val handler = locationHandler
+        if (handler != null) primarySilenceWatchdog?.let(handler::removeCallbacks)
         primarySilenceWatchdog = null
     }
 
     private fun cancelPlatformSilenceWatchdog() {
-        platformSilenceWatchdog?.let(locationHandler::removeCallbacks)
+        val handler = locationHandler
+        if (handler != null) platformSilenceWatchdog?.let(handler::removeCallbacks)
         platformSilenceWatchdog = null
     }
 
@@ -261,6 +268,8 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         callback?.let(client::removeLocationUpdates)
         callback = null
         platformFallback.stop()
+        locationHandler = null
+        locationThreadOwner.release()
         fallbackStarted.set(false)
         platformRecoveryAttempts = 0
         platformMonitoredProvider = null
