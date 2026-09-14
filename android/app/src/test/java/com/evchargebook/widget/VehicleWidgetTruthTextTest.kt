@@ -81,4 +81,33 @@ class VehicleWidgetTruthTextTest {
         assertTrue(VehicleWidgetSizePolicy.isCompact(299))
         assertFalse(VehicleWidgetSizePolicy.isCompact(300))
     }
+
+    @Test
+    fun `widget pages cycle forward through vehicle trip and charging`() {
+        assertEquals(1, navigatorCall("next", 0))
+        assertEquals(2, navigatorCall("next", 1))
+        assertEquals(0, navigatorCall("next", 2))
+    }
+
+    @Test
+    fun `widget pages cycle backward through vehicle trip and charging`() {
+        assertEquals(2, navigatorCall("previous", 0))
+        assertEquals(0, navigatorCall("previous", 1))
+        assertEquals(1, navigatorCall("previous", 2))
+    }
+
+    @Test
+    fun `widget page indicator is stable and one based`() {
+        assertEquals("1/3", navigatorCall("indicator", 0))
+        assertEquals("2/3", navigatorCall("indicator", 1))
+        assertEquals("3/3", navigatorCall("indicator", 2))
+    }
+
+    private fun navigatorCall(method: String, pageIndex: Int): Any? = runCatching {
+        val navigatorClass = Class.forName("com.evchargebook.widget.VehicleWidgetPageNavigator")
+        val navigator = navigatorClass.getField("INSTANCE").get(null)
+        navigatorClass
+            .getMethod(method, Int::class.javaPrimitiveType)
+            .invoke(navigator, pageIndex)
+    }.getOrNull()
 }
