@@ -5,7 +5,7 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
-import android.os.Looper
+import android.os.HandlerThread
 
 /**
  * Framework-only fallback for devices where Google Play services location is unavailable or stalls.
@@ -16,6 +16,7 @@ import android.os.Looper
  */
 class PlatformTripLocationSource(context: Context) : TripLocationSource {
     private val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+    private val callbackThread = HandlerThread("evcb-platform-location").apply { start() }
     private var listener: LocationListener? = null
 
     @Volatile
@@ -45,7 +46,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
                     SAMPLE_INTERVAL_MS,
                     0f,
                     newListener,
-                    Looper.getMainLooper()
+                    callbackThread.looper
                 )
             }.onSuccess {
                 successfulProviders += provider
@@ -64,7 +65,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         signalCallback(
             TripLocationSourceSignal(
                 source = SOURCE_PLATFORM,
-                detail = "registered providers=${successfulProviders.joinToString(",")}",
+                detail = "registered providers=${successfulProviders.joinToString(",")} callbackLooper=platform_location",
             )
         )
     }
