@@ -1,50 +1,47 @@
 package com.evchargebook.widget
 
-import android.content.Context
-
-/** Pure three-page navigation used by the standard Android home-screen widget. */
-object VehicleWidgetPageNavigator {
-    const val PAGE_VEHICLE = 0
-    const val PAGE_TRIP = 1
-    const val PAGE_CHARGING = 2
-    private const val PAGE_COUNT = 3
-
-    fun next(pageIndex: Int): Int = normalize(pageIndex + 1)
-
-    fun previous(pageIndex: Int): Int = normalize(pageIndex - 1)
-
-    fun indicator(pageIndex: Int): String = "${normalize(pageIndex) + 1}/$PAGE_COUNT"
-
-    fun normalize(pageIndex: Int): Int {
-        val remainder = pageIndex % PAGE_COUNT
-        return if (remainder < 0) remainder + PAGE_COUNT else remainder
-    }
+enum class VehicleWidgetStackPage {
+    VEHICLE,
+    TRIP,
+    CHARGING,
 }
 
-/** Persists the selected page independently for each widget instance. */
-class VehicleWidgetPageStore(context: Context) {
-    private val preferences = context.applicationContext.getSharedPreferences(
-        PREFS_NAME,
-        Context.MODE_PRIVATE,
+/**
+ * Pure contract for the three cards hosted by the widget StackView.
+ *
+ * The launcher owns swipe navigation. The widget deliberately keeps the interaction surface
+ * simple: tapping a card opens the app, while only pages with a meaningful contextual action
+ * expose an extra action button.
+ */
+object VehicleWidgetStackSpec {
+    private val pages = listOf(
+        VehicleWidgetStackPage.VEHICLE,
+        VehicleWidgetStackPage.TRIP,
+        VehicleWidgetStackPage.CHARGING,
     )
 
-    fun get(appWidgetId: Int): Int = VehicleWidgetPageNavigator.normalize(
-        preferences.getInt(key(appWidgetId), VehicleWidgetPageNavigator.PAGE_VEHICLE)
-    )
+    fun pageCount(): Int = pages.size
 
-    fun set(appWidgetId: Int, pageIndex: Int) {
-        preferences.edit()
-            .putInt(key(appWidgetId), VehicleWidgetPageNavigator.normalize(pageIndex))
-            .apply()
+    fun pageKey(position: Int): String = page(position).name
+
+    fun actionLabel(position: Int): String = when (page(position)) {
+        VehicleWidgetStackPage.VEHICLE -> ""
+        VehicleWidgetStackPage.TRIP -> "行程"
+        VehicleWidgetStackPage.CHARGING -> "充电记录"
     }
 
-    fun clear(appWidgetId: Int) {
-        preferences.edit().remove(key(appWidgetId)).apply()
+    fun tapDestination(position: Int): String = "APP"
+
+    fun actionDestination(position: Int): String = when (page(position)) {
+        VehicleWidgetStackPage.VEHICLE -> "NONE"
+        VehicleWidgetStackPage.TRIP -> "TRIP"
+        VehicleWidgetStackPage.CHARGING -> "APP"
     }
 
-    private fun key(appWidgetId: Int): String = "widget_page_$appWidgetId"
-
-    private companion object {
-        const val PREFS_NAME = "vehicle_widget_pages"
+    internal fun page(position: Int): VehicleWidgetStackPage {
+        val count = pages.size
+        val remainder = position % count
+        val normalized = if (remainder < 0) remainder + count else remainder
+        return pages[normalized]
     }
 }
