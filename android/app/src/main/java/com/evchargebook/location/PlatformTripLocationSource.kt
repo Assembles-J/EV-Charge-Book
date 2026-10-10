@@ -21,7 +21,7 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
         start = { it.start() },
         stop = { it.quitSafely() },
     )
-    private var listener: LocationListener? = null
+    @Volatile private var listener: LocationListener? = null
 
     @Volatile
     private var registeredProviderNames: Set<String> = emptySet()
@@ -33,10 +33,21 @@ class PlatformTripLocationSource(context: Context) : TripLocationSource {
     ) {
         stop()
         val callbackThread = callbackThreadOwner.acquire()
-        val newListener = LocationListener(callback)
+        // An old callback can already be queued on a retiring HandlerThread when the recovery
+        // watchdog re-registers. Never forward it into the new registration/session.
+        val newListener = object : LocationListener {
+            override fun onLocationChanged(location: Location) {
+                if (listener === this) callback(location)
+            }
+        }
         listener = newListener
 
-        val providers = locationManager.allProviders.toSet()
+        val providers = runCatching { locationManager.allProviders.toSet() }
+            .getOrElse { error ->
+                // Even a provider-listing exception must not leak the newly started worker.
+                stop()
+                throw error
+            }
         val candidates = listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
             .filter { provider ->
                 provider in providers && runCatching { locationManager.isProviderEnabled(provider) }.getOrDefault(false)
