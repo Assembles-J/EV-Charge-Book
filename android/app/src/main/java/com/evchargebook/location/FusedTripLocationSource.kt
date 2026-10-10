@@ -6,6 +6,7 @@ import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
+import com.evchargebook.domain.TripFusedWatchdogPolicy
 import com.evchargebook.domain.TripPlatformRecoveryPolicy
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -47,6 +48,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     private var platformRecoveryAttempts: Int = 0
     private var platformMonitoredProvider: String? = null
     private var lastReportedAvailability: Boolean? = null
+    @Volatile private var lastFreshFusedFixElapsedRealtimeNanos: Long? = null
 
     @SuppressLint("MissingPermission")
     override fun start(
@@ -61,6 +63,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         platformRecoveryAttempts = 0
         platformMonitoredProvider = null
         lastReportedAvailability = null
+        lastFreshFusedFixElapsedRealtimeNanos = null
 
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS) {
             startPlatformFallback(
@@ -79,15 +82,38 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
 
         val fusedCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                if (!running || fallbackStarted.get()) return
+                if (!running || fallbackStarted.get() ||
+                    this@FusedTripLocationSource.callback !== this
+                ) return
                 val locations = result.locations
                 if (locations.isEmpty()) return
-                armPrimarySilenceWatchdog(callback, signalCallback)
+
+                // Callback delivery is not itself a fresh fix: OEMs can repeat a cached position
+                // or release an old batch after sleep. Only new, recently captured monotonic fixes
+                // can postpone the 12s provider failover. Forward every callback to the Trip
+                // pipeline unchanged, so sampling/continuity still own persisted truth.
+                val nowElapsedNanos = SystemClock.elapsedRealtimeNanos()
+                val newestFreshFix = locations.asSequence()
+                    .map { it.elapsedRealtimeNanos }
+                    .filter { fixElapsedNanos ->
+                        TripFusedWatchdogPolicy.refreshesWatchdog(
+                            previousFreshFixElapsedRealtimeNanos = lastFreshFusedFixElapsedRealtimeNanos,
+                            fixElapsedRealtimeNanos = fixElapsedNanos,
+                            nowElapsedRealtimeNanos = nowElapsedNanos,
+                        )
+                    }
+                    .maxOrNull()
+                if (newestFreshFix != null) {
+                    lastFreshFusedFixElapsedRealtimeNanos = newestFreshFix
+                    armPrimarySilenceWatchdog(callback, signalCallback)
+                }
                 locations.forEach(callback)
             }
 
             override fun onLocationAvailability(locationAvailability: LocationAvailability) {
-                if (!running || fallbackStarted.get()) return
+                if (!running || fallbackStarted.get() ||
+                    this@FusedTripLocationSource.callback !== this
+                ) return
                 reportAvailability(locationAvailability.isLocationAvailable, signalCallback)
             }
         }
@@ -106,7 +132,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
                 }
             }
             .addOnFailureListener { error ->
-                if (!running) return@addOnFailureListener
+                if (!running || this.callback !== fusedCallback || fallbackStarted.get()) return@addOnFailureListener
                 startPlatformFallback(
                     callback = callback,
                     signalCallback = signalCallback,
@@ -132,7 +158,20 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
                 detail = "fallback_started reason=$reason",
             )
         )
-        registerPlatformFallback(callback, signalCallback)
+        // This can run on the dedicated watchdog HandlerThread. Never let a temporary GPS /
+        // network registration failure escape into the Looper and crash the process.
+        runCatching { registerPlatformFallback(callback, signalCallback) }
+            .onFailure { error ->
+                signalCallback(
+                    TripLocationSourceSignal(
+                        source = SOURCE_PLATFORM,
+                        detail = "fallback_registration_failed reason=$reason error=${error::class.java.simpleName}",
+                    )
+                )
+                // Even with no registered provider, allow only the existing bounded 30s/60s
+                // retries. The service independently handles a persistent disabled provider.
+                armPlatformSilenceWatchdog(callback, signalCallback)
+            }
     }
 
     @SuppressLint("MissingPermission")
@@ -141,6 +180,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         signalCallback: (TripLocationSourceSignal) -> Unit,
     ) {
         cancelPlatformSilenceWatchdog()
+        platformMonitoredProvider = null
         platformFallback.stop()
         platformFallback.start(
             callback = { location ->
@@ -203,7 +243,9 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         cancelPlatformSilenceWatchdog()
         if (!running || !fallbackStarted.get()) return
         val handler = locationHandler ?: return
-        val monitoredProvider = platformMonitoredProvider ?: return
+        // A failed initial registration has no monitored provider yet. It still gets the
+        // bounded retry budget; a successful registration switches to GPS/network authority.
+        val monitoredProvider = platformMonitoredProvider ?: "none"
         val delayMillis =
             TripPlatformRecoveryPolicy.recoveryDelayMillis(platformRecoveryAttempts) ?: return
         val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
@@ -274,6 +316,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         platformRecoveryAttempts = 0
         platformMonitoredProvider = null
         lastReportedAvailability = null
+        lastFreshFusedFixElapsedRealtimeNanos = null
     }
 
     private companion object {
