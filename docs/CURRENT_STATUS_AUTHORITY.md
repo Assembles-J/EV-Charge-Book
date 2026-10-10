@@ -1,8 +1,8 @@
 # EV Charge Book Current Status Authority
 
-Updated: 2026-09-14
+Updated: 2026-10-10
 Status: Operational status authority
-Baseline: `main@aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`
+Baseline: `main@50e08fb7cf5895845f7e696f6ac6036960596f32` (latest GitHub head observed 2026-10-10; last commit 2026-09-14)
 
 ## Purpose
 
@@ -20,43 +20,38 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 
 ## Executive status
 
-The repository is no longer in a broad implementation phase. The current priority is:
+The initial 2026-10-10 inspection found **53 Open Issues, 0 Open PRs** and `main@50e08fb`; the active follow-up work then opened PRs #347 (this authority reconciliation), #348 (tunnel watchdog recovery) and #349 (Android SDK CI setup). The latest-head Android Build and Android Release workflows completed successfully on 2026-09-14. This is CI evidence only, not physical or production-release acceptance.
 
-1. current-main physical acceptance for Trip reliability and the standard Android home widget;
-2. finish Charging v0.7 physical closeout;
-3. resolve the focused #338 Trip tunnel/provider-stall Draft safely, then validate it on device;
-4. validate the mainland-China Trip basemap/provider decision;
-5. normalize old physical-only Issues and finish repository governance settings.
+Priority order:
 
-Do not start a new implementation stack from an old Issue before checking current `main` and merged PR history.
+1. latest-main physical Trip GPS/foreground/background/tunnel recovery acceptance (#77/#283), after merged #344;
+2. latest-main widget swipe-stack/launcher acceptance (#301), after merged #343, and Bluetooth candidate/notification/auto-start acceptance (#235), after merged #346;
+3. Charging v0.7 lifecycle, multi-vehicle unfinished-state, migration/reboot and billing/editor acceptance (#251/#321 and child owners);
+4. Shanghai mainland basemap/provider feasibility (#199/#192), after merged #334/#345; current OpenFreeMap road/label usefulness remains unaccepted;
+5. repository governance: `main` is still unprotected per 2026-10-10 branch metadata (#75), plus branch cleanup (#265) and documentation/Issue reconciliation (#6).
+
+No new broad implementation stack should be inferred merely from historical unchecked checklists. Real-device acceptance and release-upgrade verification remain separate from Green CI.
 
 ## Current PR queue
 
-### #338 — Trip tunnel/provider-stall recovery hardening
+### Current follow-up queue (opened 2026-10-10)
 
-- Draft, not runtime authority;
-- based on Trip 34 evidence where a moving gap recovered much later than the intended watchdog window;
-- proposed change moves Fused/platform callbacks and silence watchdogs away from the main looper and adds watchdog timing diagnostics (`expectedDelayMs`, `actualDelayMs`, `lateByMs`);
-- historical Android Build #836 is Green on head `56ad8491c21f7d379067ba6052c85313f208e4e9`, but that does not authorize merge onto the later current main;
-- current review blocker: both proposed `HandlerThread`s start during source construction while `stop()` removes updates/callbacks without quitting the owned threads. Because `TripTrackingService` can create a new `FusedTripLocationSource` on later registrations/lifecycles, the Draft needs explicit thread ownership/disposal before normalization;
-- after lifecycle/resource ownership is fixed with focused evidence, replay/sync onto current main, obtain fresh exact-head Android CI, then run the stated real-device normal-road -> Hongmei South Road tunnel -> open-road acceptance;
-- preserve existing 12s Fused failover, bounded platform re-registration, no synthetic tunnel points and no fabricated distance while location is unavailable.
+- **#347** — this docs-only status reconciliation; it must track the later October PR changes rather than claiming the initial zero-PR audit is still the current queue.
+- **#348 — Draft Trip tunnel stale-callback recovery:** code proposal, **not runtime authority**. Fresh unique monotonic fix timestamps are required to refresh Fused/platform source watchdogs; stale/obsolete source callbacks are ignored, initial platform fallback registration is made exception-safe, and the same bounded 30s/60s retry budget is preserved. The one-line Android CI action v4 fix is included so exact-head tests run. Requires Green CI and physical road → tunnel → road evidence under #77/#283 before merge/closeout.
+- **#349 — Android CI setup repair:** moves `android-actions/setup-android` from v3 to v4 because Google no longer serves the obsolete SDK `tools` package. The previous October CI failures were in SDK setup, **not** Kotlin compilation. Review/merge based on a fresh full Android CI result.
 
-### #334 — Trip basemap diagnosability / OpenFreeMap Liberty trial
+Historical drafts and pending queues below have been superseded by merged work; do not treat them as outstanding code-review items.
 
-- Draft physical experiment, not runtime authority;
-- changes OpenFreeMap style to `liberty` and adds debug-only MapLibre basemap diagnostics;
-- historical Android Build #831 was Green on its old head;
-- must be validated on the target Shanghai device before provider choice;
-- useful tiles + roads/labels -> OpenFreeMap remains viable for display;
-- loaded tiles but unusable mainland roads/labels, or persistent delivery errors -> reject OpenFreeMap for this product and move #199 toward an official mainland provider such as AMap;
-- if #334 is later merged, first normalize it onto current `main` and obtain new current-head CI.
+### Recently landed on current main
 
-### Recently merged: #340 Charging monthly attribution regression
+- **#344 — Trip GPS tunnel/provider stall hardening:** merged 2026-09-14; Fused/platform callbacks and watchdogs use dedicated restartable worker threads with `quitSafely()` disposal and scheduler-delay diagnostics. Physical tunnel and repeated-lifecycle acceptance remain under #77/#283. Earlier Draft #338 was closed unmerged and superseded.
+- **#343 — vehicle home widget swipe stack:** merged 2026-09-14; native `StackView` swipe pages replace the previous tiny arrow controls. Re-test latest-main swipe, pinning, compact layout, process/reboot recovery and truthful local facts under #301; artifact #839 was a historical pre-#343 baseline.
+- **#334 — OpenFreeMap Liberty diagnostics:** merged 2026-09-14; provider failures and fallback remain diagnosable. This was not a provider acceptance decision.
+- **#345 — Trip route/map readability:** last merge to `main@50e08fb` on 2026-09-14; continuity-aware default framing, truthful long-gap rendering, minimal map controls and scroll gesture arbitration. Recorded Shanghai OpenFreeMap context remained effectively blank; provider choice is still #199's physical gate.
+- **#346 — Bluetooth auto-Trip background fallback:** merged 2026-09-14; Android 12+ background restrictions degrade auto-start to a visible one-tap notification instead of silently creating a Trip. Foreground/background/notification-denied OEM acceptance remains #235.
+- **#340 — Charging cross-month start-time attribution regression:** previously merged on current main and unchanged.
 
-#328 was closed as stale/superseded. The same focused one-file regression was replayed from current main as #340. Android Build #842 passed on exact head `399e9f3b3e352250712fa7791deafca00602b6ff`, then #340 was squash-merged as `aa7ec97ba76f3c408fe0122a82587f23c1a5aaf1`.
-
-The locked product rule is unchanged: a Charging event spanning midnight/month boundaries belongs to the date/month where it **started**, using `ChargingRecordEntity.chargeTimeEpochMillis`.
+Latest main-head workflows on 2026-09-14: Android Build [run 34821831929](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34821831929) and Android Release [run 34822213280](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34822213280), both success. A successful Release workflow is not itself proof of an accepted signed in-place upgrade.
 
 ## Charging v0.7 — #251 / #321 closeout
 
@@ -110,7 +105,9 @@ Important merged steps include:
 
 #319 was driven by real Trip 32 evidence. It intentionally does **not** add a second tracking Service, WorkManager/Alarm heartbeat, long WakeLock, battery exemption, synthetic route points or unlimited provider retries.
 
-Trip 34 later produced a separate scheduler/provider-stall hypothesis tracked by Draft #338. Until #338's thread lifecycle blocker is resolved, normalized onto current main and physically accepted, it is not runtime authority and must not be described as a completed reliability fix.
+Trip 34 then produced a scheduler/provider-stall hypothesis. Original Draft #338 had a worker-thread lifecycle leak risk and was closed unmerged. The corrected implementation **#344 has now merged**: Fused/platform callbacks and silence watchdogs are moved off the main looper; owned threads are restartable and disposed via `quitSafely()`; watchdog diagnostic timing is recorded. This is a merged code fix, **not** physical tunnel/lock-screen/provider recovery acceptance. Verify latest-main start → stop → start thread ownership and the road → tunnel → road diagnostic CSV before closing #77.
+
+October 10 focused Draft #348 additionally addresses stale/duplicate capture timestamps resetting Fused/platform watchdogs, late callbacks crossing session boundaries, and initial platform registration exception handling. These changes are **not in main** pending CI/physical acceptance; the recovery budget and persisted Trip truth boundaries remain unchanged.
 
 Locked truth boundaries:
 
@@ -125,7 +122,7 @@ Remaining P0 evidence is a **latest-main real-device drive** covering lock scree
 
 ### #283 OEM/recovery follow-up
 
-The old question “should bounded platform recovery be implemented?” is partially answered by merged #319. #283 now owns the OEM compatibility matrix and any **evidence-driven** next recovery step. Draft #338 is such a focused candidate from Trip 34 evidence, but its unmerged code is not current authority.
+The old question “should bounded platform recovery be implemented?” is partially answered by merged #319. #283 now owns the OEM compatibility matrix and any **evidence-driven** next recovery step. #344 is the merged Trip 34 recovery implementation; its physical OEM/tunnel acceptance and any further recovery changes remain evidence-gated.
 
 ### #137 distance-trust investigation
 
@@ -149,9 +146,10 @@ Merged progression includes:
 - #330 — presentation redesign / compact-expanded behavior;
 - #332 — provider exposure to launcher;
 - #336 — direct standard-Android pin flow from `车辆 → 连接与数据 → 桌面小组件` using `AppWidgetManager.requestPinAppWidget()`;
-- #339 — three deterministic pages (vehicle / Trip / Charging), per-widget previous/next navigation and `1/3` indicator, plus ColorOS data-area collapse fix.
+- #339 — three deterministic pages (vehicle / Trip / Charging) and earlier arrow navigation, plus ColorOS data-area collapse fix;
+- #343 — native swipeable `StackView` pages replacing the earlier arrows, tightened widget bounds and page-tap opening.
 
-#339 was merged as `4bd7459f770f404778ce8ea1c45da02fdb974aa0`. PR-head Android Build #838 and main-push Build #839 were Green; #839 produced the current widget-acceptance Debug APK.
+#339 was merged as `4bd7459f770f404778ce8ea1c45da02fdb974aa0`; its historical main-push Build #839 was Green. **#343 supersedes its arrow-page interaction** and is already merged; the #839 artifact is no longer the latest-main acceptance target.
 
 Truth contract:
 
@@ -161,17 +159,15 @@ Truth contract:
 - Trip/Charging actions must reuse existing business authority;
 - telemetry-aware presentation remains future work under #300.
 
-Remaining #301 gate: install current-main APK, remove/re-add the widget so launcher metadata is reapplied, then verify direct pin, 1/3 -> 2/3 -> 3/3 navigation, no clipping/collapse, truthful unknowns, process death/reboot, state refresh, vehicle switch, active Trip/Charging actions, Dark/Light and at least one non-OPPO launcher.
+Remaining #301 gate: install **latest-main APK** (not the old #839 artifact), remove/re-add the widget if launcher metadata changed, then verify direct pin, **swipe-based** vehicle → Trip → Charging pages (rather than obsolete arrow controls), page-tap open, no clipping/collapse, truthful unknowns, process death/reboot, state refresh, vehicle switch, active Trip/Charging actions, Dark/Light and at least one non-OPPO launcher.
 
 ColorOS OEM `卡片中心` is **not** the standard AppWidget authority. Native ColorOS card feasibility is separate under #337 and must use official OEM APIs/SDKs only.
 
-## Trip map/provider — #192 / #199 / #334
+## Trip map/provider — #192 / #199 / #334 / #345
 
-Basic route interaction is already implemented. Remaining work is provider/context validation for mainland China: road/label usefulness, delivery reliability, licensing/attribution and truthful fallback.
+The MapLibre + replaceable style/provider baseline and truth-preserving no-basemap fallback are in `main`. #334 merged OpenFreeMap `liberty`/diagnostic improvements; #345 merged continuity-aware default route framing, explicit `回到全程`, LONG_GAP unknown rendering and gesture simplification.
 
-Do not merge a provider implementation merely because historical CI is Green. #334 is a physical provider experiment and its Shanghai result decides whether OpenFreeMap remains viable or #199 moves to an official mainland provider adapter.
-
-Persistent Trip truth remains WGS84. If a mainland renderer requires GCJ-02, conversion belongs at the renderer/provider adapter boundary rather than rewriting persisted Trip facts.
+**The Shanghai provider decision is still open.** Real-device feedback recorded in #345 describes an effectively blank OpenFreeMap background with no useful local roads/labels. Confirm whether this is missing tile delivery or inadequate road/label coverage using on-device diagnostics before selecting a mainland provider adapter. Keep WGS84 persisted points untouched, keep renderer-only transforms at provider boundaries, retain attribution, and preserve truthful no-basemap fallback. #199 is the decision/acceptance owner; these merges do not close it.
 
 ## Vehicle/catalog/resource workflow — #244 / #20
 
@@ -181,7 +177,7 @@ Do not build a second disconnected Logo/Hero/catalog onboarding system from hist
 
 ## Bluetooth-triggered Trip — #235
 
-The persisted per-vehicle Bluetooth detection/auto-start foundation is already in `main`. #235 remains for OEM/background physical acceptance, trigger-quality policy and possible later verified-movement evolution. Bluetooth connection alone is not proven driving evidence.
+The persisted per-vehicle Bluetooth detection/auto-start foundation is in `main`. Merged #346 now adds Android 12+ background-restricted **visible one-tap notification fallback** and visible foreground auto-start feedback without treating Bluetooth presence as proof of driving. #235 remains for actual OEM/background/lock-screen/notification-denied physical acceptance, reconnect de-duplication, trigger-quality policy and possible later verified movement. Bluetooth connection alone is not proven driving evidence.
 
 ## Updater — #102
 
@@ -193,7 +189,7 @@ PR #263 established the stable README, MIT license, PR template, evidence-first 
 
 Remaining repository-setting owners:
 
-- #75 — protect `main` and require current-head Android CI;
+- #75 — protect `main` and require current-head Android CI; **branch API still reports `main.protected=false` on 2026-10-10**;
 - #265 — stale remote branch cleanup and merge-time branch deletion.
 
 Repository metadata still needs to be the source of truth before either Issue closes. Do not claim a setting is complete from documentation alone.
@@ -204,7 +200,7 @@ The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.m
 
 ## Documentation governance — #6
 
-2026-09-14 reconciliation:
+2026-09-14 reconciliation (historical baseline):
 
 - #215 rewritten from “partial implementation” to code-complete / physical-only finalization evidence;
 - #321 rewritten from stale code blockers to Charging v0.7 closeout;
@@ -215,6 +211,8 @@ The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.m
 - stale PR #328 closed; current-main replacement #340 passed exact-head Build #842 and merged;
 - final open-PR audit found Draft #338; its Trip 34 evidence and HandlerThread lifecycle blocker are now explicitly recorded rather than omitted;
 - this authority baseline moved from 2026-09-02 to 2026-09-14.
+
+2026-10-10 follow-up: reconciled merged #343/#344/#345/#346/#334 and closed unmerged #338; the initial zero-PR audit was followed by active PRs #347/#348/#349. The main branch remains unprotected in the last verified metadata. Owning Issues #77/#301/#199/#235 should use current-main acceptance criteria rather than historical artifact/arrow/Draft wording.
 
 Remaining documentation debt:
 
