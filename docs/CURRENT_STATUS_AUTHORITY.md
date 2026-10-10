@@ -20,7 +20,7 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 
 ## Executive status
 
-Repository inspection on 2026-10-10 found **53 Open Issues, 0 Open PRs** and current `main@50e08fb`. The latest-head Android Build and Android Release workflows completed successfully on 2026-09-14. This is CI evidence only, not physical or production-release acceptance.
+The initial 2026-10-10 inspection found **53 Open Issues, 0 Open PRs** and `main@50e08fb`; the active follow-up work then opened PRs #347 (this authority reconciliation), #348 (tunnel watchdog recovery) and #349 (Android SDK CI setup). The latest-head Android Build and Android Release workflows completed successfully on 2026-09-14. This is CI evidence only, not physical or production-release acceptance.
 
 Priority order:
 
@@ -34,7 +34,13 @@ No new broad implementation stack should be inferred merely from historical unch
 
 ## Current PR queue
 
-**No Open PRs as checked on 2026-10-10.** Historical drafts and pending queues below have been superseded by merged work; do not treat them as outstanding code-review items.
+### Current follow-up queue (opened 2026-10-10)
+
+- **#347** — this docs-only status reconciliation; it must track the later October PR changes rather than claiming the initial zero-PR audit is still the current queue.
+- **#348 — Draft Trip tunnel stale-callback recovery:** code proposal, **not runtime authority**. Fresh unique monotonic fix timestamps are required to refresh Fused/platform source watchdogs; stale/obsolete source callbacks are ignored, initial platform fallback registration is made exception-safe, and the same bounded 30s/60s retry budget is preserved. The one-line Android CI action v4 fix is included so exact-head tests run. Requires Green CI and physical road → tunnel → road evidence under #77/#283 before merge/closeout.
+- **#349 — Android CI setup repair:** moves `android-actions/setup-android` from v3 to v4 because Google no longer serves the obsolete SDK `tools` package. The previous October CI failures were in SDK setup, **not** Kotlin compilation. Review/merge based on a fresh full Android CI result.
+
+Historical drafts and pending queues below have been superseded by merged work; do not treat them as outstanding code-review items.
 
 ### Recently landed on current main
 
@@ -100,6 +106,8 @@ Important merged steps include:
 #319 was driven by real Trip 32 evidence. It intentionally does **not** add a second tracking Service, WorkManager/Alarm heartbeat, long WakeLock, battery exemption, synthetic route points or unlimited provider retries.
 
 Trip 34 then produced a scheduler/provider-stall hypothesis. Original Draft #338 had a worker-thread lifecycle leak risk and was closed unmerged. The corrected implementation **#344 has now merged**: Fused/platform callbacks and silence watchdogs are moved off the main looper; owned threads are restartable and disposed via `quitSafely()`; watchdog diagnostic timing is recorded. This is a merged code fix, **not** physical tunnel/lock-screen/provider recovery acceptance. Verify latest-main start → stop → start thread ownership and the road → tunnel → road diagnostic CSV before closing #77.
+
+October 10 focused Draft #348 additionally addresses stale/duplicate capture timestamps resetting Fused/platform watchdogs, late callbacks crossing session boundaries, and initial platform registration exception handling. These changes are **not in main** pending CI/physical acceptance; the recovery budget and persisted Trip truth boundaries remain unchanged.
 
 Locked truth boundaries:
 
@@ -204,7 +212,7 @@ The exact GitHub Actions inventory should be maintained in `WORKFLOW_OWNERSHIP.m
 - final open-PR audit found Draft #338; its Trip 34 evidence and HandlerThread lifecycle blocker are now explicitly recorded rather than omitted;
 - this authority baseline moved from 2026-09-02 to 2026-09-14.
 
-2026-10-10 follow-up: updated this document to account for now-merged #343/#344/#345/#346/#334, closed unmerged #338, no remaining Open PRs and the still-unprotected main branch. Owning Issues #77/#301/#199/#235 should use current-main acceptance criteria rather than historical artifact/arrow/Draft wording.
+2026-10-10 follow-up: reconciled merged #343/#344/#345/#346/#334 and closed unmerged #338; the initial zero-PR audit was followed by active PRs #347/#348/#349. The main branch remains unprotected in the last verified metadata. Owning Issues #77/#301/#199/#235 should use current-main acceptance criteria rather than historical artifact/arrow/Draft wording.
 
 Remaining documentation debt:
 
