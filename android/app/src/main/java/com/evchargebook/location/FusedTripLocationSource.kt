@@ -6,7 +6,7 @@ import android.location.Location
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.SystemClock
-import com.evchargebook.domain.TripFusedWatchdogPolicy
+import com.evchargebook.domain.TripSourceWatchdogPolicy
 import com.evchargebook.domain.TripPlatformRecoveryPolicy
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
@@ -49,6 +49,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     private var platformMonitoredProvider: String? = null
     private var lastReportedAvailability: Boolean? = null
     @Volatile private var lastFreshFusedFixElapsedRealtimeNanos: Long? = null
+    @Volatile private var lastFreshPlatformFixElapsedRealtimeNanos: Long? = null
 
     @SuppressLint("MissingPermission")
     override fun start(
@@ -64,6 +65,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         platformMonitoredProvider = null
         lastReportedAvailability = null
         lastFreshFusedFixElapsedRealtimeNanos = null
+        lastFreshPlatformFixElapsedRealtimeNanos = null
 
         if (GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) != ConnectionResult.SUCCESS) {
             startPlatformFallback(
@@ -96,7 +98,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
                 val newestFreshFix = locations.asSequence()
                     .map { it.elapsedRealtimeNanos }
                     .filter { fixElapsedNanos ->
-                        TripFusedWatchdogPolicy.refreshesWatchdog(
+                        TripSourceWatchdogPolicy.refreshesWatchdog(
                             previousFreshFixElapsedRealtimeNanos = lastFreshFusedFixElapsedRealtimeNanos,
                             fixElapsedRealtimeNanos = fixElapsedNanos,
                             nowElapsedRealtimeNanos = nowElapsedNanos,
@@ -152,6 +154,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         this.callback?.let(client::removeLocationUpdates)
         this.callback = null
         lastReportedAvailability = null
+        lastFreshPlatformFixElapsedRealtimeNanos = null
         signalCallback(
             TripLocationSourceSignal(
                 source = SOURCE_PLATFORM,
@@ -185,13 +188,22 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         platformFallback.start(
             callback = { location ->
                 if (!running || !fallbackStarted.get()) return@start
-                if (
-                    TripPlatformRecoveryPolicy.callbackRefreshesWatchdog(
+                if (TripPlatformRecoveryPolicy.callbackRefreshesWatchdog(
                         monitoredProvider = platformMonitoredProvider,
                         callbackProvider = location.provider,
                     )
                 ) {
-                    armPlatformSilenceWatchdog(callback, signalCallback)
+                    val fixElapsedNanos = location.elapsedRealtimeNanos
+                    if (TripSourceWatchdogPolicy.refreshesWatchdog(
+                            previousFreshFixElapsedRealtimeNanos = lastFreshPlatformFixElapsedRealtimeNanos,
+                            fixElapsedRealtimeNanos = fixElapsedNanos,
+                            nowElapsedRealtimeNanos = SystemClock.elapsedRealtimeNanos(),
+                        )
+                    ) {
+                        // A repeated GPS fix must not repeatedly postpone bounded recovery.
+                        lastFreshPlatformFixElapsedRealtimeNanos = fixElapsedNanos
+                        armPlatformSilenceWatchdog(callback, signalCallback)
+                    }
                 }
                 callback(location)
             },
@@ -317,6 +329,7 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         platformMonitoredProvider = null
         lastReportedAvailability = null
         lastFreshFusedFixElapsedRealtimeNanos = null
+        lastFreshPlatformFixElapsedRealtimeNanos = null
     }
 
     private companion object {
