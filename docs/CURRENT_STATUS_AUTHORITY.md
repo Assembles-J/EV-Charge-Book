@@ -1,8 +1,8 @@
 # EV Charge Book Current Status Authority
 
-Updated: 2026-10-10
+Updated: 2026-10-12
 Status: Operational status authority
-Baseline: `main@50e08fb7cf5895845f7e696f6ac6036960596f32` (latest GitHub head observed 2026-10-10; last commit 2026-09-14)
+Baseline: `main@c03ffe68a5c258590b0b68bd2612af63cf539a31` (2026-10-12 release-trigger only; runtime source `2422f15` Android CI Green)
 
 ## Purpose
 
@@ -20,7 +20,7 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 
 ## Executive status
 
-The initial 2026-10-10 inspection found **53 Open Issues, 0 Open PRs** and `main@50e08fb`; the active follow-up work then opened PRs #347 (this authority reconciliation), #348 (tunnel watchdog recovery) and #349 (Android SDK CI setup). The latest-head Android Build and Android Release workflows completed successfully on 2026-09-14. This is CI evidence only, not physical or production-release acceptance.
+2026-10-12 reconciliation: #347 was merged as `7a6d8d8`, #349 (Android SDK action v4) as `8a51087`, and #348 (stale/duplicate Trip fix watchdog recovery) as `2422f15`. The current follow-up is **Draft #350**, a separate watchdog Runnable-ownership/concurrency regression candidate, not runtime authority. Main Android CI on `2422f15` passed [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363). Android Release attempt #48 on the newer release-trigger-only commit failed before signing/upload because the public update manifest check timed out; last successful Release remains the historical 2026-09-14 run. Neither run proves physical tunnel or in-place upgrade acceptance.
 
 Priority order:
 
@@ -28,21 +28,22 @@ Priority order:
 2. latest-main widget swipe-stack/launcher acceptance (#301), after merged #343, and Bluetooth candidate/notification/auto-start acceptance (#235), after merged #346;
 3. Charging v0.7 lifecycle, multi-vehicle unfinished-state, migration/reboot and billing/editor acceptance (#251/#321 and child owners);
 4. Shanghai mainland basemap/provider feasibility (#199/#192), after merged #334/#345; current OpenFreeMap road/label usefulness remains unaccepted;
-5. repository governance: `main` is still unprotected per 2026-10-10 branch metadata (#75), plus branch cleanup (#265) and documentation/Issue reconciliation (#6).
+5. repository governance: `main` is still unprotected per 2026-10-12 branch metadata (#75), plus branch cleanup (#265) and documentation/Issue reconciliation (#6).
 
 No new broad implementation stack should be inferred merely from historical unchecked checklists. Real-device acceptance and release-upgrade verification remain separate from Green CI.
 
 ## Current PR queue
 
-### Current follow-up queue (opened 2026-10-10)
+### Active (2026-10-12)
 
-- **#347** — this docs-only status reconciliation; it must track the later October PR changes rather than claiming the initial zero-PR audit is still the current queue.
-- **#348 — Draft Trip tunnel stale-callback recovery:** code proposal, **not runtime authority**. Fresh unique monotonic fix timestamps are required to refresh Fused/platform source watchdogs; stale/obsolete source callbacks are ignored, initial platform fallback registration is made exception-safe, and the same bounded 30s/60s retry budget is preserved. The one-line Android CI action v4 fix is included so exact-head tests run. Requires Green CI and physical road → tunnel → road evidence under #77/#283 before merge/closeout.
-- **#349 — Android CI setup repair:** moves `android-actions/setup-android` from v3 to v4 because Google no longer serves the obsolete SDK `tools` package. The previous October CI failures were in SDK setup, **not** Kotlin compilation. Review/merge based on a fresh full Android CI result.
-
-Historical drafts and pending queues below have been superseded by merged work; do not treat them as outstanding code-review items.
+- **#350 — Draft GPS watchdog task ownership:** focused follow-up to merged #348. Guards retired Fused/platform watchdog Runnables against acting after cancellation/re-arm and makes cross-thread ownership references visible; adds a 26-duplicate-callback / 25-second regression test. Code is **not in main**. Exact-head [Android CI run 38220691592](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220691592) passed; physical #77/#283 acceptance and review still gate merge.
+Older Drafts and superseded queues are historical; only #350 is awaiting runtime PR review here.
 
 ### Recently landed on current main
+
+- **#348 — stale Fused/platform callback watchdog recovery:** merged 2026-10-12; ignore stale/duplicate capture timestamps for source-health reset, contain platform registration failure, keep finite recovery budget. Physical acceptance still #77/#283.
+- **#349 — Android SDK setup repair:** merged 2026-10-12; Android SDK v4 setup and Java 17 / API 36 Debug build baseline restored.
+- **#347 — status document reconciliation:** merged 2026-10-10 as `7a6d8d8`; this 2026-10-12 update supersedes its PR-queue snapshot.
 
 - **#344 — Trip GPS tunnel/provider stall hardening:** merged 2026-09-14; Fused/platform callbacks and watchdogs use dedicated restartable worker threads with `quitSafely()` disposal and scheduler-delay diagnostics. Physical tunnel and repeated-lifecycle acceptance remain under #77/#283. Earlier Draft #338 was closed unmerged and superseded.
 - **#343 — vehicle home widget swipe stack:** merged 2026-09-14; native `StackView` swipe pages replace the previous tiny arrow controls. Re-test latest-main swipe, pinning, compact layout, process/reboot recovery and truthful local facts under #301; artifact #839 was a historical pre-#343 baseline.
@@ -51,7 +52,7 @@ Historical drafts and pending queues below have been superseded by merged work; 
 - **#346 — Bluetooth auto-Trip background fallback:** merged 2026-09-14; Android 12+ background restrictions degrade auto-start to a visible one-tap notification instead of silently creating a Trip. Foreground/background/notification-denied OEM acceptance remains #235.
 - **#340 — Charging cross-month start-time attribution regression:** previously merged on current main and unchanged.
 
-Latest main-head workflows on 2026-09-14: Android Build [run 34821831929](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34821831929) and Android Release [run 34822213280](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34822213280), both success. A successful Release workflow is not itself proof of an accepted signed in-place upgrade.
+Latest runtime-source main Android Build: 2026-10-12 [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363) on `2422f15`, **Green**. A subsequent release-trigger-only commit `c03ffe68` initiated Android Release #48, but [run 38220820546](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220820546) **failed before build/sign/upload**: the existing public update manifest/APK preflight timed out at 15s. Version 0.7.48 was not published by that run. Last successful Release is the historical 2026-09-14 [run 34822213280](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34822213280), not proof of an accepted signed in-place upgrade.
 
 ## Charging v0.7 — #251 / #321 closeout
 
@@ -107,7 +108,7 @@ Important merged steps include:
 
 Trip 34 then produced a scheduler/provider-stall hypothesis. Original Draft #338 had a worker-thread lifecycle leak risk and was closed unmerged. The corrected implementation **#344 has now merged**: Fused/platform callbacks and silence watchdogs are moved off the main looper; owned threads are restartable and disposed via `quitSafely()`; watchdog diagnostic timing is recorded. This is a merged code fix, **not** physical tunnel/lock-screen/provider recovery acceptance. Verify latest-main start → stop → start thread ownership and the road → tunnel → road diagnostic CSV before closing #77.
 
-October 10 focused Draft #348 additionally addresses stale/duplicate capture timestamps resetting Fused/platform watchdogs, late callbacks crossing session boundaries, and initial platform registration exception handling. These changes are **not in main** pending CI/physical acceptance; the recovery budget and persisted Trip truth boundaries remain unchanged.
+**#348 merged 2026-10-12**: unique/recent monotonic capture timestamps gate Fused/platform source-watchdog refresh, obsolete callbacks are ignored and platform fallback registration failures are contained. Original finite 30s/60s retry budget and persisted TripPoint truth boundaries remain unchanged. **Draft #350 is not in main**; its additional retired-Runnable ownership guards and regression test are still subject to exact-head CI and physical acceptance.
 
 Locked truth boundaries:
 
@@ -118,7 +119,7 @@ Locked truth boundaries:
 - stationary GNSS drift must not become distance;
 - provider recovery changes acquisition/diagnostics, not persisted fact meaning.
 
-Remaining P0 evidence is a **latest-main real-device drive** covering lock screen, another app foreground, stationary hold, provider interruption/recovery and final Trip completion. If #338 advances, its tunnel test becomes an additional focused acceptance rather than a replacement for #77's broader matrix.
+Remaining P0 evidence is a **latest-main real-device drive** covering lock screen, another app foreground, stationary hold, provider interruption/recovery and final Trip completion. Review Draft #350 on its own exact head; neither it nor merged #348 substitutes for #77's broader physical matrix.
 
 ### #283 OEM/recovery follow-up
 
@@ -189,7 +190,7 @@ PR #263 established the stable README, MIT license, PR template, evidence-first 
 
 Remaining repository-setting owners:
 
-- #75 — protect `main` and require current-head Android CI; **branch API still reports `main.protected=false` on 2026-10-10**;
+- #75 — protect `main` and require current-head Android CI; **branch API still reports `main.protected=false` on 2026-10-12**;
 - #265 — stale remote branch cleanup and merge-time branch deletion.
 
 Repository metadata still needs to be the source of truth before either Issue closes. Do not claim a setting is complete from documentation alone.
@@ -220,6 +221,8 @@ Remaining documentation debt:
 - narrow old #70 local-Hero/model-whitelist wording to physical visual closeout;
 - add explicit supersession/version notes to older docs that still look current;
 - periodically re-audit `WORKFLOW_OWNERSHIP.md` as admin helper surfaces evolve.
+
+2026-10-12 follow-up: #347/#349/#348 are merged; runtime-source Android Build Green on `2422f15`, Draft #350 CI Green on `24b9aa8` (not main); Android Release #48 blocked on public manifest timeout, no signed APK produced or deployed. Physical acceptance under #77/#283 remains OPEN. Documentation status must distinguish latest merged code, PR candidate, CI evidence and OEM evidence.
 
 ## Authority maintenance rules
 
