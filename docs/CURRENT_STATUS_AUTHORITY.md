@@ -37,16 +37,13 @@ No new broad implementation stack should be inferred merely from historical unch
 ### Active (2026-10-12)
 
 - **#350 — Draft GPS watchdog task ownership:** focused follow-up to merged #348. Guards retired Fused/platform watchdog Runnables against acting after cancellation/re-arm and makes cross-thread ownership references visible; adds a 26-duplicate-callback / 25-second regression test. Code is **not in main**. Exact-head [Android CI run 38220691592](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220691592) passed; physical #77/#283 acceptance and review still gate merge.
-- **#348 — merged** as `2422f15` after synchronized PR-head Android CI [38220275052](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220275052) succeeded. Runtime now distinguishes stale/duplicate delivery from fresh monotonic captures and contains initial platform fallback registration errors. This is code evidence, **not** tunnel/OEM acceptance.
-- **#349 — merged** as `8a51087`; `android-actions/setup-android@v4` resolves the obsolete SDK `tools` package setup failure. Main Android CI [38208174643](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38208174643) passed.
-- **#347 — merged** as `7a6d8d8`; historical 2026-10-10 status reconciliation superseded by this current-authority update.
-
-Historical drafts and pending queues below have been superseded by merged work; do not treat them as outstanding code-review items.
+Older Drafts and superseded queues are historical; only #350 is awaiting runtime PR review here.
 
 ### Recently landed on current main
 
 - **#348 — stale Fused/platform callback watchdog recovery:** merged 2026-10-12; ignore stale/duplicate capture timestamps for source-health reset, contain platform registration failure, keep finite recovery budget. Physical acceptance still #77/#283.
 - **#349 — Android SDK setup repair:** merged 2026-10-12; Android SDK v4 setup and Java 17 / API 36 Debug build baseline restored.
+- **#347 — status document reconciliation:** merged 2026-10-10 as `7a6d8d8`; this 2026-10-12 update supersedes its PR-queue snapshot.
 
 - **#344 — Trip GPS tunnel/provider stall hardening:** merged 2026-09-14; Fused/platform callbacks and watchdogs use dedicated restartable worker threads with `quitSafely()` disposal and scheduler-delay diagnostics. Physical tunnel and repeated-lifecycle acceptance remain under #77/#283. Earlier Draft #338 was closed unmerged and superseded.
 - **#343 — vehicle home widget swipe stack:** merged 2026-09-14; native `StackView` swipe pages replace the previous tiny arrow controls. Re-test latest-main swipe, pinning, compact layout, process/reboot recovery and truthful local facts under #301; artifact #839 was a historical pre-#343 baseline.
