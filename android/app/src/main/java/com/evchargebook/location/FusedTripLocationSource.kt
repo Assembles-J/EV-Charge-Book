@@ -41,12 +41,13 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
     )
 
     @Volatile private var running = false
-    private var callback: LocationCallback? = null
-    private var locationHandler: Handler? = null
-    private var primarySilenceWatchdog: Runnable? = null
-    private var platformSilenceWatchdog: Runnable? = null
+    // Service lifecycle and location/watchdog callbacks run on different threads.
+    @Volatile private var callback: LocationCallback? = null
+    @Volatile private var locationHandler: Handler? = null
+    @Volatile private var primarySilenceWatchdog: Runnable? = null
+    @Volatile private var platformSilenceWatchdog: Runnable? = null
     private var platformRecoveryAttempts: Int = 0
-    private var platformMonitoredProvider: String? = null
+    @Volatile private var platformMonitoredProvider: String? = null
     private var lastReportedAvailability: Boolean? = null
     @Volatile private var lastFreshFusedFixElapsedRealtimeNanos: Long? = null
     @Volatile private var lastFreshPlatformFixElapsedRealtimeNanos: Long? = null
@@ -228,8 +229,11 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         if (!running || fallbackStarted.get()) return
         val handler = locationHandler ?: return
         val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
-        val watchdog = Runnable {
-            if (running && !fallbackStarted.get()) {
+        val watchdog = object : Runnable {
+            override fun run() {
+                // A cancelled callback can already be dequeued while stop/start or a new fix
+                // replaces the deadline. Never let that old task trigger fallback later.
+                if (primarySilenceWatchdog !== this || !running || fallbackStarted.get()) return
                 val actualDelayMs = SystemClock.elapsedRealtime() - scheduledAtElapsedMs
                 signalCallback(
                     TripLocationSourceSignal(
@@ -261,27 +265,30 @@ class FusedTripLocationSource(private val context: Context) : TripLocationSource
         val delayMillis =
             TripPlatformRecoveryPolicy.recoveryDelayMillis(platformRecoveryAttempts) ?: return
         val scheduledAtElapsedMs = SystemClock.elapsedRealtime()
-        val watchdog = Runnable {
-            if (!running || !fallbackStarted.get()) return@Runnable
-            val actualDelayMs = SystemClock.elapsedRealtime() - scheduledAtElapsedMs
-            val attempt = platformRecoveryAttempts + 1
-            platformRecoveryAttempts = attempt
-            signalCallback(
-                TripLocationSourceSignal(
-                    source = SOURCE_PLATFORM,
-                    detail = "recovery_reregister attempt=$attempt provider=$monitoredProvider silenceMs=$delayMillis actualDelayMs=$actualDelayMs lateByMs=${(actualDelayMs - delayMillis).coerceAtLeast(0L)}",
-                )
-            )
-            runCatching {
-                registerPlatformFallback(callback, signalCallback)
-            }.onFailure { error ->
+        val watchdog = object : Runnable {
+            override fun run() {
+                // Removing a queued Runnable is not a substitute for validating its ownership.
+                if (platformSilenceWatchdog !== this || !running || !fallbackStarted.get()) return
+                val actualDelayMs = SystemClock.elapsedRealtime() - scheduledAtElapsedMs
+                val attempt = platformRecoveryAttempts + 1
+                platformRecoveryAttempts = attempt
                 signalCallback(
                     TripLocationSourceSignal(
                         source = SOURCE_PLATFORM,
-                        detail = "recovery_reregister_failed attempt=$attempt provider=$monitoredProvider error=${error::class.java.simpleName}",
+                        detail = "recovery_reregister attempt=$attempt provider=$monitoredProvider silenceMs=$delayMillis actualDelayMs=$actualDelayMs lateByMs=${(actualDelayMs - delayMillis).coerceAtLeast(0L)}",
                     )
                 )
-                armPlatformSilenceWatchdog(callback, signalCallback)
+                runCatching {
+                    registerPlatformFallback(callback, signalCallback)
+                }.onFailure { error ->
+                    signalCallback(
+                        TripLocationSourceSignal(
+                            source = SOURCE_PLATFORM,
+                            detail = "recovery_reregister_failed attempt=$attempt provider=$monitoredProvider error=${error::class.java.simpleName}",
+                        )
+                    )
+                    armPlatformSilenceWatchdog(callback, signalCallback)
+                }
             }
         }
         platformSilenceWatchdog = watchdog
