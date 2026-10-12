@@ -1,5 +1,7 @@
 release_series=0.7
-requested_from_pr=334
-product_source_commit=d8582063aaee1a5caf248b2c228d463859d49dd5
-purpose=main-branch-map-provider-device-acceptance
-requested_at=2026-09-14T05:24:00Z
+requested_from_pr=348
+product_source_commit=2422f15bf994ebb771ec475364786befcf8e725c
+main_ci_run=38220500363
+purpose=production-signed-tunnel-gps-watchdog-recovery-device-acceptance
+physical_acceptance=pending-issue-77-283
+requested_at=2026-10-12
