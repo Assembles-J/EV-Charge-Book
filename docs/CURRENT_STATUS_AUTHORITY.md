@@ -2,7 +2,7 @@
 
 Updated: 2026-10-12
 Status: Operational status authority
-Baseline: `main@2422f15bf994ebb771ec475364786befcf8e725c` (verified 2026-10-12; exact-main Android CI Green)
+Baseline: `main@c03ffe68a5c258590b0b68bd2612af63cf539a31` (2026-10-12 release-trigger only; runtime source `2422f15` Android CI Green)
 
 ## Purpose
 
@@ -20,7 +20,7 @@ An Open Issue does not imply missing code. A Draft/unmerged PR is not runtime au
 
 ## Executive status
 
-2026-10-12 reconciliation: #347 was merged as `7a6d8d8`, #349 (Android SDK action v4) as `8a51087`, and #348 (stale/duplicate Trip fix watchdog recovery) as `2422f15`. The current follow-up is **Draft #350**, a separate watchdog Runnable-ownership/concurrency regression candidate, not runtime authority. Main Android CI on `2422f15` passed [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363). The last successful Android Release run remains the historical 2026-09-14 run, not proof of accepted production upgrade or physical tunnel behavior.
+2026-10-12 reconciliation: #347 was merged as `7a6d8d8`, #349 (Android SDK action v4) as `8a51087`, and #348 (stale/duplicate Trip fix watchdog recovery) as `2422f15`. The current follow-up is **Draft #350**, a separate watchdog Runnable-ownership/concurrency regression candidate, not runtime authority. Main Android CI on `2422f15` passed [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363). Android Release attempt #48 on the newer release-trigger-only commit failed before signing/upload because the public update manifest check timed out; last successful Release remains the historical 2026-09-14 run. Neither run proves physical tunnel or in-place upgrade acceptance.
 
 Priority order:
 
@@ -28,7 +28,7 @@ Priority order:
 2. latest-main widget swipe-stack/launcher acceptance (#301), after merged #343, and Bluetooth candidate/notification/auto-start acceptance (#235), after merged #346;
 3. Charging v0.7 lifecycle, multi-vehicle unfinished-state, migration/reboot and billing/editor acceptance (#251/#321 and child owners);
 4. Shanghai mainland basemap/provider feasibility (#199/#192), after merged #334/#345; current OpenFreeMap road/label usefulness remains unaccepted;
-5. repository governance: `main` is still unprotected per 2026-10-10 branch metadata (#75), plus branch cleanup (#265) and documentation/Issue reconciliation (#6).
+5. repository governance: `main` is still unprotected per 2026-10-12 branch metadata (#75), plus branch cleanup (#265) and documentation/Issue reconciliation (#6).
 
 No new broad implementation stack should be inferred merely from historical unchecked checklists. Real-device acceptance and release-upgrade verification remain separate from Green CI.
 
@@ -36,7 +36,7 @@ No new broad implementation stack should be inferred merely from historical unch
 
 ### Active (2026-10-12)
 
-- **#350 — Draft GPS watchdog task ownership:** focused follow-up to merged #348. Guards retired Fused/platform watchdog Runnables against acting after cancellation/re-arm and makes cross-thread ownership references visible; adds a 26-duplicate-callback / 25-second regression test. Code is **not in main**. Requires exact-head Android CI plus #77/#283 physical acceptance before merging.
+- **#350 — Draft GPS watchdog task ownership:** focused follow-up to merged #348. Guards retired Fused/platform watchdog Runnables against acting after cancellation/re-arm and makes cross-thread ownership references visible; adds a 26-duplicate-callback / 25-second regression test. Code is **not in main**. Exact-head [Android CI run 38220691592](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220691592) passed; physical #77/#283 acceptance and review still gate merge.
 - **#348 — merged** as `2422f15` after synchronized PR-head Android CI [38220275052](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220275052) succeeded. Runtime now distinguishes stale/duplicate delivery from fresh monotonic captures and contains initial platform fallback registration errors. This is code evidence, **not** tunnel/OEM acceptance.
 - **#349 — merged** as `8a51087`; `android-actions/setup-android@v4` resolves the obsolete SDK `tools` package setup failure. Main Android CI [38208174643](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38208174643) passed.
 - **#347 — merged** as `7a6d8d8`; historical 2026-10-10 status reconciliation superseded by this current-authority update.
@@ -55,7 +55,7 @@ Historical drafts and pending queues below have been superseded by merged work; 
 - **#346 — Bluetooth auto-Trip background fallback:** merged 2026-09-14; Android 12+ background restrictions degrade auto-start to a visible one-tap notification instead of silently creating a Trip. Foreground/background/notification-denied OEM acceptance remains #235.
 - **#340 — Charging cross-month start-time attribution regression:** previously merged on current main and unchanged.
 
-Latest main-head Android Build: 2026-10-12 [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363) on `main@2422f15`, **Green**. Latest known Android Release remains 2026-09-14 [run 34822213280](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34822213280), Green; not proof of an accepted signed in-place upgrade.
+Latest runtime-source main Android Build: 2026-10-12 [run 38220500363](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220500363) on `2422f15`, **Green**. A subsequent release-trigger-only commit `c03ffe68` initiated Android Release #48, but [run 38220820546](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/38220820546) **failed before build/sign/upload**: the existing public update manifest/APK preflight timed out at 15s. Version 0.7.48 was not published by that run. Last successful Release is the historical 2026-09-14 [run 34822213280](https://github.com/Assembles-J/EV-Charge-Book/actions/runs/34822213280), not proof of an accepted signed in-place upgrade.
 
 ## Charging v0.7 — #251 / #321 closeout
 
@@ -225,7 +225,7 @@ Remaining documentation debt:
 - add explicit supersession/version notes to older docs that still look current;
 - periodically re-audit `WORKFLOW_OWNERSHIP.md` as admin helper surfaces evolve.
 
-2026-10-12 follow-up: #347/#349/#348 are merged; exact-main Android Build Green on `2422f15`, Draft #350 handles the next source/watchdog concurrency slice, and physical acceptance under #77/#283 remains OPEN. Documentation status must distinguish latest merged code, PR candidate, CI evidence and OEM evidence.
+2026-10-12 follow-up: #347/#349/#348 are merged; runtime-source Android Build Green on `2422f15`, Draft #350 CI Green on `24b9aa8` (not main); Android Release #48 blocked on public manifest timeout, no signed APK produced or deployed. Physical acceptance under #77/#283 remains OPEN. Documentation status must distinguish latest merged code, PR candidate, CI evidence and OEM evidence.
 
 ## Authority maintenance rules
 
