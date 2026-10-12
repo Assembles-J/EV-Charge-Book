@@ -1,5 +1,6 @@
 package com.evchargebook.domain
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -44,5 +45,34 @@ class TripSourceWatchdogPolicyTest {
         assertFalse(TripSourceWatchdogPolicy.refreshesWatchdog(null, 0L, now))
         assertFalse(TripSourceWatchdogPolicy.refreshesWatchdog(null, -1L, now))
         assertFalse(TripSourceWatchdogPolicy.refreshesWatchdog(null, now + 1L, now))
+    }
+
+    @Test
+    fun twentySixCachedFusedCallbacksCannotKeepTheTwelveSecondWatchdogAlive() {
+        val originalFix = 300_000L * millisToNanos
+        val twelveSeconds = 12_000L * millisToNanos
+        var previousFreshFix: Long? = null
+        var watchdogDeadline = originalFix + twelveSeconds
+        var refreshCount = 0
+
+        // One identical capture is delivered every second for 25s. Callback delivery continues,
+        // but the source's silence watchdog must remain due 12s after the first capture.
+        for (second in 0L..25L) {
+            val deliveryTime = originalFix + second * 1_000L * millisToNanos
+            if (TripSourceWatchdogPolicy.refreshesWatchdog(
+                    previousFreshFixElapsedRealtimeNanos = previousFreshFix,
+                    fixElapsedRealtimeNanos = originalFix,
+                    nowElapsedRealtimeNanos = deliveryTime,
+                )
+            ) {
+                previousFreshFix = originalFix
+                watchdogDeadline = deliveryTime + twelveSeconds
+                refreshCount++
+            }
+        }
+
+        assertEquals(1, refreshCount)
+        assertEquals(originalFix + twelveSeconds, watchdogDeadline)
+        assertTrue(originalFix + 25_000L * millisToNanos > watchdogDeadline)
     }
 }
