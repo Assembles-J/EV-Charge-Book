@@ -35,11 +35,14 @@ def open_request(url: str, *, method: str = "GET", range_first_byte: bool = Fals
 
 def fetch_manifest(url: str) -> dict:
     request_url = cache_busted(url)
-    with open_request(request_url) as response:
-        status = getattr(response, "status", 200)
-        if not 200 <= status <= 299:
-            raise RuntimeError(f"manifest returned HTTP {status}")
-        payload = response.read().decode("utf-8")
+    try:
+        with open_request(request_url) as response:
+            status = getattr(response, "status", 200)
+            if not 200 <= status <= 299:
+                raise RuntimeError(f"manifest returned HTTP {status}")
+            payload = response.read().decode("utf-8")
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"could not read update manifest {url}: {exc}") from exc
     try:
         manifest = json.loads(payload)
     except json.JSONDecodeError as exc:
@@ -67,8 +70,8 @@ def check_apk(url: str) -> None:
     except urllib.error.HTTPError as exc:
         if exc.code not in (405, 501):
             raise RuntimeError(f"immutable APK HEAD failed with HTTP {exc.code}: {url}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"immutable APK is unreachable: {url}: {exc.reason}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"immutable APK HEAD failed: {url}: {exc}") from exc
 
     try:
         with open_request(url, range_first_byte=True) as response:
@@ -76,8 +79,8 @@ def check_apk(url: str) -> None:
             if status not in (200, 206):
                 raise RuntimeError(f"immutable APK range GET returned HTTP {status}: {url}")
             response.read(1)
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"immutable APK is unreachable: {url}: {exc.reason}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(f"immutable APK range GET failed: {url}: {exc}") from exc
 
 
 def main() -> int:
